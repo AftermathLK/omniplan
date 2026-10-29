@@ -1,0 +1,404 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OmniPlan household",
+        "description": "Choose the people in your household. They get personal \"My Day\" views, kiosk columns and shift-aware chores.",
+        "data": {
+          "household": "Household people",
+          "weather_entity": "Weather entity (for \"this weekend if it's not raining\")",
+          "conversation_agent": "Assist agent for Brain Dump (a local LLM works best)"
+        },
+        "data_description": {
+          "conversation_agent": "Leave empty to use the built-in rules parser."
+        }
+      },
+      "shift": {
+        "title": "Work shifts: {person}",
+        "description": "Optionally link {person}'s work calendar. On days {person} works, shift-aware chores go to whoever is off duty (or whose shift ends first).",
+        "data": {
+          "calendar": "Work calendar",
+          "keywords": "Shift keywords (comma separated; empty = every event is a shift)"
+        }
+      },
+      "mealie": {
+        "title": "Mealie (optional)",
+        "description": "Connect a local Mealie server for prep timelines, leftovers and two-way shopping sync. Leave the URL empty to skip.",
+        "data": {
+          "mealie_url": "Mealie URL",
+          "mealie_verify_ssl": "Verify SSL certificate",
+          "mealie_sync_minutes": "Sync every (minutes)",
+          "mealie_lookahead_days": "Plan prep tasks this many days ahead",
+          "mealie_api_token": "API token"
+        },
+        "data_description": {
+          "mealie_url": "http:// or https:// address of your Mealie server, e.g. http://192.168.1.20:9000. No user names, query strings or redirects.",
+          "mealie_api_token": "Stored in Home Assistant's config entry data and only ever sent to this Mealie server. It is never shown again or sent to dashboards."
+        }
+      },
+      "schedule": {
+        "title": "Schedule",
+        "data": {
+          "rollover_hour": "Daily rollover hour (recurring chores reset at this hour)",
+          "shift_check_time": "Shift-aware assignment time",
+          "weekend_check_time": "Weekend weather check time",
+          "breakfast_time": "Breakfast time",
+          "lunch_time": "Lunch time",
+          "dinner_time": "Dinner time",
+          "create_cook_tasks": "Create a \"Cook …\" task for each planned meal",
+          "enable_leftovers": "Create leftover trackers after dinner",
+          "leftover_time": "Create leftover tracker at",
+          "leftover_days": "Leftovers keep for (days)",
+          "prep_rules": "Prep rules (one per line: tag => hours | template)",
+          "show_panel": "Show OmniPlan in the sidebar"
+        },
+        "data_description": {
+          "prep_rules": "Templates may use {recipe}, {meat} and {action}. Recipes tagged like thaw-36h work without a rule."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach Mealie at that URL within 10 seconds (redirects are not followed).",
+      "invalid_auth": "Mealie rejected the API token.",
+      "token_required": "An API token is required when a Mealie URL is set.",
+      "invalid_url": "Enter a plain http:// or https:// URL with a host name or IP address (no user name, query string or fragment)."
+    },
+    "abort": {
+      "single_instance_allowed": "OmniPlan is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OmniPlan household",
+        "data": {
+          "household": "Household people",
+          "weather_entity": "Weather entity",
+          "conversation_agent": "Assist agent for Brain Dump"
+        }
+      },
+      "shift": {
+        "title": "Work shifts: {person}",
+        "description": "Optionally link {person}'s work calendar for shift-aware chores.",
+        "data": {
+          "calendar": "Work calendar",
+          "keywords": "Shift keywords (comma separated; empty = every event is a shift)"
+        }
+      },
+      "mealie": {
+        "title": "Mealie (optional)",
+        "description": "Leave the URL empty to disconnect Mealie.",
+        "data": {
+          "mealie_url": "Mealie URL",
+          "mealie_verify_ssl": "Verify SSL certificate",
+          "mealie_sync_minutes": "Sync every (minutes)",
+          "mealie_lookahead_days": "Plan prep tasks this many days ahead",
+          "mealie_api_token": "API token"
+        },
+        "data_description": {
+          "mealie_url": "http:// or https:// address of your Mealie server, e.g. http://192.168.1.20:9000. No user names, query strings or redirects.",
+          "mealie_api_token": "Leave empty to keep the stored token. It is never shown again or sent to dashboards."
+        }
+      },
+      "schedule": {
+        "title": "Schedule",
+        "data": {
+          "rollover_hour": "Daily rollover hour",
+          "shift_check_time": "Shift-aware assignment time",
+          "weekend_check_time": "Weekend weather check time",
+          "breakfast_time": "Breakfast time",
+          "lunch_time": "Lunch time",
+          "dinner_time": "Dinner time",
+          "create_cook_tasks": "Create a \"Cook …\" task for each planned meal",
+          "enable_leftovers": "Create leftover trackers after dinner",
+          "leftover_time": "Create leftover tracker at",
+          "leftover_days": "Leftovers keep for (days)",
+          "prep_rules": "Prep rules (one per line: tag => hours | template)",
+          "show_panel": "Show OmniPlan in the sidebar"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach Mealie at that URL within 10 seconds (redirects are not followed).",
+      "invalid_auth": "Mealie rejected the API token.",
+      "token_required": "An API token is required when a Mealie URL is set.",
+      "invalid_url": "Enter a plain http:// or https:// URL with a host name or IP address (no user name, query string or fragment)."
+    }
+  },
+  "services": {
+    "parse_brain_dump": {
+      "name": "Parse brain dump",
+      "description": "Turn free text (or a voice transcript) into tasks and shopping items.",
+      "fields": {
+        "text": {
+          "name": "Text",
+          "description": "What's on your mind, e.g. \"pick up 2x4s Saturday morning and add garlic powder to the grocery list\"."
+        },
+        "agent_id": {
+          "name": "Agent",
+          "description": "Assist conversation agent to use instead of the configured one."
+        },
+        "dry_run": {
+          "name": "Dry run",
+          "description": "Only return the parsed actions without creating anything."
+        }
+      }
+    },
+    "add_task": {
+      "name": "Add task",
+      "description": "Create a task in an OmniPlan plan.",
+      "fields": {
+        "plan": {
+          "name": "Plan",
+          "description": "Plan name, id or its todo entity."
+        },
+        "summary": {
+          "name": "Summary",
+          "description": "Task title."
+        },
+        "description": {
+          "name": "Description",
+          "description": "Markdown notes."
+        },
+        "due_date": {
+          "name": "Due date",
+          "description": "Due date."
+        },
+        "due_datetime": {
+          "name": "Due date and time",
+          "description": "Due date and time."
+        },
+        "priority": {
+          "name": "Priority",
+          "description": "none, low, medium, high or urgent."
+        },
+        "time_of_day_bucket": {
+          "name": "Time of day",
+          "description": "anytime, morning, afternoon or evening."
+        },
+        "assigned_to": {
+          "name": "Assigned to",
+          "description": "Person entities; leave empty for the household pool."
+        },
+        "context_tags": {
+          "name": "Context tags",
+          "description": "e.g. Indoor, Garage/Yard, Computer, Errand."
+        },
+        "estimated_minutes": {
+          "name": "Estimated minutes",
+          "description": "How long it takes."
+        },
+        "recurrence_rule": {
+          "name": "Recurrence rule",
+          "description": "RRULE, e.g. FREQ=WEEKLY;BYDAY=TU."
+        },
+        "recurrence_interval_days": {
+          "name": "Repeat days after completion",
+          "description": "Rolling recurrence in days."
+        },
+        "shift_aware": {
+          "name": "Shift aware",
+          "description": "Assign daily to whoever is off work."
+        }
+      }
+    },
+    "complete_task": {
+      "name": "Complete task",
+      "description": "Mark a task completed (or re-open it).",
+      "fields": {
+        "uid": {
+          "name": "Task id",
+          "description": "Task uid."
+        },
+        "summary": {
+          "name": "Summary",
+          "description": "Exact task title, used when no uid is given."
+        },
+        "plan": {
+          "name": "Plan",
+          "description": "Limit the summary search to this plan."
+        },
+        "completed": {
+          "name": "Completed",
+          "description": "False re-opens the task."
+        }
+      }
+    },
+    "snooze_task": {
+      "name": "Snooze task",
+      "description": "Hide a task until a time or a context is met.",
+      "fields": {
+        "uid": {
+          "name": "Task id",
+          "description": "Task uid."
+        },
+        "rule_type": {
+          "name": "Rule",
+          "description": "time, person_home, all_home, weekend_dry or entity_state."
+        },
+        "until": {
+          "name": "Until",
+          "description": "For time snoozes."
+        },
+        "person": {
+          "name": "Person",
+          "description": "For person_home."
+        },
+        "entity_id": {
+          "name": "Entity",
+          "description": "For entity_state."
+        },
+        "state": {
+          "name": "State",
+          "description": "Target state for entity_state."
+        },
+        "above": {
+          "name": "Above",
+          "description": "Numeric threshold for entity_state."
+        },
+        "below": {
+          "name": "Below",
+          "description": "Numeric threshold for entity_state."
+        }
+      }
+    },
+    "add_shopping_item": {
+      "name": "Add shopping item",
+      "description": "Add an item to a shopping list, merging quantities with an existing entry.",
+      "fields": {
+        "text": {
+          "name": "Item",
+          "description": "e.g. \"2 lbs ground beef\"."
+        },
+        "plan": {
+          "name": "Plan",
+          "description": "Shopping plan; defaults to groceries."
+        },
+        "category": {
+          "name": "Aisle",
+          "description": "Override the automatic aisle."
+        }
+      }
+    },
+    "trigger_pantry_low": {
+      "name": "Set pantry stock",
+      "description": "Set a pantry item's stock and run its low-stock action.",
+      "fields": {
+        "item": {
+          "name": "Item",
+          "description": "Pantry item name or id."
+        },
+        "state": {
+          "name": "State",
+          "description": "in_stock, low or out."
+        },
+        "action": {
+          "name": "Action",
+          "description": "shopping, batch_task, ask or none (overrides the item setting)."
+        }
+      }
+    },
+    "run_shift_balance": {
+      "name": "Run shift-aware assignment",
+      "description": "Assign today's shift-aware chores now."
+    },
+    "sync_mealie": {
+      "name": "Sync Mealie",
+      "description": "Sync shopping lists and meal-plan prep tasks with Mealie now."
+    },
+    "clone_plan": {
+      "name": "Clone plan",
+      "description": "Duplicate a plan: its sections and every item that isn't part of a trip.",
+      "fields": {
+        "plan": {
+          "name": "Plan",
+          "description": "Plan name, id or its todo entity."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name of the copy."
+        },
+        "start_date": {
+          "name": "Due date",
+          "description": "Optional due date for every copied item."
+        }
+      }
+    },
+    "reset_plan": {
+      "name": "Reset plan",
+      "description": "Un-check every item in a plan (all of its trips, for packing plans).",
+      "fields": {
+        "plan": {
+          "name": "Plan",
+          "description": "Plan name or id."
+        }
+      }
+    },
+    "create_trip": {
+      "name": "Create trip",
+      "description": "Start a trip in a packing plan. Every item marked repeatable is copied onto it, unchecked.",
+      "fields": {
+        "plan": {
+          "name": "Packing plan",
+          "description": "Packing plan name, id or its todo entity."
+        },
+        "name": {
+          "name": "Trip name",
+          "description": "e.g. Up North Cabin."
+        },
+        "start_date": {
+          "name": "Start date",
+          "description": "First day of the trip."
+        },
+        "end_date": {
+          "name": "End date",
+          "description": "Last day of the trip (defaults to the start date)."
+        }
+      }
+    },
+    "complete_maintenance": {
+      "name": "Complete maintenance task",
+      "description": "Log a maintenance task as done: parts come out of stock, the next due date is scheduled and the task's on-complete action runs. Tasks that require an NFC scan can't be completed this way.",
+      "fields": {
+        "task": {
+          "name": "Task",
+          "description": "Task id, its code (e.g. #3.1), \"Object / Task\" (e.g. Furnace / Replace Filter) or a task name that is unique."
+        },
+        "cost": {
+          "name": "Cost",
+          "description": "Labor or service cost, on top of the parts used."
+        },
+        "duration_minutes": {
+          "name": "Duration",
+          "description": "How long it took, in minutes."
+        },
+        "notes": {
+          "name": "Notes",
+          "description": "Shown in the task's history and the service record."
+        }
+      }
+    },
+    "log_salt_level": {
+      "name": "Log water softener salt",
+      "description": "Record a salt fill, an observed level or an empty tank so the salt estimate recalibrates. A fill also completes the refill task.",
+      "fields": {
+        "object": {
+          "name": "Water softener",
+          "description": "Object name, id or code (e.g. #2)."
+        },
+        "kind": {
+          "name": "What happened",
+          "description": "fill, level (you looked at the tank) or empty (tank empty / bridges checked)."
+        },
+        "level": {
+          "name": "Level",
+          "description": "Where the salt is now, on the softener's scale (level mark, percent or bags). For a fill, leave empty to mean full."
+        },
+        "bags": {
+          "name": "Bags added",
+          "description": "For a fill: how many bags you poured in, instead of a level."
+        }
+      }
+    }
+  }
+}

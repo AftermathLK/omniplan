@@ -1,0 +1,255 @@
+parse_brain_dump:
+  fields:
+    text:
+      required: true
+      example: "Remind me to pick up 2x4s at Menards on Saturday morning and add garlic powder to the grocery list"
+      selector:
+        text:
+          multiline: true
+    agent_id:
+      selector:
+        conversation_agent:
+    dry_run:
+      default: false
+      selector:
+        boolean:
+
+add_task:
+  fields:
+    plan:
+      required: true
+      example: "Daily Chores"
+      selector:
+        text:
+    summary:
+      required: true
+      selector:
+        text:
+    description:
+      selector:
+        text:
+          multiline: true
+    due_date:
+      selector:
+        date:
+    due_datetime:
+      selector:
+        datetime:
+    priority:
+      selector:
+        select:
+          options: ["none", "low", "medium", "high", "urgent"]
+    time_of_day_bucket:
+      selector:
+        select:
+          options: ["anytime", "morning", "afternoon", "evening"]
+    assigned_to:
+      selector:
+        entity:
+          domain: person
+          multiple: true
+    context_tags:
+      selector:
+        select:
+          multiple: true
+          custom_value: true
+          options: ["Indoor", "Garage/Yard", "Computer", "Errand"]
+    estimated_minutes:
+      selector:
+        number:
+          min: 1
+          max: 600
+          mode: box
+    recurrence_rule:
+      example: "FREQ=WEEKLY;BYDAY=TU"
+      selector:
+        text:
+    recurrence_interval_days:
+      selector:
+        number:
+          min: 1
+          max: 3650
+          mode: box
+    shift_aware:
+      selector:
+        boolean:
+
+complete_task:
+  fields:
+    uid:
+      selector:
+        text:
+    summary:
+      example: "Feed the cat"
+      selector:
+        text:
+    plan:
+      selector:
+        text:
+    completed:
+      default: true
+      selector:
+        boolean:
+
+snooze_task:
+  fields:
+    uid:
+      required: true
+      selector:
+        text:
+    rule_type:
+      required: true
+      selector:
+        select:
+          options: ["time", "person_home", "all_home", "weekend_dry", "entity_state"]
+    until:
+      selector:
+        datetime:
+    person:
+      selector:
+        entity:
+          domain: person
+    entity_id:
+      selector:
+        entity:
+    state:
+      selector:
+        text:
+    above:
+      selector:
+        number:
+          mode: box
+          step: any
+    below:
+      selector:
+        number:
+          mode: box
+          step: any
+
+add_shopping_item:
+  fields:
+    text:
+      required: true
+      example: "2 lbs ground beef"
+      selector:
+        text:
+    plan:
+      selector:
+        text:
+    category:
+      selector:
+        select:
+          custom_value: true
+          options: ["Produce", "Meat", "Dairy", "Spices/Pantry", "Hardware", "Other"]
+
+trigger_pantry_low:
+  fields:
+    item:
+      required: true
+      example: "Taco seasoning"
+      selector:
+        text:
+    state:
+      required: true
+      selector:
+        select:
+          options: ["in_stock", "low", "out"]
+    action:
+      selector:
+        select:
+          options: ["shopping", "batch_task", "ask", "none"]
+
+run_shift_balance:
+
+sync_mealie:
+
+clone_plan:
+  fields:
+    plan:
+      required: true
+      example: "Trip Packing"
+      selector:
+        text:
+    name:
+      selector:
+        text:
+    start_date:
+      selector:
+        date:
+
+reset_plan:
+  fields:
+    plan:
+      required: true
+      selector:
+        text:
+
+create_trip:
+  fields:
+    plan:
+      required: true
+      example: "Trip Packing"
+      selector:
+        text:
+    name:
+      required: true
+      example: "Up North Cabin"
+      selector:
+        text:
+    start_date:
+      selector:
+        date:
+    end_date:
+      selector:
+        date:
+
+complete_maintenance:
+  fields:
+    task:
+      required: true
+      example: "Furnace / Replace Filter"
+      selector:
+        text:
+    cost:
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 0.01
+          mode: box
+    duration_minutes:
+      selector:
+        number:
+          min: 0
+          max: 10000
+          mode: box
+    notes:
+      selector:
+        text:
+
+log_salt_level:
+  fields:
+    object:
+      required: true
+      example: "Water Softener"
+      selector:
+        text:
+    kind:
+      required: true
+      selector:
+        select:
+          options: ["fill", "level", "empty"]
+    level:
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.5
+          mode: box
+    bags:
+      selector:
+        number:
+          min: 0.5
+          max: 20
+          step: 0.5
+          mode: box
