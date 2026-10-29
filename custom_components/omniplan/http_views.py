@@ -1,4 +1,4 @@
-"""Authenticated HTTP endpoints for the maintenance document vault and service records.
+"""Authenticated HTTP endpoints: maintenance documents, service records and Mealie recipe images.
 
 The card uploads with ``hass.fetchWithAuth`` and opens files through
 short-lived signed paths (``auth/sign_path``), so every request carries a
@@ -8,6 +8,10 @@ object belongs to, exactly like the WebSocket API does.
 Files are sniffed from their bytes (PDF, PNG, JPEG, GIF, WebP, HEIC or plain
 text only), stored by SHA-256, and served with ``nosniff``, a locked-down
 Content-Security-Policy and a sanitized file name.
+
+Recipe images are fetched by Home Assistant from Mealie with the stored token
+(so they work away from home and the token never reaches the browser) and are
+only passed through when Mealie answers with a real image type.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from homeassistant.core import HomeAssistant
 from .const import DOC_CATEGORIES, DOC_CONTENT_TYPES, DOMAIN, MAX_UPLOAD_BYTES
 from .database import MDOCS
 from .maintenance import safe_filename, sniff_document_type
+from .mealie_client import MealieError, validate_recipe_id
 from .planner import PlannerError
 
 SECURITY_HEADERS = {
@@ -41,6 +46,7 @@ def async_register_views(hass: HomeAssistant) -> None:
     hass.http.register_view(DocumentUploadView())
     hass.http.register_view(DocumentView())
     hass.http.register_view(ServiceRecordView())
+    hass.http.register_view(MealieImageView())
 
 
 async def _context(request: web.Request) -> tuple[Any, Any]:
@@ -156,3 +162,22 @@ class ServiceRecordView(HomeAssistantView):
             return _error(err)
         headers = {**SECURITY_HEADERS, "Content-Disposition": 'inline; filename="service-record.pdf"'}
         return web.Response(body=pdf, content_type="application/pdf", headers=headers)
+
+
+class MealieImageView(HomeAssistantView):
+    url = "/api/omniplan/mealie_image/{recipe_id}"
+    name = "api:omniplan:mealie_image"
+    requires_auth = True
+
+    async def get(self, request: web.Request, recipe_id: str) -> web.StreamResponse:
+        coordinator, _actor = await _context(request)
+        try:
+            validate_recipe_id(recipe_id)
+        except MealieError as err:
+            raise web.HTTPBadRequest() from err
+        try:
+            data, content_type = await coordinator.recipes.image(recipe_id)
+        except (MealieError, PlannerError) as err:
+            raise web.HTTPNotFound() from err
+        headers = {**SECURITY_HEADERS, "Cache-Control": "private, max-age=86400"}
+        return web.Response(body=data, content_type=content_type, headers=headers)

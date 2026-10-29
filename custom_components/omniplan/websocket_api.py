@@ -225,6 +225,11 @@ def async_register(hass: HomeAssistant) -> None:
         ws_push_bom,
         ws_mealie_sync,
         ws_mealie_lists,
+        ws_mealie_get_recipes,
+        ws_mealie_recipe_preview,
+        ws_mealie_add_recipe_to_groceries,
+        ws_mealie_plan_meal,
+        ws_mealie_import_settings,
         ws_run_shift_balance,
     ):
         websocket_api.async_register_command(hass, command)
@@ -787,6 +792,91 @@ async def ws_mealie_sync(hass, connection, msg, coordinator, actor):
 @_command({vol.Required("type"): "omniplan/mealie_lists"}, admin=True)
 async def ws_mealie_lists(hass, connection, msg, coordinator, actor):
     return await coordinator.async_mealie_lists()
+
+
+# ----------------------------------------------------------------------
+# Mealie recipe browser
+# ----------------------------------------------------------------------
+SLUG = vol.All(str, vol.Length(min=1, max=200))
+MEAL_TYPE = vol.In(("breakfast", "lunch", "dinner", "side", "snack", "dessert", "drink"))
+
+
+@_command({vol.Required("type"): "omniplan/mealie_get_recipes", vol.Optional("refresh", default=False): bool})
+async def ws_mealie_get_recipes(hass, connection, msg, coordinator, actor):
+    return await coordinator.recipes.recipes(refresh=msg["refresh"])
+
+
+@_command(
+    {vol.Required("type"): "omniplan/mealie_recipe_preview", vol.Required("recipe_slug"): SLUG, vol.Optional("skip_seasonings"): vol.Any(None, bool)}
+)
+async def ws_mealie_recipe_preview(hass, connection, msg, coordinator, actor):
+    return await coordinator.recipes.preview(msg["recipe_slug"], actor, skip_seasonings=msg.get("skip_seasonings"))
+
+
+@_command(
+    {
+        vol.Required("type"): "omniplan/mealie_add_recipe_to_groceries",
+        vol.Required("recipe_slug"): SLUG,
+        vol.Optional("plan_id"): OPT_ID,
+        vol.Optional("ingredients"): vol.Any(None, vol.All([vol.All(int, vol.Range(min=0, max=999))], vol.Length(max=200))),
+        vol.Optional("skip_seasonings"): vol.Any(None, bool),
+        vol.Optional("date"): DATE,
+        vol.Optional("entry_type", default="dinner"): MEAL_TYPE,
+    },
+    guard=lambda m: {"plans": [m.get("plan_id")]},
+)
+async def ws_mealie_add_recipe_to_groceries(hass, connection, msg, coordinator, actor):
+    return await coordinator.recipes.add_to_groceries(
+        msg["recipe_slug"],
+        actor,
+        plan_id=msg.get("plan_id"),
+        indices=msg.get("ingredients"),
+        skip_seasonings=msg.get("skip_seasonings"),
+        day=msg.get("date") or None,
+        entry_type=msg["entry_type"],
+    )
+
+
+@_command(
+    {
+        vol.Required("type"): "omniplan/mealie_plan_meal",
+        vol.Required("recipe_slug"): SLUG,
+        vol.Required("date"): _text(40),
+        vol.Optional("entry_type", default="dinner"): MEAL_TYPE,
+        vol.Optional("add_ingredients", default=False): bool,
+        vol.Optional("plan_id"): OPT_ID,
+        vol.Optional("skip_seasonings"): vol.Any(None, bool),
+    },
+    guard=lambda m: {"plans": [m.get("plan_id")]},
+)
+async def ws_mealie_plan_meal(hass, connection, msg, coordinator, actor):
+    return await coordinator.recipes.plan_meal(
+        msg["recipe_slug"],
+        msg["date"],
+        actor,
+        entry_type=msg["entry_type"],
+        add_ingredients=msg["add_ingredients"],
+        plan_id=msg.get("plan_id"),
+        skip_seasonings=msg.get("skip_seasonings"),
+    )
+
+
+@_command(
+    {
+        vol.Required("type"): "omniplan/mealie_import_settings",
+        vol.Optional("settings"): vol.Schema(
+            {
+                vol.Optional("skip_seasonings"): bool,
+                vol.Optional("seasonings"): vol.All([_text(200)], vol.Length(max=1000)),
+            }
+        ),
+    }
+)
+async def ws_mealie_import_settings(hass, connection, msg, coordinator, actor):
+    """Read (or, with ``settings``, change) the household's recipe import filter."""
+    if "settings" in msg:
+        return await coordinator.recipes.save_settings(msg["settings"])
+    return await coordinator.recipes.settings()
 
 
 @_command({vol.Required("type"): "omniplan/run_shift_balance"}, admin=True)

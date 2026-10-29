@@ -14,7 +14,7 @@
  * inject markup or script into the dashboard.
  */
 
-const OP_VERSION = "1.2.0";
+const OP_VERSION = "1.3.0";
 
 const AISLES = ["Produce", "Meat", "Dairy", "Spices/Pantry", "Hardware", "Other"];
 const BUCKETS = [
@@ -28,13 +28,6 @@ const KANBAN = [
   ["ready", "Ready"],
   ["in_progress", "In Progress"],
   ["done", "Done"],
-];
-const CONTEXTS = ["Indoor", "Garage/Yard", "Computer", "Errand"];
-const DURATIONS = [
-  ["5", "≤ 5m"],
-  ["15", "≤ 15m"],
-  ["30", "30m"],
-  ["60", "1h+"],
 ];
 const PRIORITIES = ["none", "low", "medium", "high", "urgent"];
 const PRIORITY_RANK = { none: 0, low: 1, medium: 2, high: 3, urgent: 4 };
@@ -125,7 +118,7 @@ const ALLOWED_TAGS = new Set([
   "TBODY", "TD", "TEXTAREA", "TH", "THEAD", "TR", "UL",
 ]);
 const ALLOWED_ATTRS = new Set([
-  "accept", "capture", "multiple", "autocomplete", "autofocus", "checked", "class", "colspan", "disabled", "enterkeyhint", "for", "hidden", "href",
+  "accept", "capture", "label", "multiple", "autocomplete", "autofocus", "checked", "class", "colspan", "disabled", "enterkeyhint", "for", "hidden", "href",
   "icon", "id", "inputmode", "list", "max", "maxlength", "min", "name", "placeholder", "rel", "required", "role",
   "selected", "step", "style", "tabindex", "target", "title", "type", "value",
 ]);
@@ -434,7 +427,6 @@ const MAINT_STYLES = `
 .mfilters select { min-height: 34px; padding: 4px 8px; font-size: .85rem; }
 .mfilters .grow { flex: 1; }
 .maddmenu { position: relative; }
-.maddmenu .menu { top: 40px; right: 0; }
 .mgroup { margin: 4px 0 8px; }
 .mgroup-head { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--op-muted); font-weight: 600; padding: 6px 2px; display: flex; gap: 8px; align-items: center; }
 .mrow { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(120px, 220px) auto; gap: 10px; align-items: center; padding: 10px 8px; border-top: 1px solid var(--op-divider); }
@@ -488,7 +480,6 @@ const MAINT_STYLES = `
 .mid { font-size: .78rem; font-weight: 600; border: 1px solid var(--op-divider); border-radius: 8px; padding: 1px 7px; color: var(--op-muted); }
 .msub { font-size: .88rem; color: var(--op-muted); display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; align-items: center; }
 .mhead-actions { display: flex; gap: 6px; align-items: center; position: relative; }
-.mhead-actions .menu { top: 40px; right: 0; }
 .mtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--op-divider); }
 .mkpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
 .mkpi { background: var(--op-surface); border-radius: 10px; padding: 10px 12px; border: 1px solid var(--op-divider); }
@@ -584,6 +575,67 @@ const MAINT_STYLES = `
 `;
 
 /* ------------------------------------------------------------------ */
+/* Mealie recipe browser styles                                        */
+/* ------------------------------------------------------------------ */
+
+const RECIPE_SORTS = [
+  ["az", "A–Z"],
+  ["recent", "Recently added"],
+  ["cooked", "Most cooked"],
+  ["category", "By category"],
+];
+const MEAL_TYPES = [
+  ["dinner", "Dinner"],
+  ["lunch", "Lunch"],
+  ["breakfast", "Breakfast"],
+  ["side", "Side"],
+  ["snack", "Snack"],
+  ["dessert", "Dessert"],
+];
+const RECIPE_PAGE = 60;
+
+const RECIPE_STYLES = `
+.rshoptabs { margin-bottom: 8px; }
+@media (max-width: 520px) { .rshoptabs .long { display: none; } }
+.rfilters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 8px; }
+.rfilters input[type=search] { flex: 1 1 200px; border-radius: 18px; min-height: 36px; padding: 6px 14px; min-width: 0; }
+.rfilters select { min-height: 36px; padding: 4px 8px; max-width: 100%; flex: 1 1 140px; }
+.rnote { font-size: .8rem; color: var(--op-muted); margin-bottom: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.rcard { border: 1px solid var(--op-divider); border-radius: var(--op-radius); overflow: hidden; display: flex; flex-direction: column; background: var(--op-bg); min-width: 0; }
+.rimg { aspect-ratio: 16 / 10; background: var(--op-surface); display: flex; align-items: center; justify-content: center; color: var(--op-muted); overflow: hidden; }
+.rimg ha-icon { --mdc-icon-size: 36px; opacity: .45; }
+.rimg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.rbody { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.rtitle { font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.rmeta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: .78rem; color: var(--op-muted); }
+.ractions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; align-items: center; }
+.ractions .btn { flex: 1 1 auto; justify-content: center; }
+@media (max-width: 520px) {
+  .rgrid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .rcard { flex-direction: row; }
+  .rimg { flex: 0 0 92px; width: 92px; aspect-ratio: auto; min-height: 92px; }
+  .ractions .btn { flex: 1 1 40%; padding: 4px 8px; }
+}
+.rgroup { grid-column: 1 / -1; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--op-muted); font-weight: 600; padding: 6px 2px 0; }
+.rmore { display: flex; justify-content: center; margin: 12px 0; }
+.rrow { display: flex; gap: 10px; align-items: center; padding: 8px 4px; border-top: 1px solid var(--op-divider); cursor: pointer; }
+.rrow:first-child { border-top: none; }
+.rrow input { width: 20px; height: 20px; min-height: auto; flex: 0 0 auto; }
+.rrow .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rrow.skip .grow { color: var(--op-muted); }
+.rchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.rchips .chip { padding-right: 2px; }
+.rchips .x { background: none; border: none; width: 26px; height: 26px; border-radius: 50%; color: var(--op-muted); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.rchips .x:hover { background: var(--op-surface); color: var(--op-danger); }
+.rdays { display: flex; flex-wrap: wrap; gap: 6px; }
+.rpantry { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0 12px; }
+.rpantry label { display: flex; align-items: center; gap: 8px; padding: 6px 2px; font-size: .9rem; color: var(--op-text); cursor: pointer; }
+.rpantry input { width: 18px; height: 18px; min-height: auto; }
+.rsettings .shop-add { margin-top: 6px; }
+`;
+
+/* ------------------------------------------------------------------ */
 /* Styles                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -613,7 +665,7 @@ input, select, textarea { font: inherit; color: var(--op-text); background: var(
 textarea { min-height: 90px; resize: vertical; width: 100%; }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--op-accent); outline-offset: -1px; }
 .op-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px 4px; flex-wrap: wrap; position: relative; }
-.op-title { font-size: 1.25rem; font-weight: 600; flex: 1 1 auto; display: flex; align-items: center; gap: 8px; }
+.op-title { font-size: 1.25rem; font-weight: 600; flex: 0 1 auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .op-people { display: flex; gap: 6px; flex-wrap: wrap; }
 .avatar { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: .8rem; font-weight: 600; background-size: cover; background-position: center; flex: 0 0 auto; border: 2px solid transparent; }
 .avatar.sm { width: 24px; height: 24px; font-size: .65rem; border-width: 1px; }
@@ -631,21 +683,28 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--op-accent);
 .op-brain .icon-btn.mic.on { color: var(--op-danger); animation: pulse 1s infinite; }
 .op-brain .send { background: var(--op-accent); color: var(--text-primary-color, #fff); }
 @keyframes pulse { 50% { opacity: .4; } }
-.op-tabs { display: flex; gap: 4px; padding: 4px 12px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--op-divider); align-items: flex-end; }
-.op-tabs::-webkit-scrollbar { display: none; }
+.op-pick { flex: 0 1 auto; min-width: 0; margin-right: auto; }
+.op-picker { max-width: 100%; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--op-divider); background: var(--op-surface); border-radius: 22px; padding: 6px 8px 6px 12px; min-height: 40px; font-weight: 600; color: var(--op-text); }
+.op-picker:hover { border-color: var(--op-accent); }
+.op-picker .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.op-picker .count, .menu .count { background: var(--op-accent); color: var(--text-primary-color, #fff); border-radius: 10px; padding: 0 7px; font-size: .75rem; font-weight: 700; flex: 0 0 auto; }
+.op-picker .chev { --mdc-icon-size: 20px; color: var(--op-muted); flex: 0 0 auto; }
+.menu .count { margin-left: auto; background: var(--op-surface); color: var(--op-muted); }
+.menu button.on { background: color-mix(in srgb, var(--op-accent) 12%, transparent); color: var(--op-accent); font-weight: 600; }
+.menu button.on .count { background: var(--op-accent); color: var(--text-primary-color, #fff); }
+.menu .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu button { min-width: 0; flex: 0 0 auto; }
+.menu button > ha-icon { flex: 0 0 auto; }
+.menu .lock { --mdc-icon-size: 14px; opacity: .7; }
+.menu .sep { height: 1px; background: var(--op-divider); margin: 4px 6px; flex: 0 0 auto; }
 .tab { background: none; border: none; padding: 10px 12px; border-radius: 8px 8px 0 0; white-space: nowrap; color: var(--op-muted); display: inline-flex; gap: 6px; align-items: center; border-bottom: 3px solid transparent; }
 .tab.on { color: var(--op-accent); border-bottom-color: var(--op-accent); font-weight: 600; }
 .tab .count { background: var(--op-surface); border-radius: 10px; padding: 0 7px; font-size: .75rem; color: var(--op-muted); }
-.tab .lock { --mdc-icon-size: 14px; opacity: .7; }
-.tab.add, .tab.manage { color: var(--op-muted); padding: 10px 8px; }
-.tab-spacer { flex: 1 0 8px; }
-.op-filters { display: flex; gap: 8px; padding: 8px 16px; flex-wrap: wrap; align-items: center; }
-.op-chips { display: flex; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; align-items: center; }
-.op-chips .label { font-size: .8rem; color: var(--op-muted); margin-right: 2px; display: inline-flex; align-items: center; gap: 4px; }
+.op-filters { display: flex; padding: 0 16px 6px; justify-content: flex-end; }
 .chip { border: 1px solid var(--op-divider); background: var(--op-bg); border-radius: 16px; padding: 4px 12px; font-size: .85rem; min-height: 32px; display: inline-flex; align-items: center; gap: 4px; }
 .chip.on { background: var(--op-accent); border-color: var(--op-accent); color: var(--text-primary-color, #fff); }
 .chip.ghost { border-style: dashed; color: var(--op-muted); }
-.op-search { flex: 0 1 200px; min-width: 140px; border-radius: 18px; min-height: 36px; padding: 6px 14px; }
+.op-search { flex: 1 1 auto; max-width: 320px; min-width: 0; border-radius: 18px; min-height: 36px; padding: 6px 14px; }
 .op-body { padding: 4px 12px 16px; flex: 1 1 auto; }
 .empty { color: var(--op-muted); text-align: center; padding: 28px 12px; font-size: .95rem; }
 .empty.sm { padding: 10px 8px; font-size: .85rem; }
@@ -833,10 +892,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--op-accent);
 .op-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #323232; color: #fff; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 14px; z-index: 10; max-width: calc(100vw - 32px); box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: .92rem; }
 .op-toast button { background: none; border: none; color: var(--op-accent); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 6px; }
 .ghost-drag { position: fixed; pointer-events: none; z-index: 11; opacity: .9; transform: rotate(1.5deg); box-shadow: 0 8px 24px rgba(0,0,0,.25); border-radius: 10px; background: var(--op-bg); max-width: 360px; }
-.menu { position: absolute; right: 12px; top: 48px; background: var(--op-bg); border: 1px solid var(--op-divider); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18); z-index: 8; display: flex; flex-direction: column; min-width: 220px; padding: 4px; }
+.menu { position: fixed; right: 12px; top: 56px; white-space: nowrap; overflow-y: auto; background: var(--op-bg); border: 1px solid var(--op-divider); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18); z-index: 9999; display: flex; flex-direction: column; min-width: 220px; padding: 4px; }
 .menu button { background: none; border: none; text-align: left; padding: 10px 12px; border-radius: 8px; display: flex; gap: 10px; align-items: center; }
 .menu button:hover { background: var(--op-surface); }
-.mealie-status { font-size: .75rem; color: var(--op-muted); }
+.mealie-status { font-size: .75rem; color: var(--op-muted); background: none; border: 1px solid var(--op-divider); border-radius: 12px; padding: 2px 8px; font-weight: 500; white-space: nowrap; }
+.mealie-status:hover { color: var(--op-accent); border-color: var(--op-accent); }
+.mealie-status.bad { color: var(--op-danger); }
 .error { color: var(--op-danger); padding: 16px; }
 `;
 
@@ -855,8 +916,6 @@ class OmniPlanCard extends HTMLElement {
     this._ui = {
       tab: null,
       search: "",
-      durations: new Set(),
-      contexts: new Set(),
       people: new Set(),
       kanbanMode: "kanban",
       expanded: new Set(),
@@ -865,8 +924,10 @@ class OmniPlanCard extends HTMLElement {
       showDone: new Set(),
       allMine: false,
       showHistory: false,
-      quickAll: false,
       menu: false,
+      planMenu: false,
+      shop: {},
+      recipes: { category: "", sort: "az", query: "" },
       quickScope: storage.get("omniplan.quickScope", "shared") === "private" ? "private" : "shared",
       renaming: null,
       maint: {
@@ -906,6 +967,7 @@ class OmniPlanCard extends HTMLElement {
     this._onPointerDown = this._onPointerDown.bind(this);
     this._onPointerMove = this._onPointerMove.bind(this);
     this._onPointerUp = this._onPointerUp.bind(this);
+    this._onViewport = () => this._placeMenus(this.shadowRoot);
   }
 
   /* ---------------- Lovelace API ---------------- */
@@ -923,7 +985,7 @@ class OmniPlanCard extends HTMLElement {
     if (config.view_mode && !VIEW_MODES.includes(config.view_mode)) {
       throw new Error(`view_mode must be one of ${VIEW_MODES.join(", ")}`);
     }
-    this._config = { view_mode: "quick", show_brain_dump: true, show_quick_wins: true, ...config };
+    this._config = { view_mode: "quick", show_brain_dump: true, ...config };
     this.toggleAttribute("kiosk", this._config.view_mode === "kiosk_split");
     this._ui.tab = this._config.plan || null;
     if (this._shellReady) {
@@ -960,12 +1022,17 @@ class OmniPlanCard extends HTMLElement {
 
   connectedCallback() {
     if (this._hass && !this._unsub) this._connect();
+    // Menus are position:fixed; keep them glued to their button while the page scrolls.
+    window.addEventListener("resize", this._onViewport);
+    window.addEventListener("scroll", this._onViewport, { capture: true, passive: true });
   }
 
   disconnectedCallback() {
     if (this._unsub) this._unsub();
     this._unsub = null;
     clearTimeout(this._maintPoll);
+    window.removeEventListener("resize", this._onViewport);
+    window.removeEventListener("scroll", this._onViewport, { capture: true });
   }
 
   _watchedStatesChanged(prev, next) {
@@ -1192,7 +1259,7 @@ class OmniPlanCard extends HTMLElement {
   _buildShell() {
     const root = this.shadowRoot;
     const style = document.createElement("style");
-    style.textContent = STYLES + MAINT_STYLES;
+    style.textContent = STYLES + MAINT_STYLES + RECIPE_STYLES;
     const container = document.createElement("div");
     setHTML(
       container,
@@ -1203,9 +1270,7 @@ class OmniPlanCard extends HTMLElement {
           <button class="icon-btn mic" data-action="brain-mic" title="Speak"><ha-icon icon="mdi:microphone"></ha-icon></button>
           <button class="icon-btn send" data-action="brain-send" title="Add"><ha-icon icon="mdi:send"></ha-icon></button>
         </div>
-        <nav class="op-tabs"></nav>
         <div class="op-filters">
-          <div class="op-chips"></div>
           <input class="op-search" type="search" placeholder="Search" aria-label="Search tasks">
         </div>
         <div class="op-body"></div>
@@ -1253,44 +1318,91 @@ class OmniPlanCard extends HTMLElement {
         ${this._avatar(p, "")}${home ? html`<span class="home-dot"></span>` : ""}</button>`;
     });
     const mealie = this._board.mealie?.enabled
-      ? html`<span class="mealie-status" title="${this._board.mealie.error || ""}">${this._board.mealie.ok === false ? "⚠ Mealie" : "Mealie ✓"}</span>`
+      ? html`<button class="mealie-status ${this._board.mealie.ok === false ? "bad" : ""}" data-action="r-open-browser" title="${this._board.mealie.ok === false ? this._board.mealie.error || "Mealie is unreachable" : "Browse Mealie recipes"}">${this._board.mealie.ok === false ? "⚠ Mealie" : "Mealie ✓"}</button>`
       : "";
     setHTML(
       root.querySelector(".op-header"),
       html`<div class="op-title">${title} ${mealie}</div>
+        ${this._config.plan ? "" : this._planPickerHtml(tab)}
         <div class="op-people">${peopleHtml}</div>
         <button class="icon-btn" data-action="menu" title="More" aria-label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></button>
         ${this._ui.menu ? this._menuHtml() : ""}`,
     );
+    this._placeMenus(root.querySelector(".op-header"));
+  }
 
-    const counts = (planId) =>
-      (this._idx.byPlan.get(planId) || []).filter((t) => t.status !== "completed" && t.status !== "snoozed").length;
-    let tabs = html``;
-    if (!this._config.plan) {
-      tabs = html`${this._shownTabs().map((t) => {
-        const count = t.plan && t.plan.archetype !== "pantry_spices" && t.plan.archetype !== "packing_trips" ? html`<span class="count">${t.plan.archetype === "home_maintenance" ? this._maintCount(t.key) : counts(t.key)}</span>` : "";
-        const lock = t.plan?.is_private ? html`<ha-icon class="lock" icon="mdi:lock-outline" title="Private"></ha-icon>` : "";
-        return html`<button class="tab ${tab === t.key ? "on" : ""}" data-action="tab" data-id="${t.key}"><ha-icon icon="${t.icon}"></ha-icon>${t.label}${lock}${count}</button>`;
-      })}
-        <button class="tab add" data-action="plan-new" title="New category / plan" aria-label="New category"><ha-icon icon="mdi:plus"></ha-icon></button>
-        <span class="tab-spacer"></span>
-        <button class="tab manage" data-action="categories" title="Manage categories (hide, reorder)" aria-label="Manage categories"><ha-icon icon="mdi:cog-outline"></ha-icon></button>`;
+  /** Open (not done, not snoozed) items for a category, or null where a count means nothing. */
+  _tabCount(tab) {
+    const open = (planId) => (this._idx.byPlan.get(planId) || []).filter((t) => t.status !== "completed" && t.status !== "snoozed").length;
+    if (tab.plan) {
+      if (tab.plan.archetype === "home_maintenance") return this._maintCount(tab.key);
+      if (tab.plan.archetype === "pantry_spices" || tab.plan.archetype === "packing_trips") return null;
+      return open(tab.key);
     }
-    const tabsEl = root.querySelector(".op-tabs");
-    setHTML(tabsEl, tabs);
-    tabsEl.hidden = !!this._config.plan;
+    if (tab.key === "quick") return open(this._quickPlanId());
+    if (tab.key === "myday") {
+      const me = this._me();
+      if (!me) return null;
+      return this._board.tasks.filter(
+        (t) => !t.parent_uid && this._isActionable(t) && t.status !== "completed" && t.status !== "snoozed" && t.assigned_to.includes(me) && this._isTodayRelevant(t),
+      ).length;
+    }
+    return null;
+  }
 
-    const chips = root.querySelector(".op-chips");
-    if (this._config.show_quick_wins) {
-      setHTML(
-        chips,
-        html`<span class="label"><ha-icon icon="mdi:lightning-bolt"></ha-icon>Quick wins</span>
-          ${DURATIONS.map(([v, l]) => html`<button class="chip ${this._ui.durations.has(v) ? "on" : ""}" data-action="quick-dur" data-id="${v}">${l}</button>`)}
-          ${CONTEXTS.map((c) => html`<button class="chip ${this._ui.contexts.has(c) ? "on" : ""}" data-action="quick-ctx" data-id="${c}">${c}</button>`)}
-          ${this._ui.durations.size || this._ui.contexts.size ? html`<button class="chip ghost" data-action="quick-clear">Clear</button>` : ""}`,
-      );
-    } else {
-      setHTML(chips, html``);
+  _planPickerHtml(tab) {
+    const tabs = this._shownTabs();
+    const current = this._allTabs().find((t) => t.key === tab) || tabs[0];
+    const count = current ? this._tabCount(current) : null;
+    const menu = this._ui.planMenu
+      ? html`<div class="menu op-planmenu" role="menu" aria-label="Categories">
+          ${tabs.map((t) => {
+            const c = this._tabCount(t);
+            return html`<button class="${t.key === tab ? "on" : ""}" data-action="tab" data-id="${t.key}" role="menuitem"><ha-icon icon="${t.icon}"></ha-icon><span class="grow">${t.label}</span>${t.plan?.is_private ? html`<ha-icon class="lock" icon="mdi:lock-outline" title="Private"></ha-icon>` : ""}${c !== null ? html`<span class="count">${c}</span>` : ""}</button>`;
+          })}
+          <div class="sep" role="separator"></div>
+          <button data-action="plan-new" role="menuitem"><ha-icon icon="mdi:plus"></ha-icon>New category / plan</button>
+          <button data-action="categories" role="menuitem"><ha-icon icon="mdi:eye-settings-outline"></ha-icon>Show / hide categories</button>
+        </div>`
+      : "";
+    return html`<span class="op-pick"><button class="op-picker" data-action="plan-menu" aria-haspopup="menu" aria-expanded="${this._ui.planMenu ? "true" : "false"}" title="Switch category">
+        <ha-icon icon="${current?.icon || "mdi:format-list-checks"}"></ha-icon><span class="label">${current?.label || "OmniPlan"}</span>${count !== null && count !== undefined ? html`<span class="count">${count}</span>` : ""}<ha-icon class="chev" icon="mdi:menu-down"></ha-icon></button>${menu}</span>`;
+  }
+
+  /**
+   * Pop-up menus are position:fixed so no overflow:hidden ancestor (ha-card, a scroll area)
+   * can clip them. Each sits under its trigger (the element just before it), flipping
+   * sideways or above so it stays fully inside the viewport with a 12px margin.
+   */
+  _placeMenus(scope) {
+    const margin = 12;
+    for (const menu of (scope || this.shadowRoot).querySelectorAll(".menu")) {
+      const anchor = menu.previousElementSibling;
+      if (!anchor) continue;
+      const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      Object.assign(menu.style, {
+        left: "0px",
+        top: "0px",
+        right: "auto",
+        bottom: "auto",
+        maxWidth: `${Math.max(180, viewportWidth - 2 * margin)}px`,
+        maxHeight: `${Math.max(160, window.innerHeight - 2 * margin)}px`,
+      });
+      // A transformed/contained ancestor can become the containing block; measure its offset.
+      const origin = menu.getBoundingClientRect();
+      const box = anchor.getBoundingClientRect();
+      const width = menu.offsetWidth;
+      const height = menu.offsetHeight;
+      const vw = viewportWidth;
+      const vh = window.innerHeight;
+      let left = box.left;
+      if (left + width > vw - margin) left = box.right - width;
+      left = Math.min(Math.max(margin, left), Math.max(margin, vw - margin - width));
+      let top = box.bottom + 4;
+      if (top + height > vh - margin && box.top - 4 - height >= margin) top = box.top - 4 - height;
+      top = Math.max(margin, Math.min(top, vh - margin - Math.min(height, vh - 2 * margin)));
+      menu.style.left = `${Math.round(left - origin.left)}px`;
+      menu.style.top = `${Math.round(top - origin.top)}px`;
     }
   }
 
@@ -1328,8 +1440,10 @@ class OmniPlanCard extends HTMLElement {
       const plan = this._idx.plans.get(tab);
       content = plan ? this._planHtml(plan) : html`<div class="empty">Category not found.</div>`;
     }
-    setHTML(body, html`${this._quickWinsHtml()}${content}`);
+    setHTML(body, content);
     this._hydrateMarkdown(body);
+    this._hydrateRecipeImages(body);
+    this._placeMenus(body);
     this._restoreFocus(focus);
   }
 
@@ -1366,35 +1480,6 @@ class OmniPlanCard extends HTMLElement {
         setHTML(el, simpleMarkdown(text));
       }
     }
-  }
-
-  _quickWinsHtml() {
-    const { durations, contexts } = this._ui;
-    if (!durations.size && !contexts.size) return html``;
-    const matches = this._sortTasks(
-      this._board.tasks.filter((t) => {
-        if (t.parent_uid || !this._isActionable(t)) return false;
-        if (!["needs_action", "in_process"].includes(t.status)) return false;
-        if (!this._matchesSearch(t)) return false;
-        if (durations.size) {
-          const est = t.estimated_minutes;
-          if (!est) return false;
-          const fits = [...durations].some((d) => (d === "60" ? est >= 60 : d === "30" ? est <= 30 : est <= Number(d)));
-          if (!fits) return false;
-        }
-        if (contexts.size && !(t.context_tags || []).some((c) => contexts.has(c))) return false;
-        const me = this._me();
-        if (this._ui.people.size) return t.assigned_to.some((p) => this._ui.people.has(p)) || this._isPool(t);
-        if (me && this._mode() === "personal") return this._isPool(t) || t.assigned_to.includes(me);
-        return true;
-      }),
-    );
-    const shown = this._ui.quickAll ? matches : matches.slice(0, 5);
-    return html`<div class="quick">
-      <div class="section-head"><ha-icon icon="mdi:lightning-bolt"></ha-icon>Quick wins
-        <span class="grow"></span>${matches.length > 5 ? html`<button class="link" data-action="quick-all">${this._ui.quickAll ? "Top 5" : `All ${matches.length}`}</button>` : ""}</div>
-      ${shown.length ? shown.map((t) => this._taskRow(t, { showPlan: true })) : html`<div class="empty">Nothing unblocked fits that window. Enjoy the break.</div>`}
-    </div>`;
   }
 
   _myDayHtml() {
@@ -1546,8 +1631,6 @@ class OmniPlanCard extends HTMLElement {
     }
     if (task.recurrence_label) out.push(html`<span class="badge"><ha-icon icon="mdi:repeat"></ha-icon>${task.recurrence_label}</span>`);
     if (task.streak > 1) out.push(html`<span class="badge streak">🔥 ${task.streak}</span>`);
-    if (task.estimated_minutes) out.push(html`<span class="badge"><ha-icon icon="mdi:timer-outline"></ha-icon>${task.estimated_minutes >= 60 ? `${Math.round(task.estimated_minutes / 6) / 10}h` : `${task.estimated_minutes}m`}</span>`);
-    for (const tag of task.context_tags || []) out.push(html`<span class="badge">${tag}</span>`);
     if (task.status === "blocked") {
       const names = (task.open_blockers || []).map((b) => b.summary).join(", ");
       out.push(html`<span class="badge overdue"><ha-icon icon="mdi:lock-outline"></ha-icon>${names ? `Blocked by ${names}` : "Blocked"}</span>`);
@@ -1764,11 +1847,15 @@ class OmniPlanCard extends HTMLElement {
   }
 
   _shoppingHtml(plan, tasks) {
+    const mode = this._isGroceryPlan(plan) ? this._ui.shop[plan.id] || "list" : "list";
+    if (mode === "recipes") return html`${this._shopTabsHtml(plan, mode)}${this._recipesHtml(plan)}`;
+    if (mode === "pantry") return html`${this._shopTabsHtml(plan, mode)}${this._pantryDrawerHtml(plan)}`;
     const open = tasks.filter((t) => t.status !== "completed");
     const done = tasks.filter((t) => t.status === "completed");
     const categories = [...AISLES, ...new Set(open.map((t) => t.category).filter((c) => c && !AISLES.includes(c)))];
     const history = this._history[plan.id];
     const parts = [
+      this._shopTabsHtml(plan, mode),
       html`<div class="shop-add">
         <input data-focus="shop-${plan.id}" data-shop-input="${plan.id}" maxlength="500" placeholder="Add item… e.g. 2 lbs ground beef" enterkeyhint="done" list="op-hist-${plan.id}">
         <datalist id="op-hist-${plan.id}">${(history || []).map((h) => html`<option value="${h.display_name}">`)}</datalist>
@@ -2760,6 +2847,432 @@ class OmniPlanCard extends HTMLElement {
       )}`;
   }
 
+  /* ---------------- Groceries: Mealie recipe browser ---------------- */
+
+  _isGroceryPlan(plan) {
+    return plan?.archetype === "shopping_errands" && (plan.settings?.role === "groceries" || !!plan.settings?.mealie_list_id);
+  }
+
+  _groceryPlan() {
+    const plans = this._activePlans().filter((p) => this._isGroceryPlan(p));
+    return plans.find((p) => p.settings?.role === "groceries") || plans[0] || null;
+  }
+
+  _shopTabsHtml(plan, mode) {
+    if (!this._isGroceryPlan(plan)) return html``;
+    const tab = (key, icon, label) =>
+      html`<button class="tab ${mode === key ? "on" : ""}" data-action="r-shop-tab" data-plan="${plan.id}" data-id="${key}"><ha-icon icon="${icon}"></ha-icon>${label}</button>`;
+    return html`<div class="msubnav rshoptabs">
+      ${tab("list", "mdi:cart-outline", "Shopping list")}
+      ${tab("recipes", "mdi:book-open-page-variant-outline", html`<span class="long">Browse Mealie </span>Recipes`)}
+      ${tab("pantry", "mdi:shaker-outline", html`Pantry &amp; <span class="long">Excluded </span>Spices`)}
+    </div>`;
+  }
+
+  async _loadRecipes(refresh = false) {
+    if (this._recipeLoading) return;
+    this._recipeLoading = true;
+    this._recipes = { ...(this._recipes || {}), error: null };
+    try {
+      const data = await this._store.call({ type: "omniplan/mealie_get_recipes", refresh });
+      this._recipes = { data, error: null };
+      this._importSettings = data.settings;
+    } catch (err) {
+      this._recipes = { ...(this._recipes || {}), error: err.message || String(err) };
+    } finally {
+      this._recipeLoading = false;
+    }
+    if (this._idx?.plans.get(this._currentTab())?.archetype === "shopping_errands") this._renderBody();
+  }
+
+  async _loadImportSettings() {
+    if (this._settingsLoading) return;
+    this._settingsLoading = true;
+    this._settingsError = null;
+    try {
+      this._importSettings = await this._store.call({ type: "omniplan/mealie_import_settings" });
+    } catch (err) {
+      this._settingsError = err.message || String(err);
+    } finally {
+      this._settingsLoading = false;
+    }
+    this._renderBody();
+  }
+
+  _filteredRecipes() {
+    const all = this._recipes?.data?.recipes || [];
+    const { category, sort, query } = this._ui.recipes;
+    const q = query.trim().toLowerCase();
+    let list = all;
+    if (category.startsWith("c:")) list = list.filter((r) => r.categories.includes(category.slice(2)));
+    else if (category.startsWith("t:")) list = list.filter((r) => r.tags.includes(category.slice(2)));
+    if (q) list = list.filter((r) => [r.name, r.description, ...r.categories, ...r.tags].join(" ").toLowerCase().includes(q));
+    const byName = (a, b) => a.name.localeCompare(b.name);
+    const first = (r) => r.categories[0] || "~Uncategorized";
+    const sorters = {
+      az: byName,
+      recent: (a, b) => String(b.date_added || "").localeCompare(String(a.date_added || "")) || byName(a, b),
+      cooked: (a, b) => b.times_cooked - a.times_cooked || String(b.last_made || "").localeCompare(String(a.last_made || "")) || byName(a, b),
+      category: (a, b) => first(a).localeCompare(first(b)) || byName(a, b),
+    };
+    return [...list].sort(sorters[sort] || byName);
+  }
+
+  _recipeCardHtml(plan, r) {
+    const url = safeUrl(r.url);
+    return html`<div class="rcard">
+      <div class="rimg" ${r.has_image ? html`data-rimg="${r.id}"` : ""}><ha-icon icon="mdi:silverware-fork-knife"></ha-icon></div>
+      <div class="rbody">
+        <div class="rtitle">${r.name}</div>
+        <div class="rmeta">
+          ${r.categories.slice(0, 3).map((c) => html`<span class="badge plan">${c}</span>`)}
+          ${r.total_time ? html`<span class="badge"><ha-icon icon="mdi:timer-outline"></ha-icon>${r.total_time}</span>` : ""}
+          ${r.times_cooked ? html`<span class="badge">Cooked ${r.times_cooked}×</span>` : ""}
+          ${url ? html`<a class="badge" href="${url}"><ha-icon icon="mdi:open-in-new"></ha-icon>Mealie</a>` : ""}
+        </div>
+        <div class="ractions">
+          <button class="btn small" data-action="r-add" data-plan="${plan.id}" data-slug="${r.slug}" title="Add the ingredients, skipping seasonings and what the pantry has"><ha-icon icon="mdi:cart-plus"></ha-icon>Add ingredients</button>
+          <button class="btn small flat" data-action="r-review" data-plan="${plan.id}" data-slug="${r.slug}" data-name="${r.name}" title="Choose which ingredients to add"><ha-icon icon="mdi:format-list-checks"></ha-icon>Review</button>
+          <button class="btn small flat" data-action="r-plan" data-plan="${plan.id}" data-slug="${r.slug}" data-name="${r.name}"><ha-icon icon="mdi:calendar-plus"></ha-icon>Plan meal</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  _recipesHtml(plan) {
+    if (!this._board.mealie?.enabled) {
+      return html`<div class="empty">Connect Mealie to browse recipes here: Settings → Devices &amp; services → OmniPlan → Configure → Mealie.</div>`;
+    }
+    const state = this._recipes;
+    if (!state?.data) {
+      if (state?.error) {
+        return html`<div class="empty">Couldn't load recipes from Mealie: ${state.error} <button class="link" data-action="r-refresh">Try again</button></div>`;
+      }
+      this._loadRecipes();
+      return html`<div class="empty">Loading recipes from Mealie…</div>`;
+    }
+    const ui = this._ui.recipes;
+    const data = state.data;
+    const list = this._filteredRecipes();
+    const shown = list.slice(0, ui.limit || RECIPE_PAGE);
+    const settings = this._importSettings || data.settings || {};
+    const cards = [];
+    let group = null;
+    for (const r of shown) {
+      if (ui.sort === "category") {
+        const name = r.categories[0] || "Uncategorized";
+        if (name !== group) cards.push(html`<div class="rgroup">${name}</div>`);
+        group = name;
+      }
+      cards.push(this._recipeCardHtml(plan, r));
+    }
+    return html`<div class="rfilters">
+        <input type="search" data-rsearch data-focus="rsearch" maxlength="100" value="${ui.query}" placeholder="Search ${data.recipes.length} recipes" aria-label="Search recipes">
+        <select data-rfilter="category" aria-label="Category">
+          <option value="">All categories</option>
+          ${data.categories.length ? html`<optgroup label="Categories">${data.categories.map((c) => html`<option value="c:${c}" ${ui.category === `c:${c}` ? html`selected` : ""}>${c}</option>`)}</optgroup>` : ""}
+          ${data.tags.length ? html`<optgroup label="Tags">${data.tags.map((t) => html`<option value="t:${t}" ${ui.category === `t:${t}` ? html`selected` : ""}>${t}</option>`)}</optgroup>` : ""}
+        </select>
+        <select data-rfilter="sort" aria-label="Sort">${RECIPE_SORTS.map(([v, l]) => html`<option value="${v}" ${ui.sort === v ? html`selected` : ""}>${l}</option>`)}</select>
+        <button class="icon-btn" data-action="r-refresh" title="Reload recipes from Mealie" aria-label="Reload recipes"><ha-icon icon="mdi:refresh"></ha-icon></button>
+      </div>
+      <div class="rnote"><ha-icon icon="${settings.skip_seasonings ? "mdi:filter-check-outline" : "mdi:filter-off-outline"}"></ha-icon>
+        ${settings.skip_seasonings ? "Add ingredients skips seasonings and anything the pantry has in stock." : "Add ingredients adds everything except what the pantry has in stock."}
+        <button class="link" data-action="r-shop-tab" data-plan="${plan.id}" data-id="pantry">Change</button></div>
+      ${list.length ? html`<div class="rgrid">${cards}</div>` : html`<div class="empty">${data.recipes.length ? "No recipes match." : "Mealie has no recipes yet."}</div>`}
+      ${list.length > shown.length ? html`<div class="rmore"><button class="btn flat" data-action="r-more">Show more (${list.length - shown.length} left)</button></div>` : ""}`;
+  }
+
+  _pantryDrawerHtml(plan) {
+    const settings = this._importSettings;
+    if (!settings && this._settingsError) {
+      return html`<div class="empty">Couldn't load the import settings: ${this._settingsError} <button class="link" data-action="r-settings-retry">Try again</button></div>`;
+    }
+    if (!settings) {
+      this._loadImportSettings();
+      return html`<div class="empty">Loading…</div>`;
+    }
+    const pantryPlans = this._activePlans().filter((p) => p.archetype === "pantry_spices");
+    const items = this._board.pantry || [];
+    return html`<div class="rsettings">
+      <div class="mcard"><h3><ha-icon icon="mdi:filter-outline"></ha-icon>When adding a recipe to ${plan.name}</h3>
+        <label class="inline rrow"><input type="checkbox" data-action="r-skip-toggle" ${settings.skip_seasonings ? html`checked` : ""}>
+          <span class="grow">Automatically ignore seasonings &amp; spices when adding recipes</span></label>
+        <div class="lastdone">Items the pantry has in stock are always skipped. In Review you can still re-check anything you're out of.</div>
+      </div>
+      <div class="mcard"><h3><ha-icon icon="mdi:shaker-outline"></ha-icon>Ignored seasonings &amp; staples <span class="badge">${settings.seasonings.length}</span><span class="grow"></span>
+          <button class="link" data-action="r-seasoning-reset">Reset to defaults</button></h3>
+        <div class="rchips">${settings.seasonings.map(
+          (s) => html`<span class="chip">${s}<button class="x" data-action="r-seasoning-remove" data-id="${s}" aria-label="Stop ignoring ${s}"><ha-icon icon="mdi:close"></ha-icon></button></span>`,
+        )}</div>
+        <div class="shop-add"><input data-seasoning-input maxlength="60" placeholder="Add a seasoning or staple… e.g. sesame oil" enterkeyhint="done" aria-label="Add an ignored seasoning">
+          <button class="btn" data-action="r-seasoning-add" aria-label="Add"><ha-icon icon="mdi:plus"></ha-icon></button></div>
+        <div class="lastdone">Ingredients match by name, so "kosher salt" covers "1 tsp kosher salt, to taste". Mealie foods labelled as spices or seasonings are ignored too.</div>
+      </div>
+      ${pantryPlans.map((pp) => {
+        const mine = items.filter((i) => i.plan_id === pp.id).sort((a, b) => a.name.localeCompare(b.name));
+        return html`<div class="mcard"><h3><ha-icon icon="mdi:fridge-outline"></ha-icon>In the house now — ${pp.name}<span class="grow"></span><span class="badge">${mine.filter((i) => i.stock_state === "in_stock").length} in stock</span></h3>
+          ${mine.length
+            ? html`<div class="rpantry">${mine.map(
+                (i) => html`<label><input type="checkbox" data-action="r-pantry-toggle" data-id="${i.id}" ${i.stock_state === "in_stock" ? html`checked` : ""}>${i.name}${i.stock_state === "low" ? html` <span class="badge today">low</span>` : ""}</label>`,
+              )}</div>`
+            : html`<div class="empty sm">No staples yet.</div>`}
+          <div class="shop-add"><input data-pantry-input="${pp.id}" maxlength="120" placeholder="Add a staple you keep on hand… e.g. rice" enterkeyhint="done" aria-label="Add a pantry staple">
+            <button class="btn" data-action="pantry-add" data-plan="${pp.id}" aria-label="Add"><ha-icon icon="mdi:plus"></ha-icon></button></div>
+        </div>`;
+      })}
+      ${pantryPlans.length ? "" : html`<div class="empty sm">Create a Pantry category to track the staples you keep in the house.</div>`}
+    </div>`;
+  }
+
+  _recipeReviewHtml(d) {
+    const p = d.preview;
+    const reason = (row) =>
+      row.skip === "seasoning" ? html`<span class="badge">Seasoning</span>` : row.skip === "pantry" ? html`<span class="badge ok">In pantry${row.pantry_item ? `: ${row.pantry_item}` : ""}</span>` : "";
+    const checked = p ? p.ingredients.filter((r) => !r.skip).length : 0;
+    return html`<h2><span class="grow">${d.name}</span>${this._closeButton()}</h2>
+      <div class="hint">Checked items go on ${d.planName}. Seasonings and what the pantry has are unchecked; tick anything you're out of.</div>
+      ${d.error ? html`<div class="empty">${d.error}</div>` : ""}
+      ${p
+        ? html`<div class="rreview">${p.ingredients.map(
+            (row) => html`<label class="rrow ${row.skip ? "skip" : ""}"><input type="checkbox" data-ring="${row.index}" ${row.skip ? "" : html`checked`}>
+              <span class="grow">${row.text}${row.note ? html` <span class="lastdone">(${row.note})</span>` : ""}</span>${reason(row)}</label>`,
+          )}${p.ingredients.length ? "" : html`<div class="empty sm">This recipe has no ingredients in Mealie.</div>`}</div>`
+        : d.error
+          ? ""
+          : html`<div class="empty sm">Loading ingredients…</div>`}
+      <div class="dialog-actions">
+        ${p ? html`<button class="btn flat" data-action="r-review-all">Check all</button>` : ""}<span class="grow"></span>
+        <button class="btn flat" data-action="dialog-close">Cancel</button>
+        <button class="btn" data-action="r-review-save" ${p ? "" : html`disabled`}><ha-icon icon="mdi:cart-plus"></ha-icon>Add <span class="rcount">${checked}</span> to ${d.planName}</button>
+      </div>`;
+  }
+
+  _recipePlanHtml(d) {
+    const days = Array.from({ length: 7 }, (_, i) => addDays(this._today(), i));
+    const label = (iso, i) => (i === 0 ? "Today" : i === 1 ? "Tomorrow" : `${weekdayShort(iso)} ${monthDay(iso)}`);
+    return html`<h2><span class="grow">Plan ${d.name}</span>${this._closeButton()}</h2>
+      <div class="form rplan-form">
+        <div class="full"><div class="rdays">${days.map(
+          (iso, i) => html`<button type="button" class="chip ${d.day === iso ? "on" : ""}" data-action="r-plan-day" data-id="${iso}">${label(iso, i)}</button>`,
+        )}</div></div>
+        <label>…or another day<input type="date" name="r-day" value="${d.day}" min="${this._today()}"></label>
+        <label>Meal<select name="r-meal">${MEAL_TYPES.map(([v, l]) => html`<option value="${v}" ${d.entry === v ? html`selected` : ""}>${l}</option>`)}</select></label>
+        <label class="inline full"><input type="checkbox" name="r-also" ${d.add ? html`checked` : ""}>Also add its ingredients to ${d.planName} (skipping seasonings &amp; pantry items)</label>
+      </div>
+      <div class="dialog-actions"><button class="btn flat" data-action="dialog-close">Cancel</button>
+        <button class="btn" data-action="r-plan-save"><ha-icon icon="mdi:calendar-check"></ha-icon>Add to meal plan</button></div>`;
+  }
+
+  /** Recipe thumbnails: fetched with the user's token via HA, shown as blob URLs (lazily, as they scroll in). */
+  _hydrateRecipeImages(container) {
+    const slots = container.querySelectorAll("[data-rimg]");
+    if (!this._rimg) this._rimg = new Map();
+    if (this._rimgObserver) this._rimgObserver.disconnect();
+    if (!slots.length) return;
+    if (!this._rimgObserver && "IntersectionObserver" in window) {
+      this._rimgObserver = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            this._rimgObserver.unobserve(entry.target);
+            this._loadRecipeImage(entry.target.dataset.rimg);
+          }
+        },
+        { rootMargin: "300px" },
+      );
+    }
+    for (const slot of slots) {
+      const id = slot.dataset.rimg;
+      if (this._rimg.has(id)) this._showRecipeImage(slot, this._rimg.get(id));
+      else if (this._rimgObserver) this._rimgObserver.observe(slot);
+      else this._loadRecipeImage(id);
+    }
+  }
+
+  async _loadRecipeImage(id) {
+    if (!this._rimgPending) this._rimgPending = new Map();
+    if (!this._rimg.has(id) && !this._rimgPending.has(id)) {
+      const job = (async () => {
+        try {
+          const response = await this._hass.fetchWithAuth(`/api/omniplan/mealie_image/${encodeURIComponent(id)}`);
+          if (!response.ok) throw new Error(String(response.status));
+          const blob = await response.blob();
+          if (!/^image\/(webp|jpeg|png|gif)$/.test(blob.type)) throw new Error("not an image");
+          this._rimg.set(id, URL.createObjectURL(blob));
+        } catch (_err) {
+          this._rimg.set(id, null); // keep the placeholder icon
+        }
+      })();
+      this._rimgPending.set(id, job);
+    }
+    await this._rimgPending.get(id);
+    this._rimgPending.delete(id);
+    for (const slot of this.shadowRoot.querySelectorAll(`[data-rimg="${CSS.escape(id)}"]`)) this._showRecipeImage(slot, this._rimg.get(id));
+  }
+
+  _showRecipeImage(slot, url) {
+    if (!url || slot.querySelector("img")) return;
+    // Built with the DOM API: a blob: URL from our own fetch, never markup.
+    const img = document.createElement("img");
+    img.alt = "";
+    img.decoding = "async";
+    img.src = url;
+    slot.replaceChildren(img);
+  }
+
+  async _saveImportSettings(changes) {
+    try {
+      this._importSettings = await this._store.call({ type: "omniplan/mealie_import_settings", settings: changes });
+      if (this._recipes?.data) this._recipes.data.settings = this._importSettings;
+    } catch (err) {
+      this._fail(err);
+    }
+    this._renderBody();
+  }
+
+  _seasoningAdd(input) {
+    const value = (input || this.shadowRoot.querySelector("[data-seasoning-input]"))?.value.trim();
+    if (!value || !this._importSettings) return;
+    return this._saveImportSettings({ seasonings: [...this._importSettings.seasonings, value] });
+  }
+
+  _recipeResultToast(res) {
+    const skipped = res.skipped_seasonings + res.skipped_pantry;
+    const parts = [];
+    if (res.added.length) parts.push(`Added ${res.added.length} item${res.added.length === 1 ? "" : "s"} from ${res.recipe}`);
+    else if (!res.meal_plan) parts.push(`Nothing to add from ${res.recipe}`);
+    if (res.meal_plan) parts.push(`${res.added.length ? "planned" : `Planned ${res.recipe}`} for ${weekdayShort(res.meal_plan.date)} ${usDate(res.meal_plan.date)}`);
+    let message = parts.join(" · ");
+    if (skipped) message += ` (Skipped ${skipped} seasoning${skipped === 1 ? "" : "s"}/pantry item${skipped === 1 ? "" : "s"})`;
+    this._showToast(message);
+  }
+
+  _recipeChange(el) {
+    const data = el.dataset || {};
+    if (data.rfilter) {
+      this._ui.recipes[data.rfilter] = el.value;
+      this._ui.recipes.limit = RECIPE_PAGE;
+      this._renderBody();
+      return true;
+    }
+    if (data.ring !== undefined) {
+      const count = this.shadowRoot.querySelectorAll(".rreview [data-ring]:checked").length;
+      const label = this.shadowRoot.querySelector(".rcount");
+      if (label) label.textContent = String(count);
+      return true;
+    }
+    if (this._dialog?.kind === "recipe-plan" && el.name === "r-day") {
+      this._dialog.day = el.value;
+      this._syncPlanDraft();
+      this._renderDialog();
+      return true;
+    }
+    return false;
+  }
+
+  _syncPlanDraft() {
+    const form = this.shadowRoot.querySelector(".rplan-form");
+    const d = this._dialog;
+    if (!form || d?.kind !== "recipe-plan") return;
+    d.entry = form.querySelector('[name="r-meal"]').value;
+    d.add = form.querySelector('[name="r-also"]').checked;
+  }
+
+  async _recipeAction(action, el, event) {
+    const id = el.dataset.id;
+    const ui = this._ui.recipes;
+    const planName = (planId) => this._idx.plans.get(planId)?.name || "Groceries";
+    switch (action) {
+      case "r-open-browser": {
+        const plan = this._groceryPlan();
+        if (!plan) return this._showToast("Add a Groceries shopping category to browse recipes");
+        this._ui.tab = plan.id;
+        this._ui.shop[plan.id] = "recipes";
+        return this._render();
+      }
+      case "r-shop-tab":
+        this._ui.shop[el.dataset.plan] = id;
+        return this._renderBody();
+      case "r-refresh":
+        this._recipes = null;
+        this._renderBody();
+        return this._loadRecipes(true);
+      case "r-more":
+        ui.limit = (ui.limit || RECIPE_PAGE) + RECIPE_PAGE;
+        return this._renderBody();
+      case "r-add": {
+        el.disabled = true;
+        try {
+          const res = await this._call({ type: "omniplan/mealie_add_recipe_to_groceries", recipe_slug: el.dataset.slug, plan_id: el.dataset.plan });
+          this._recipeResultToast(res);
+        } finally {
+          el.disabled = false;
+        }
+        return;
+      }
+      case "r-review": {
+        const dialog = { kind: "recipe-review", slug: el.dataset.slug, name: el.dataset.name, planId: el.dataset.plan, planName: planName(el.dataset.plan), preview: null, error: null };
+        this._openDialog(dialog);
+        try {
+          dialog.preview = await this._store.call({ type: "omniplan/mealie_recipe_preview", recipe_slug: dialog.slug });
+        } catch (err) {
+          dialog.error = err.message || String(err);
+        }
+        if (this._dialog === dialog) this._renderDialog();
+        return;
+      }
+      case "r-review-all":
+        for (const box of this.shadowRoot.querySelectorAll(".rreview [data-ring]")) box.checked = true;
+        return this._recipeChange(this.shadowRoot.querySelector(".rreview [data-ring]") || el);
+      case "r-review-save": {
+        const d = this._dialog;
+        const indices = [...this.shadowRoot.querySelectorAll(".rreview [data-ring]:checked")].map((box) => Number(box.dataset.ring));
+        if (!indices.length) return this._showToast("Check at least one ingredient");
+        const res = await this._call({ type: "omniplan/mealie_add_recipe_to_groceries", recipe_slug: d.slug, plan_id: d.planId, ingredients: indices });
+        this._closeDialog();
+        return this._recipeResultToast(res);
+      }
+      case "r-plan":
+        return this._openDialog({ kind: "recipe-plan", slug: el.dataset.slug, name: el.dataset.name, planId: el.dataset.plan, planName: planName(el.dataset.plan), day: this._today(), entry: "dinner", add: true });
+      case "r-plan-day":
+        this._syncPlanDraft();
+        this._dialog.day = id;
+        return this._renderDialog();
+      case "r-plan-save": {
+        this._syncPlanDraft();
+        const d = this._dialog;
+        if (!d.day) return this._showToast("Pick a day");
+        const res = await this._call({
+          type: "omniplan/mealie_plan_meal",
+          recipe_slug: d.slug,
+          date: d.day,
+          entry_type: d.entry,
+          add_ingredients: d.add,
+          plan_id: d.planId,
+        });
+        this._closeDialog();
+        return this._recipeResultToast(res);
+      }
+      case "r-settings-retry":
+        this._settingsError = null;
+        return this._loadImportSettings();
+      case "r-skip-toggle":
+        return this._saveImportSettings({ skip_seasonings: el.checked });
+      case "r-seasoning-remove":
+        return this._saveImportSettings({ seasonings: (this._importSettings?.seasonings || []).filter((s) => s !== id) });
+      case "r-seasoning-add":
+        return this._seasoningAdd();
+      case "r-seasoning-reset":
+        if (!confirm("Replace the ignored list with the built-in seasonings and staples?")) return;
+        return this._saveImportSettings({ seasonings: this._importSettings?.defaults || [] });
+      case "r-pantry-toggle":
+        return this._pantryState(id, el.checked ? "in_stock" : "out");
+      default:
+        return;
+    }
+  }
+
   /* ---------------- Dialogs ---------------- */
 
   _openDialog(dialog) {
@@ -2797,6 +3310,8 @@ class OmniPlanCard extends HTMLElement {
       "maint-salt": () => this._mSaltDialogHtml(d),
       "maint-qr": () => this._mQrDialogHtml(d),
       "maint-template": () => this._mTemplateDialogHtml(d),
+      "recipe-review": () => this._recipeReviewHtml(d),
+      "recipe-plan": () => this._recipePlanHtml(d),
     };
     const inner = renderers[d.kind] ? renderers[d.kind]() : html``;
     setHTML(host, html`<div class="backdrop" data-action="dialog-backdrop"><div class="dialog" role="dialog" aria-modal="true">${inner}</div></div>`);
@@ -2827,7 +3342,6 @@ class OmniPlanCard extends HTMLElement {
     const kids = t.uid ? this._idx.children.get(t.uid) || [] : [];
     const sections = isQuick ? this._idx.sections.get(plan.id) || [] : [];
     const trips = isPacking ? (this._idx.trips.get(plan.id) || []).filter((x) => x.status !== "archived" || x.id === t.trip_id) : [];
-    const estimates = [5, 15, 30, 60, 120];
     return html`<form class="task-form">
       <h2><span class="grow">${d.promoting ? "Make it recurring" : t.uid ? "Edit task" : "New task"}</span>${this._closeButton()}</h2>
       ${d.promoting ? html`<div class="banner"><ha-icon icon="mdi:repeat"></ha-icon>Pick how often it repeats and which plan it belongs to. Saving moves it off the quick list.</div>` : ""}
@@ -2862,12 +3376,6 @@ class OmniPlanCard extends HTMLElement {
         <label>Time of day<select name="time_of_day_bucket">${BUCKETS.map(([b, l]) => html`<option value="${b}" ${b === (t.time_of_day_bucket || "anytime") ? html`selected` : ""}>${l}</option>`)}</select></label>
         <label>Due date<input type="date" name="due_date" value="${t.due_datetime ? "" : t.due_date || ""}"></label>
         <label>…or due at<input type="datetime-local" name="due_datetime" value="${due}"></label>
-        <label>Estimate<select name="estimated_minutes"><option value="">—</option>${estimates.map(
-          (m) => html`<option value="${m}" ${Number(t.estimated_minutes) === m ? html`selected` : ""}>${m >= 60 ? `${m / 60}h` : `${m} min`}</option>`,
-        )}${t.estimated_minutes && !estimates.includes(Number(t.estimated_minutes)) ? html`<option selected value="${t.estimated_minutes}">${t.estimated_minutes} min</option>` : ""}</select></label>
-        <label>Context<span class="toggle-group">${CONTEXTS.map(
-          (c) => html`<label class="inline"><input type="checkbox" name="ctx" value="${c}" ${(t.context_tags || []).includes(c) ? html`checked` : ""}>${c}</label>`,
-        )}</span></label>
         <label class="full">Assigned to <span class="toggle-group">${people.map(
           (p) => html`<label class="inline"><input type="checkbox" name="assignee" value="${p.entity_id}" ${assigned.has(p.entity_id) ? html`checked` : ""}>${this._avatar(p)} ${p.name}</label>`,
         )}<span class="lastdone">Leave everyone unchecked for the household pool.</span></span></label>
@@ -4448,8 +4956,8 @@ class OmniPlanCard extends HTMLElement {
     const maint = this._ui.maint;
     const maintMenu = maint.addMenu || maint.headMenu;
     if (!target) {
-      if (this._ui.menu) {
-        this._ui.menu = false;
+      if (this._ui.menu || this._ui.planMenu) {
+        this._ui.menu = this._ui.planMenu = false;
         this._renderChrome();
       }
       if (maintMenu) {
@@ -4460,8 +4968,8 @@ class OmniPlanCard extends HTMLElement {
     }
     const action = target.dataset.action;
     if (action === "dialog-backdrop" && path[0] !== target) return;
-    if (action !== "menu" && this._ui.menu) {
-      this._ui.menu = false;
+    if (action !== "menu" && action !== "plan-menu" && (this._ui.menu || this._ui.planMenu)) {
+      this._ui.menu = this._ui.planMenu = false;
       this._renderChrome();
     }
     if (maintMenu && action !== "m-add-menu" && action !== "m-head-menu") {
@@ -4479,6 +4987,7 @@ class OmniPlanCard extends HTMLElement {
         return;
       case "tab":
         ui.tab = id;
+        ui.planMenu = false;
         ui.selected.clear();
         ui.renaming = null;
         if (this._idx.plans.get(id)?.archetype === "shopping_errands" && ui.showHistory) this._loadHistory(id);
@@ -4496,6 +5005,7 @@ class OmniPlanCard extends HTMLElement {
         return this._render();
       case "menu":
         ui.menu = !ui.menu;
+        ui.planMenu = false;
         return this._renderChrome();
       case "refresh":
         return this._store.refresh();
@@ -4503,19 +5013,10 @@ class OmniPlanCard extends HTMLElement {
         const status = await this._call({ type: "omniplan/mealie_sync" });
         return this._showToast(status.ok ? "Mealie synced" : `Mealie: ${status.error || "sync failed"}`);
       }
-      case "quick-dur":
-        ui.durations.has(id) ? ui.durations.delete(id) : ui.durations.add(id);
-        return this._render();
-      case "quick-ctx":
-        ui.contexts.has(id) ? ui.contexts.delete(id) : ui.contexts.add(id);
-        return this._render();
-      case "quick-clear":
-        ui.durations.clear();
-        ui.contexts.clear();
-        return this._render();
-      case "quick-all":
-        ui.quickAll = !ui.quickAll;
-        return this._renderBody();
+      case "plan-menu":
+        ui.planMenu = !ui.planMenu;
+        ui.menu = false;
+        return this._renderChrome();
       case "myday-all":
         ui.allMine = !ui.allMine;
         return this._renderBody();
@@ -4791,12 +5292,18 @@ class OmniPlanCard extends HTMLElement {
       }
       default:
         if (action.startsWith("m-")) return this._maintAction(action, el, event);
+        if (action.startsWith("r-")) return this._recipeAction(action, el, event);
         return;
     }
   }
 
   _onKeyDown(event) {
     if (event.key === "Escape") {
+      if (this._ui.planMenu || this._ui.menu) {
+        this._ui.planMenu = this._ui.menu = false;
+        this._renderChrome();
+        return;
+      }
       if (this._dialog) {
         this._closeDialog();
         return;
@@ -4829,6 +5336,7 @@ class OmniPlanCard extends HTMLElement {
       [data.shopInput, () => this._shopAdd(data.shopInput)],
       [data.bomInput || data.bomQty, () => this._bomAdd(data.bomInput || data.bomQty)],
       [data.pantryInput, () => this._pantryAdd(data.pantryInput)],
+      [data.seasoningInput !== undefined, () => this._seasoningAdd(el)],
       [data.quickInput, () => this._quickAdd(data.quickInput)],
       [data.sectionInput !== undefined && data.plan, () => this._sectionTaskAdd(el)],
       [data.newSection, () => this._sectionAdd(data.newSection)],
@@ -4849,6 +5357,10 @@ class OmniPlanCard extends HTMLElement {
       this._searchTimer = setTimeout(() => this._renderBody(), 80);
     } else if (el.dataset?.iconInput !== undefined) {
       this._setIcon(el.value);
+    } else if (el.dataset?.rsearch !== undefined) {
+      this._ui.recipes.query = el.value;
+      clearTimeout(this._searchTimer);
+      this._searchTimer = setTimeout(() => this._renderBody(), 120);
     } else if (el.dataset?.msearch !== undefined) {
       this._ui.maint.query = el.value;
       clearTimeout(this._searchTimer);
@@ -4859,6 +5371,7 @@ class OmniPlanCard extends HTMLElement {
   _onChange(event) {
     const el = event.composedPath()[0];
     if (this._maintChange(el)) return;
+    if (this._recipeChange(el)) return;
     if (el.dataset?.bulk && el.value) {
       const value = el.value;
       el.value = "";
@@ -4965,8 +5478,6 @@ class OmniPlanCard extends HTMLElement {
       status: val("status"),
       priority: val("priority"),
       time_of_day_bucket: val("time_of_day_bucket"),
-      estimated_minutes: val("estimated_minutes") ? Number(val("estimated_minutes")) : null,
-      context_tags: checked("ctx"),
       assigned_to: checked("assignee"),
       description: val("description") || null,
       shift_aware: !!form.querySelector('[name="shift_aware"]')?.checked,
@@ -5601,13 +6112,12 @@ class OmniPlanCardEditor extends HTMLElement {
       html`<div class="form">
         <label>Title<input data-key="title" value="${c.title ?? ""}" placeholder="OmniPlan"></label>
         <label>Opens on<select data-key="view_mode">${modes.map(([v, l]) => html`<option value="${v}" ${(c.view_mode || "quick") === v ? html`selected` : ""}>${l}</option>`)}</select></label>
-        <label>Single plan (hides tabs)<select data-key="plan"><option value="">— all plans —</option>
+        <label>Single plan (hides the category dropdown)<select data-key="plan"><option value="">— all plans —</option>
           ${plans.map((p) => html`<option value="${p.id}" ${c.plan === p.id ? html`selected` : ""}>${p.name}</option>`)}</select></label>
-        <label>Plans shown as tabs (none = all)<span class="plans">${plans.map(
+        <label>Categories in the dropdown (none = all)<span class="plans">${plans.map(
           (p) => html`<label class="inline"><input type="checkbox" data-plan="${p.id}" ${selected.has(p.id) ? html`checked` : ""}>${p.name}</label>`,
         )}</span></label>
         <label class="inline"><input type="checkbox" data-key="show_brain_dump" ${c.show_brain_dump !== false ? html`checked` : ""}>Show Brain Dump bar</label>
-        <label class="inline"><input type="checkbox" data-key="show_quick_wins" ${c.show_quick_wins !== false ? html`checked` : ""}>Show “Got 15 minutes?” quick-win filters</label>
       </div>`,
     );
     this.shadowRoot.replaceChildren(style, ...container.childNodes);

@@ -95,6 +95,7 @@ from .kitchen import build_prep_steps, ingredient_lines, leftover_summary, parse
 from .maintenance_runtime import MaintenanceRuntime
 from .mealie_client import InvalidMealieUrl, MealieAuthError, MealieClient, MealieError, item_hash, item_text
 from .planner import SYSTEM, Actor, Planner
+from .recipe_browser import RecipeBrowser
 from .shift_balance import Chore, PersonAvailability, balance_chores, parse_keywords, shifts_for_day
 from .snooze import (
     HOME,
@@ -139,6 +140,13 @@ class OmniPlanCoordinator:
         self.maintenance = MaintenanceRuntime(hass, self)
         self.mealie: MealieClient | None = None
         self.mealie_status: dict[str, Any] = {"enabled": False}
+        self.recipes = RecipeBrowser(
+            mealie=lambda: self.mealie,
+            planner=self.planner,
+            db=self.db,
+            today=lambda: dt_util.now().date(),
+            on_mealplan_changed=self._mealplan_changed,
+        )
         self._unsubs: list[CALLBACK_TYPE] = []
         self._state_unsub: CALLBACK_TYPE | None = None
         self._pending_plans: set[str] = set()
@@ -587,6 +595,12 @@ class OmniPlanCoordinator:
                 _LOGGER.warning("Mealie sync failed: %s", err)
                 self.mealie_status.update({"ok": False, "error": str(err)})
         return self.mealie_status
+
+    @callback
+    def _mealplan_changed(self) -> None:
+        """A meal was planned from the recipe browser: pick up its prep and cook tasks now."""
+        if self.mealie is not None and not self._shutting_down:
+            self.entry.async_create_background_task(self.hass, self.async_sync_mealie(), "omniplan_mealie_mealplan")
 
     async def async_mealie_lists(self) -> list[dict[str, Any]]:
         if self.mealie is None:

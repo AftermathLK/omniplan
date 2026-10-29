@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 
 from custom_components.omniplan.const import DOMAIN
 from custom_components.omniplan.diagnostics import async_get_config_entry_diagnostics
@@ -304,3 +305,46 @@ async def test_mealie_client_refuses_redirects_and_hides_details(hass: HomeAssis
     with pytest.raises(MealieError):
         await client.async_get_recipe("../users/self")
     assert aioclient_mock.mock_calls == []  # rejected before any request
+
+
+async def test_mealie_recipe_list_pages_and_image_checks(hass: HomeAssistant, aioclient_mock) -> None:
+    base = f"http://{SECRET_HOST}:9000"
+    client = MealieClient(async_get_clientsession(hass), base, SECRET_TOKEN)
+    recipe_id = "0d2b6f1a-1111-4222-8333-444455556666"
+
+    aioclient_mock.get(f"{base}/api/recipes", params={"page": "1", "perPage": "1000", "orderBy": "name", "orderDirection": "asc"}, json={"items": [{"slug": "a"}], "total_pages": 2})
+    aioclient_mock.get(f"{base}/api/recipes", params={"page": "2", "perPage": "1000", "orderBy": "name", "orderDirection": "asc"}, json={"items": [{"slug": "b"}], "total_pages": 2})
+    assert [r["slug"] for r in await client.async_list_recipes()] == ["a", "b"]
+
+    image_url = f"{base}/api/media/recipes/{recipe_id}/images/min-original.webp"
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(image_url, content=b"RIFFxxxxWEBP", headers={"Content-Type": "image/webp"})
+    data, content_type = await client.async_get_recipe_image(recipe_id)
+    assert data == b"RIFFxxxxWEBP" and content_type == "image/webp"
+    assert aioclient_mock.mock_calls[0][3]["Authorization"] == f"Bearer {SECRET_TOKEN}"
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(image_url, text="<script>alert(1)</script>", headers={"Content-Type": "text/html"})
+    with pytest.raises(MealieError, match="did not return an image"):
+        await client.async_get_recipe_image(recipe_id)
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(image_url, content=b"x" * (3 * 1024 * 1024 + 1), headers={"Content-Type": "image/jpeg"})
+    with pytest.raises(MealieError, match="too large"):
+        await client.async_get_recipe_image(recipe_id)
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(image_url, status=302, headers={"Location": "http://evil.example/steal"})
+    with pytest.raises(MealieError):
+        await client.async_get_recipe_image(recipe_id)
+    assert len(aioclient_mock.mock_calls) == 1
+
+    aioclient_mock.clear_requests()
+    for bad in ("../users/self", "x/../../etc", ""):
+        with pytest.raises(MealieError):
+            await client.async_get_recipe_image(bad)
+    with pytest.raises(MealieError):
+        await client.async_get_recipe_image(recipe_id, size="../../secret")
+    with pytest.raises(MealieError):
+        await client.async_create_mealplan(dt_util.now().date(), recipe_id, "brunch")
+    assert aioclient_mock.mock_calls == []  # all rejected before any request

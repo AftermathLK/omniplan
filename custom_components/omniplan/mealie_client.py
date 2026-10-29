@@ -43,12 +43,20 @@ __all__ = [
     "name_key",
     "parse_item",
     "validate_base_url",
+    "validate_recipe_id",
     "validate_slug",
 ]
 
 _LOGGER = logging.getLogger(__name__)
 TIMEOUT = aiohttp.ClientTimeout(total=MEALIE_TIMEOUT_SECONDS)
 _SLUG_RE = re.compile(SLUG_PATTERN)
+_RECIPE_ID_RE = re.compile(r"^[0-9a-fA-F-]{8,64}$")
+RECIPE_PAGE_SIZE = 1000
+MAX_RECIPES = 3000
+IMAGE_SIZES = ("min-original.webp", "tiny-original.webp", "original.webp")
+IMAGE_TYPES = ("image/webp", "image/jpeg", "image/png", "image/gif")
+MAX_IMAGE_BYTES = 3 * 1024 * 1024
+MEAL_TYPES = ("breakfast", "lunch", "dinner", "side", "snack", "dessert", "drink")
 
 
 class MealieError(Exception):
@@ -106,6 +114,14 @@ def validate_slug(slug: str) -> str:
     return value
 
 
+def validate_recipe_id(recipe_id: str) -> str:
+    """Recipe ids (UUIDs) go into the image URL path."""
+    value = (recipe_id or "").strip()
+    if not _RECIPE_ID_RE.match(value):
+        raise MealieError("That does not look like a Mealie recipe id")
+    return value
+
+
 def _seg(value: Any) -> str:
     """Percent-encode one URL path segment (``/`` included)."""
     return quote(str(value), safe="")
@@ -145,11 +161,35 @@ class MealieClient:
                     raise _NotFound("Mealie returned 404")
                 if response.status >= 400:
                     raise MealieError(f"Mealie returned HTTP {response.status}")
-                if response.status == 204 or response.content_length == 0:
+                if response.status == 204 or _length(response) == 0:
                     return None
                 return await response.json(content_type=None)
         except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as err:
             # aiohttp messages include host and port; keep them out of logs and the UI.
+            raise MealieError(f"Cannot reach Mealie ({type(err).__name__})") from err
+
+    async def _request_image(self, path: str) -> tuple[bytes, str]:
+        """GET an image: same rules as :meth:`_request`, plus a type check and a size cap."""
+        url = f"{self.base_url}{path}"
+        headers = {"Authorization": f"Bearer {self._token}", "Accept": ", ".join(IMAGE_TYPES)}
+        try:
+            async with self._session.get(url, headers=headers, timeout=TIMEOUT, allow_redirects=False) as response:
+                if response.status in (401, 403):
+                    raise MealieAuthError(f"Mealie rejected the API token (HTTP {response.status})")
+                if response.status == 404:
+                    raise _NotFound("Mealie returned 404")
+                if response.status != 200:
+                    raise MealieError(f"Mealie returned HTTP {response.status}")
+                content_type = (response.content_type or "").lower()
+                if content_type not in IMAGE_TYPES:
+                    raise MealieError("Mealie did not return an image")
+                if (_length(response) or 0) > MAX_IMAGE_BYTES:
+                    raise MealieError("The recipe image is too large")
+                data = await response.content.read(MAX_IMAGE_BYTES + 1)
+                if len(data) > MAX_IMAGE_BYTES:
+                    raise MealieError("The recipe image is too large")
+                return data, content_type
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as err:
             raise MealieError(f"Cannot reach Mealie ({type(err).__name__})") from err
 
     async def _household_request(self, method: str, suffix: str, **kwargs: Any) -> Any:
@@ -210,6 +250,41 @@ class MealieClient:
             raise MealieError("Recipe not found in Mealie") from err
         return data or {}
 
+    async def async_list_recipes(self) -> list[dict[str, Any]]:
+        """Every recipe summary (name, slug, image key, categories, tags, times), page by page."""
+        recipes: list[dict[str, Any]] = []
+        page = 1
+        while len(recipes) < MAX_RECIPES:
+            data = await self._request(
+                "GET",
+                "/api/recipes",
+                params={"page": page, "perPage": RECIPE_PAGE_SIZE, "orderBy": "name", "orderDirection": "asc"},
+            )
+            items = [item for item in _items(data) if isinstance(item, dict)]
+            recipes.extend(items)
+            total_pages = data.get("total_pages") if isinstance(data, dict) else None
+            if not items or not isinstance(total_pages, int) or page >= total_pages:
+                break
+            page += 1
+        return recipes[:MAX_RECIPES]
+
+    async def async_create_mealplan(self, day: date, recipe_id: str, entry_type: str = "dinner") -> dict[str, Any]:
+        """Put a recipe on the household meal plan."""
+        if entry_type not in MEAL_TYPES:
+            raise MealieError("Unknown meal type")
+        payload = {"date": day.isoformat(), "entryType": entry_type, "recipeId": validate_recipe_id(recipe_id), "title": "", "text": ""}
+        return await self._household_request("POST", "/mealplans", json=payload) or {}
+
+    async def async_get_recipe_image(self, recipe_id: str, size: str = IMAGE_SIZES[0]) -> tuple[bytes, str]:
+        """A recipe's image bytes and content type (for the authenticated Home Assistant proxy)."""
+        if size not in IMAGE_SIZES:
+            raise MealieError("Unknown image size")
+        path = f"/api/media/recipes/{_seg(validate_recipe_id(recipe_id))}/images/{size}"
+        try:
+            return await self._request_image(path)
+        except _NotFound as err:
+            raise MealieError("This recipe has no image") from err
+
     # ------------------------------------------------------------------
     # Shopping lists
     # ------------------------------------------------------------------
@@ -256,6 +331,12 @@ class MealieClient:
             # Already gone in Mealie is fine; anything else is a real failure.
             if not isinstance(err.__cause__, _NotFound):
                 raise
+
+
+def _length(response: Any) -> int | None:
+    """The declared body size, if the server sent one."""
+    value = response.headers.get("Content-Length")
+    return int(value) if value and value.isdigit() else None
 
 
 class _NotFound(MealieError):

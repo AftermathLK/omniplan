@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -12,6 +13,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from custom_components.omniplan.const import DOMAIN
+from custom_components.omniplan.mealie_client import MealieError
+
+ORZO_ID = "0d2b6f1a-1111-4222-8333-444455556666"
 
 
 class FakeMealie:
@@ -28,6 +32,7 @@ class FakeMealie:
         self.created: list[str] = []
         self.updated: list[dict] = []
         self.deleted: list[str] = []
+        self.planned: list[tuple] = []
         self._seq = 0
 
     async def async_get_self(self):
@@ -66,7 +71,21 @@ class FakeMealie:
         return self.mealplans
 
     async def async_get_recipe(self, slug):
+        if slug not in self.recipes:
+            raise MealieError("Recipe not found in Mealie")
         return self.recipes[slug]
+
+    async def async_list_recipes(self):
+        return [{k: r.get(k) for k in ("id", "slug", "name", "recipeCategory", "tags", "image", "totalTime")} for r in self.recipes.values()]
+
+    async def async_create_mealplan(self, day, recipe_id, entry_type="dinner"):
+        self.planned.append((day.isoformat(), recipe_id, entry_type))
+        return {"id": len(self.planned)}
+
+    async def async_get_recipe_image(self, recipe_id, size="min-original.webp"):
+        if recipe_id != ORZO_ID:
+            raise MealieError("This recipe has no image")
+        return b"RIFF....WEBPVP8 ", "image/webp"
 
 
 @pytest.fixture
@@ -173,3 +192,69 @@ async def test_meal_plan_prep_cook_and_leftovers(hass: HomeAssistant, mealie_ent
     fake.mealplans = []
     await coordinator.async_sync_mealie()
     assert await coordinator.db.list_tasks(source="mealie_prep") == []
+
+
+async def test_recipe_browser_websocket_and_image_proxy(hass: HomeAssistant, mealie_entry: MockConfigEntry, hass_ws_client, hass_client, hass_client_no_auth) -> None:
+    coordinator = mealie_entry.runtime_data
+    fake = FakeMealie.instance
+    fake.recipes["chicken-sausage-orzo"] = {
+        "id": ORZO_ID,
+        "slug": "chicken-sausage-orzo",
+        "name": "Chicken Sausage Orzo <img src=x onerror=alert(1)>",
+        "recipeCategory": [{"name": "Chicken"}, {"name": "Pasta"}],
+        "tags": [{"name": "Weeknight"}],
+        "image": "k1",
+        "totalTime": "35 minutes",
+        "recipeIngredient": [
+            {"quantity": 12, "unit": {"abbreviation": "oz"}, "food": {"name": "chicken sausage"}},
+            {"quantity": 1.5, "unit": {"name": "cup"}, "food": {"name": "orzo"}},
+            {"quantity": 1, "unit": {"abbreviation": "tsp"}, "food": {"name": "kosher salt"}},
+            {"note": "1 tsp smoked paprika"},
+        ],
+    }
+    ws = await hass_ws_client(hass)
+    seq = iter(range(1, 1000))
+
+    async def call(message: dict) -> dict:
+        msg_id = next(seq)
+        await ws.send_json({"id": msg_id, **message})
+        while True:
+            reply = await ws.receive_json()
+            if reply.get("id") == msg_id and reply.get("type") == "result":
+                return reply
+
+    listing = (await call({"type": "omniplan/mealie_get_recipes"}))["result"]
+    [orzo] = listing["recipes"]
+    assert orzo["slug"] == "chicken-sausage-orzo" and orzo["has_image"] and listing["categories"] == ["Chicken", "Pasta"]
+    assert "token" not in json.dumps(listing)  # the API token never reaches the card
+
+    preview = (await call({"type": "omniplan/mealie_recipe_preview", "recipe_slug": "chicken-sausage-orzo"}))["result"]
+    assert [row["skip"] for row in preview["ingredients"]] == [None, None, "seasoning", "seasoning"]
+
+    added = (await call({"type": "omniplan/mealie_add_recipe_to_groceries", "recipe_slug": "chicken-sausage-orzo"}))["result"]
+    assert sorted(added["added"]) == ["Chicken sausage", "Orzo"] and added["skipped_seasonings"] == 2
+    groceries = await coordinator.planner.grocery_plan()
+    assert {t["summary"] for t in await coordinator.db.list_tasks(groceries["id"], top_level_only=True)} >= {"Chicken sausage", "Orzo"}
+
+    day = (dt_util.now().date() + timedelta(days=2)).isoformat()
+    planned = (await call({"type": "omniplan/mealie_plan_meal", "recipe_slug": "chicken-sausage-orzo", "date": day}))["result"]
+    assert planned["meal_plan"]["date"] == day and fake.planned == [(day, ORZO_ID, "dinner")]
+
+    settings = (await call({"type": "omniplan/mealie_import_settings", "settings": {"skip_seasonings": False}}))["result"]
+    assert settings["skip_seasonings"] is False
+    preview = (await call({"type": "omniplan/mealie_recipe_preview", "recipe_slug": "chicken-sausage-orzo"}))["result"]
+    assert all(row["skip"] is None for row in preview["ingredients"])
+
+    bad = await call({"type": "omniplan/mealie_recipe_preview", "recipe_slug": "missing"})
+    assert not bad["success"] and bad["error"]["code"] == "mealie_error"
+    chores = await coordinator.planner.chores_plan()
+    wrong = await call({"type": "omniplan/mealie_add_recipe_to_groceries", "recipe_slug": "chicken-sausage-orzo", "plan_id": chores["id"]})
+    assert not wrong["success"] and wrong["error"]["code"] == "invalid"
+
+    client = await hass_client()
+    image = await client.get(f"/api/omniplan/mealie_image/{ORZO_ID}")
+    assert image.status == 200 and image.content_type == "image/webp" and image.headers["X-Content-Type-Options"] == "nosniff"
+    assert (await client.get("/api/omniplan/mealie_image/aaaabbbb-0000")).status == 404  # no image in Mealie
+    assert (await client.get("/api/omniplan/mealie_image/not%20an%20id")).status == 400
+    assert (await (await hass_client_no_auth()).get(f"/api/omniplan/mealie_image/{ORZO_ID}")).status == 401
+

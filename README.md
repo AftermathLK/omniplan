@@ -3,7 +3,7 @@
 A local-first household planner that runs **entirely inside Home Assistant Core**: no add-on, no Docker, no cloud. Data lives in `<config>/.storage/omniplan.db` (SQLite via `aiosqlite`). Every plan is also a native `todo.*` entity, so Assist, automations and the stock To-do panel keep working, and the bundled `omniplan-card` / sidebar panel adds everything native to-do lists can't do.
 
 - **Quick List home screen**: the card opens on a zero-friction list for everyday one-offs. Switch between the **shared household** list and **your private** one, organize items into collapsible, renamable, reorderable **sections** ("Calls to Make", "House Stuff"…), add from the top bar or inside any section, and **promote** an item into a structured plan, or make it recurring, with one tap.
-- **Categories you control**: hide tabs you're not using, reorder them (per user), and create new categories on the spot: name, `mdi:` icon, shared or private, and the behavior you want (quick list, time-blocked chores, shopping grid, Kanban/DIY, trip packing, home maintenance & assets, pantry).
+- **Categories you control**: switch categories from one dropdown in the card's header, hide the ones you're not using, reorder them (per user), and create new categories on the spot: name, `mdi:` icon, shared or private, and the behavior you want (quick list, time-blocked chores, shopping grid, Kanban/DIY, trip packing, home maintenance & assets, pantry).
 - **Plans with archetypes**: Daily chores (time-blocked agenda, streaks, rollover), Shopping (aisle grid, dedupe, frequently-bought drawer), Projects (Kanban ⇄ dependency tree, bill of materials), Home maintenance (objects, tasks, sensor triggers, parts and documents; see below), Pantry (In stock / Low / Out with restock actions).
 - **Home maintenance & asset management**: every appliance, system or vehicle is an object (`#3`) with its tasks (`#3.1`), parts inventory, manuals and invoices, and a full service history. Tasks fall due on rolling or planned intervals, seasonal windows, or sensor triggers (thresholds, counters, runtime hours, cycle counts, leak sensors), and learn a better interval from your feedback. You can complete them by scanning an NFC tag or a printed QR code, and print a PDF service record for any date range.
 - **Water softener telemetry**: a Droplet (or any total-water meter) drives a live salt estimate in gallons and days remaining. OmniPlan detects regenerations and learns how much water each level of salt lasts.
@@ -12,9 +12,8 @@ A local-first household planner that runs **entirely inside Home Assistant Core*
 - **PRN / shift-aware chores**: every morning, chores marked *shift-aware* go to whoever is off work (or whose shift ends first), based on each person's work calendar.
 - **Blocking dependencies**: Task B stays `blocked` (and optionally hidden) until Task A is done, then pops into Ready.
 - **Snooze until context**: until a time, next time I'm home, when we're all home, this weekend if it's not raining, or when any entity reaches a state or threshold.
-- **Mealie**: prep timelines worked back from the meal plan (thaw T-36h, smoker T-4h…), "Cook …" tasks, leftover trackers with a countdown, pantry batch recipes, and two-way shopping-list sync with unit-normalized merging (`0.5 cup + 120 ml → 1 cup / 240 ml`).
+- **Mealie**: browse your recipes inside Groceries and add a recipe's ingredients in one tap, without the spice rack or what's already in the pantry; plan meals onto Mealie's meal plan; prep timelines worked back from the meal plan (thaw T-36h, smoker T-4h…), "Cook …" tasks, leftover trackers with a countdown, pantry batch recipes, and two-way shopping-list sync with unit-normalized merging (`0.5 cup + 120 ml → 1 cup / 240 ml`).
 - **Brain Dump**: type or speak "pick up 2x4s at Menards Saturday morning and add garlic powder to the grocery list", and it becomes a project task plus a grocery item. It uses your Assist LLM agent when one is configured and falls back to a built-in rules parser otherwise.
-- **"Got 15 minutes?"**: duration and context chips surface 3–5 unblocked tasks that fit the moment.
 
 ## Install
 
@@ -54,33 +53,32 @@ type: custom:omniplan-card
 view_mode: kiosk_split
 title: Today
 show_brain_dump: true
-show_quick_wins: true
 ```
 
 ```yaml
-# A single plan, no tabs (e.g. the grocery list on the fridge tablet)
+# A single plan, no category dropdown (e.g. the grocery list on the fridge tablet)
 type: custom:omniplan-card
 plan: Groceries        # plan name or id
 ```
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `view_mode` | `quick` | `quick` opens on the Quick List, `personal` on My Day, `kiosk_split` on the family split, and `auto` picks personal when your user is linked to a person. If that tab is hidden, the first visible tab opens. |
+| `view_mode` | `quick` | `quick` opens on the Quick List, `personal` on My Day, `kiosk_split` on the family split, and `auto` picks personal when your user is linked to a person. If that category is hidden, the first visible one opens. |
 | `plan` | none | Show one plan only (name or id). |
-| `plans` | all | List of plan names or ids to show as tabs. |
+| `plans` | all | List of plan names or ids to offer in the category dropdown. |
 | `person` | your person | Force whose "My Day" is shown. |
 | `title` | `OmniPlan` | Card title. |
 | `show_brain_dump` | `true` | Show the Brain Dump bar and mic button. |
-| `show_quick_wins` | `true` | Show the "Got 15 minutes?" filter chips. |
 
 The sidebar panel (**OmniPlan**) is the same card, full page.
 
 Card tips:
 - **Quick List**: type in the top bar and press Enter. Start with a section name to file it there ("Calls: dentist" lands in "Calls to Make"), or use the section picker or the "+ Add task" field inside a section. Section headers collapse (remembered per user, on every device), and the pencil, arrow and trash buttons rename, reorder and delete a section; deleting one moves its tasks to the inbox, with undo.
 - **Promote**: the ➜ button on a quick-list item moves it into any plan (shopping items get an aisle, packing items go to the next trip), or **Repeat it…** opens the editor with a weekly schedule pre-filled so it becomes a recurring chore.
-- **Categories**: **+** in the tab bar creates a category. The ⚙ at the end of the tab bar hides, shows and reorders tabs for you only, and lists archived categories so you can restore them.
+- **Categories**: the dropdown in the header (it shows the current category and how many items are open) lists every category with its count. At the bottom, **New category / plan** creates one and **Show / hide categories** hides, shows and reorders them for you only, and lists archived categories so you can restore them.
 - **Trips**: "New trip" asks for a name and dates and pre-fills every repeatable item. Tap the big box to pack (it's crossed out instantly), tap ↻ to switch an item between *repeatable* and *one-off* (that applies to the item on every trip), and type "Tech: headlamp" to add into a group. Trips become active on their start date; archive them when you're home.
 - Tap a task to expand its notes and checklist. Tap the pencil icon for the full editor (recurrence, assignees, dependencies and history).
+- **Groceries**: the **Shopping list | Browse Mealie Recipes | Pantry & Excluded Spices** bar at the top switches between the list, the recipe browser and the import settings (described under Mealie below). Tapping **Mealie ✓** in the header jumps straight to the recipes.
 - **Maintenance**: the blue object name opens the object (tasks, documents, parts, full history); the bold task name opens the task (KPIs, timeline, triggers, recommendation, activity). ✔ **Complete** on a row logs it right away with undo; the task page's Complete asks for cost, duration, parts, feedback and a photo.
 - Drag the ⋮ handle to reorder, or to move between Morning/Afternoon/Evening, Kanban columns, aisles, quick-list sections, trips and packing groups, or between people in the family view (dropping on a person's column reassigns the task).
 - Every completion and delete shows a 5-second **Undo**.
@@ -195,13 +193,18 @@ For private lists, the name fields are `null` and `private` is `true`. For examp
   - recipe **notes or description** containing `Lead time: thaw 36h, smoker 4h`, or a recipe **extra** (custom field) named `omniplan` with the same text;
   - **configured rules** in the options, one per line: `tag-or-keyword => hours | template`, where templates can use `{recipe}`, `{meat}` and `{action}`. Keyword rules (e.g. `brisket => 36 | …`) match the recipe name or notes.
 - **Cook tasks and leftovers**: a "Cook Smoked Brisket" task is due at meal time minus the recipe's total time. When it's checked off, or at the leftover time on the meal day, OmniPlan adds "Eat or freeze leftover … (Cooked Tuesday)" with a countdown that turns urgent when it expires.
+- **Recipe browser** (Groceries → **Browse Mealie Recipes**): every Mealie recipe with its photo, categories, total time and how often it was on your meal plan in the last year. Filter by category or tag, sort A–Z, by recently added, by most cooked or by category, and search. Each recipe has three actions:
+  - **Add ingredients** adds what you need to that grocery list straight away, merging quantities with items already on it: *"Added 6 items from Chicken Sausage Orzo (Skipped 4 seasonings/pantry items)"*.
+  - **Review** opens the ingredient list with seasonings and in-stock pantry items unchecked. Tick anything you're out of, untick what you have, and add.
+  - **Plan meal** picks a day (the next week as one-tap chips, or any date) and a meal, puts the recipe on Mealie's meal plan and optionally adds its ingredients too. Prep and cook tasks for that meal appear after the next sync, which starts right away.
+- **Pantry & Excluded Spices**: the seasoning filter is on by default. It ignores the household's list of seasonings and staples (salt, black pepper, garlic powder, paprika, cumin, oregano, olive oil, water, cooking spray…), which you can add to, prune or reset, plus any Mealie food labelled as a spice or seasoning. Matching ignores amounts and words like *ground*, *dried*, *freshly* or *to taste*, so "1 tsp freshly ground black pepper, to taste" counts as black pepper, while "coconut water" and "bell pepper" are still bought. Anything your pantry has **in stock** is skipped too (a pantry "Flour" covers "all-purpose flour"); the same drawer lists your pantry staples with a checkbox each to mark what's in the house right now.
 - **Pantry batches**: link a pantry item to a Mealie recipe slug and press **Load ingredients from Mealie**. When the item goes Low or Out, OmniPlan either pushes the raw ingredients to the shopping list or creates a "Make a new batch of …" chore with the recipe link and ingredient list, depending on the item's setting (or it asks each time).
 
 ## Privacy & security
 
 - **Private lists are filtered on the server.** A private category, including each user's "My Quick List", is returned only to its owner and the household members it's explicitly shared with. Every WebSocket command checks each plan, task, section, trip, pantry or BOM id it's given against the signed-in user before doing anything. Ids the user can't see answer `not_found`, exactly like ids that don't exist. Administrators get no back door through the API. Private lists have no `todo.*` entity, because entity state is readable by every Home Assistant user, and bus events for them carry no task text.
 - **Admin-only changes**: deleting a household category (`omniplan/delete_plan`), listing Mealie shopping lists and running shift balancing use Home Assistant's `require_admin`. Changing routing roles, Mealie links, archiving, or making a household list private also need an administrator (or the list's creator). Owners delete their own private lists with `omniplan/delete_private_plan`. Tab order, hidden tabs and collapsed sections are per-user preferences.
-- **Mealie credentials** live in the config entry's `data` (`.storage/core.config_entries`; protected by file permissions, not encrypted), never in options, entity attributes, WebSocket payloads or the card. The card only receives a sync status. All Mealie traffic goes from Home Assistant's own HTTP session, with a 10-second timeout, no redirects (so the token is never replayed to another host), percent-encoded path segments and validated recipe slugs. Error messages and logs never contain the URL, the token or response bodies. Upgrading from 1.0 moves an existing token out of options automatically.
+- **Mealie credentials** live in the config entry's `data` (`.storage/core.config_entries`; protected by file permissions, not encrypted), never in options, entity attributes, WebSocket payloads or the card. The card receives a sync status and, in the recipe browser, recipe names, categories and Mealie links, but never the token. Recipe photos are fetched by Home Assistant and passed to the card through an authenticated endpoint (`/api/omniplan/mealie_image/…`), so they work away from home. That endpoint only accepts recipe ids, only passes through real image types up to 3 MB, and serves them with `nosniff` and a sandboxing CSP. All Mealie traffic goes from Home Assistant's own HTTP session, with a 10-second timeout, no redirects (so the token is never replayed to another host), percent-encoded path segments and validated recipe slugs. Error messages and logs never contain the URL, the token or response bodies. Upgrading from 1.0 moves an existing token out of options automatically.
 - **Diagnostics** (Settings → Devices & services → OmniPlan → ⋮ → Download diagnostics) contain settings and counts only; the token, URLs, user ids, calendars and private list names are `**REDACTED**`.
 - **SQL**: every value is a `?` parameter. The only text spliced into SQL is table and column names, which must appear in the schema allow-list. A unit test fails the build if an f-string or `%` formatting builds SQL anywhere in the integration.
 - **XSS**: the card renders through an escape-by-default `html` tagged template (the same model as Lit's bindings). Every interpolated value is HTML-escaped unless it is itself trusted template output, and an allow-list sanitizer then strips any element or attribute OmniPlan doesn't use (scripts, `on*` handlers, `javascript:` links) before anything reaches the live page. Links are only ever `http(s)`, both when stored and when rendered.
@@ -225,6 +228,8 @@ custom_components/omniplan/
 ├── services.py        omniplan.* services
 ├── brain_dump.py      LLM prompt + JSON validation, deterministic rules fallback
 ├── mealie_client.py   async Mealie REST client (v2 household routes, v1 group fallback)
+├── recipes.py         recipe summaries and the seasoning / pantry import filter
+├── recipe_browser.py  cached recipe list, image cache, recipe → groceries and meal planning
 ├── units.py           quantity parsing, unit normalization/merging, aisle categorization
 ├── kitchen.py         prep-rule discovery, leftover naming, ingredient lines
 ├── dependencies.py    blocking-dependency resolution and cycle detection
@@ -236,13 +241,13 @@ custom_components/omniplan/
 ├── maintenance_manager.py   objects, tasks, parts, documents, completions, NFC, salt learning, board views
 ├── maintenance_runtime.py   HA glue: state + tag events, zone-gated notifications, document files
 ├── maintenance_ws.py  omniplan/maint_* WebSocket commands
-├── http_views.py      document upload/download and the service-record PDF endpoint
+├── http_views.py      document upload/download, the service-record PDF and the Mealie image proxy
 ├── qr.py              QR-code encoder (Reed–Solomon, byte mode)
 ├── pdf.py             minimal PDF table writer
 └── frontend/omniplan-card.js   zero-dependency card, panel and card editor (escape-by-default rendering)
 ```
 
-The modules that hold the logic (`planner`, `database`, `units`, `dependencies`, `recurrence`, `shift_balance`, `snooze`, `kitchen`, `brain_dump`, `maintenance`, `maintenance_manager`, `qr`, `pdf`) don't import Home Assistant, which is why most of the behaviour can be unit-tested without it.
+The modules that hold the logic (`planner`, `database`, `units`, `dependencies`, `recurrence`, `shift_balance`, `snooze`, `kitchen`, `brain_dump`, `maintenance`, `maintenance_manager`, `qr`, `pdf`, `recipes`, `recipe_browser`) don't import Home Assistant, which is why most of the behaviour can be unit-tested without it.
 
 The database file and the `omniplan_docs` folder are included in Home Assistant backups because they live in `.storage`. Deleting the integration leaves them in place.
 
