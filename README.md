@@ -3,10 +3,10 @@
 </p>
 
 <p align="center">
-  <a href="https://hacs.xyz/"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5?style=for-the-badge&logo=homeassistantcommunitystore&logoColor=white" alt="HACS custom repository"></a>
-  <a href="https://www.home-assistant.io/"><img src="https://img.shields.io/badge/Home%20Assistant-2024.11%2B-18BCF2?style=for-the-badge&logo=homeassistant&logoColor=white" alt="Home Assistant 2024.11 or newer"></a>
+  <a href="https://hacs.xyz/"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/badges/hacs.svg" alt="HACS custom repository"></a>
+  <a href="https://www.home-assistant.io/"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/badges/home-assistant.svg" alt="Home Assistant 2024.11 or newer"></a>
   <img src="https://img.shields.io/github/manifest-json/v/AftermathLK/omniplan?filename=custom_components%2Fomniplan%2Fmanifest.json&style=for-the-badge&label=version&color=0A84E0" alt="Version">
-  <img src="https://img.shields.io/badge/cloud-none-2E9E4F?style=for-the-badge" alt="No cloud">
+  <img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/badges/no-cloud.svg" alt="No cloud">
 </p>
 
 <p align="center">
