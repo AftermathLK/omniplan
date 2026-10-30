@@ -8,7 +8,7 @@ can be unit tested without a Home Assistant installation.
 from __future__ import annotations
 
 DOMAIN = "omniplan"
-VERSION = "1.3.2"
+VERSION = "1.3.3"
 
 DB_FILENAME = "omniplan.db"
 

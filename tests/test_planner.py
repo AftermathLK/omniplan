@@ -285,3 +285,10 @@ async def test_plan_crud(planner) -> None:
     assert updated["name"] == "Costco run" and updated["settings"] == {"mealie_list_id": "abc"}
     await planner.delete_plan(plan["id"])
     assert await planner.db.get_plan(plan["id"]) is None
+
+
+async def test_retired_plan_icons_are_replaced(planner) -> None:
+    plan = await planner.db.create_plan({"name": "Old maintenance", "archetype": "home_maintenance", "icon": "mdi:home-wrench"})
+    await planner.ensure_defaults()
+    assert (await planner.db.get_plan(plan["id"]))["icon"] == "mdi:tools"
+    assert all(p["icon"] != "mdi:home-wrench" for p in await planner.db.list_plans(include_archived=True))

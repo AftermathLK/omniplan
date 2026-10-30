@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="OmniPlan">
+  <title>OmniPlan</title>
+  <defs>
+    <linearGradient id="op-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2EC0FF"/>
+      <stop offset="0.55" stop-color="#0A84E0"/>
+      <stop offset="1" stop-color="#0B4FA8"/>
+    </linearGradient>
+    <linearGradient id="op-shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.30"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="op-house" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E8F3FF"/>
+    </linearGradient>
+    <filter id="op-drop" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#04224F" flood-opacity="0.38"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#op-bg)"/>
+  <rect width="512" height="512" rx="116" fill="url(#op-shine)"/>
+  <g filter="url(#op-drop)">
+    <path d="M256 96 L432 238 L398 238 L398 388 Q398 414 372 414 L140 414 Q114 414 114 388 L114 238 L80 238 Z"
+          fill="url(#op-house)" stroke="url(#op-house)" stroke-width="22" stroke-linejoin="round"/>
+  </g>
+  <g>
+    <circle cx="162" cy="282" r="19" fill="#2E9E4F"/>
+    <path d="M152 282 l7 7 l14 -15" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="196" y="273" width="160" height="18" rx="9" fill="#C9D7E6"/>
+    <circle cx="162" cy="332" r="19" fill="#2E9E4F"/>
+    <path d="M152 332 l7 7 l14 -15" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="196" y="323" width="128" height="18" rx="9" fill="#C9D7E6"/>
+    <circle cx="162" cy="382" r="16" fill="none" stroke="#0A84E0" stroke-width="6"/>
+    <rect x="196" y="373" width="146" height="18" rx="9" fill="#9CCBF5"/>
+  </g>
+  <circle cx="392" cy="118" r="38" fill="#FFB31A" stroke="#FFFFFF" stroke-width="12"/>
+</svg>

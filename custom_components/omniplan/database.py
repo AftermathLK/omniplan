@@ -983,6 +983,14 @@ class OmniPlanDB:
             await self.conn.execute("DELETE FROM item_history WHERE plan_id = ?", (plan_id,))
             await self.conn.execute("DELETE FROM sync_tombstones WHERE plan_id = ?", (plan_id,))
 
+    async def replace_plan_icon(self, old: str, new: str) -> list[str]:
+        """Swap one icon for another on every plan that uses it; returns the plan ids changed."""
+        rows = await self._fetchall("SELECT id FROM plans WHERE icon = ?", (old,))
+        if rows:
+            async with self._tx():
+                await self.conn.execute("UPDATE plans SET icon = ?, updated_at = ? WHERE icon = ?", (new, utc_now_iso(), old))
+        return [row[0] for row in rows]
+
     async def reorder_plans(self, ordered_ids: Sequence[str]) -> None:
         async with self._tx():
             for position, plan_id in enumerate(ordered_ids, start=1):

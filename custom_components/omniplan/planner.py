@@ -152,7 +152,7 @@ DEFAULT_PLANS: tuple[dict[str, Any], ...] = (
     {"name": "Groceries", "archetype": ARCHETYPE_SHOPPING, "icon": "mdi:cart-outline", "settings": {"role": ROLE_GROCERIES}},
     {"name": "Hardware", "archetype": ARCHETYPE_SHOPPING, "icon": "mdi:hammer-wrench", "settings": {"role": ROLE_HARDWARE, "default_category": AISLE_HARDWARE}},
     {"name": "Projects", "archetype": ARCHETYPE_PROJECTS, "icon": "mdi:hammer-screwdriver", "settings": {}},
-    {"name": "Home Maintenance", "archetype": ARCHETYPE_MAINTENANCE, "icon": "mdi:home-wrench", "settings": {}},
+    {"name": "Home Maintenance", "archetype": ARCHETYPE_MAINTENANCE, "icon": "mdi:tools", "settings": {}},
     {"name": "Trip Packing", "archetype": ARCHETYPE_PACKING, "icon": "mdi:bag-suitcase-outline", "settings": {}},
     {"name": "Pantry & Spices", "archetype": ARCHETYPE_PANTRY, "icon": "mdi:shaker-outline", "settings": {}},
 )
@@ -166,6 +166,8 @@ _ICON_RE = re.compile(ICON_PATTERN)
 _COLOR_RE = re.compile(COLOR_PATTERN)
 _UNSET = object()
 PANTRY_SHOPPING_PREFIX = "shop:"
+# Icons that earlier versions used but Material Design Icons doesn't have (they render blank).
+RETIRED_ICONS = {"mdi:home-wrench": "mdi:tools"}
 MAX_UNDO_ENTRIES = 200
 MAX_SHARED_WITH = 20
 PREF_VALUE_MAX = 200
@@ -388,7 +390,9 @@ class Planner:
         return created
 
     async def ensure_defaults(self) -> None:
-        """Add plans introduced by newer versions to existing databases (once)."""
+        """Add plans introduced by newer versions to existing databases (once), and fix retired icons."""
+        for old, new in RETIRED_ICONS.items():
+            self._notify(await self.db.replace_plan_icon(old, new))
         if await self.db.get_meta("quick_list_seeded"):
             return
         plans = await self.db.list_plans(include_archived=True)

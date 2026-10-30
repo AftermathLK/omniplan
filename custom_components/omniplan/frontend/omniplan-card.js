@@ -14,7 +14,7 @@
  * inject markup or script into the dashboard.
  */
 
-const OP_VERSION = "1.3.2";
+const OP_VERSION = "1.3.3";
 
 const AISLES = ["Produce", "Meat", "Dairy", "Spices/Pantry", "Hardware", "Other"];
 const BUCKETS = [
@@ -37,7 +37,7 @@ const ARCHETYPES = {
   shopping_errands: { label: "Compact shopping grid", icon: "mdi:cart-outline", hint: "Aisle tiles, quantity merging, frequently bought." },
   projects_diy: { label: "Kanban / DIY", icon: "mdi:hammer-screwdriver", hint: "Kanban and dependency views, bill of materials." },
   packing_trips: { label: "Trip packing", icon: "mdi:bag-suitcase-outline", hint: "Dated trips, always-pack items added automatically." },
-  home_maintenance: { label: "Home maintenance & assets", icon: "mdi:home-wrench", hint: "Objects, intervals, sensor triggers, parts, documents, NFC & QR." },
+  home_maintenance: { label: "Home maintenance & assets", icon: "mdi:tools", hint: "Objects, intervals, sensor triggers, parts, documents, NFC & QR." },
   pantry_spices: { label: "Pantry & spices", icon: "mdi:shaker-outline", hint: "In stock / low / out with restock actions." },
 };
 const ACTIONABLE = new Set(["quick_list", "daily_chores", "projects_diy", "home_maintenance"]);
@@ -45,7 +45,7 @@ const PACKING_GROUPS = ["Clothes", "Toiletries", "Tech", "Kids Gear", "Documents
 const ICON_CHOICES = [
   "mdi:format-list-checks", "mdi:lightning-bolt-outline", "mdi:phone-outline", "mdi:home-outline", "mdi:broom",
   "mdi:washing-machine", "mdi:silverware-fork-knife", "mdi:cart-outline", "mdi:store-outline", "mdi:hammer-screwdriver",
-  "mdi:hammer-wrench", "mdi:home-wrench", "mdi:flower-outline", "mdi:tree-outline", "mdi:car-outline",
+  "mdi:hammer-wrench", "mdi:tools", "mdi:flower-outline", "mdi:tree-outline", "mdi:car-outline",
   "mdi:bag-suitcase-outline", "mdi:airplane", "mdi:tent", "mdi:beach", "mdi:gift-outline",
   "mdi:party-popper", "mdi:baby-carriage", "mdi:dog-side", "mdi:cat", "mdi:school-outline",
   "mdi:briefcase-outline", "mdi:laptop", "mdi:cash", "mdi:heart-pulse", "mdi:dumbbell",
@@ -789,6 +789,7 @@ const COOK_STYLES = `
 .cawake { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 22px; border: 2px solid var(--op-divider); font-weight: 600; cursor: pointer; user-select: none; min-height: 40px; }
 .cawake input { width: 20px; height: 20px; min-height: auto; margin: 0; }
 .cawake.on { border-color: #f9a825; background: color-mix(in srgb, #ffd54f 28%, transparent); }
+.cawake .sun { color: #f9a825; --mdc-icon-size: 22px; }
 .cawake-status { font-size: .75rem; color: var(--op-muted); }
 .cawake-status.on { color: #2e7d32; }
 .cook-scroll { flex: 1; overflow: auto; padding: 0 0 16px; overscroll-behavior: contain; }
@@ -1016,7 +1017,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--op-accent);
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .aisle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .tile { border: 1px solid var(--op-divider); background: var(--op-bg); border-radius: 12px; min-height: 64px; padding: 10px 12px; text-align: left; display: flex; flex-direction: column; justify-content: center; gap: 2px; position: relative; touch-action: manipulation; }
-.tile .name { font-weight: 500; font-size: 1rem; line-height: 1.2; }
+.tile .name { font-weight: 500; font-size: 1rem; line-height: 1.2; padding-right: 22px; overflow-wrap: anywhere; }
 .tile .qty { font-size: .8rem; color: var(--op-muted); }
 .tile.done { opacity: .5; }
 .tile.done .name { text-decoration: line-through; }
@@ -2378,7 +2379,7 @@ class OmniPlanCard extends HTMLElement {
       html`<div class="section-head">${plan.name} <span class="badge ${low ? "today" : "ok"}">${low} low / out</span></div>
         <div class="inline-add"><input data-focus="pantry-${plan.id}" data-pantry-input="${plan.id}" maxlength="120" placeholder="Add staple or seasoning blend…" enterkeyhint="done">
         <button class="btn flat" data-action="pantry-add" data-plan="${plan.id}" aria-label="Add pantry item"><ha-icon icon="mdi:plus"></ha-icon></button>
-        <button class="btn" data-action="s-open" data-context="pantry" data-plan="${plan.id}" title="Scan groceries as you put them away"><ha-icon icon="mdi:barcode-scan"></ha-icon>📷 Scan</button></div>`,
+        <button class="btn" data-action="s-open" data-context="pantry" data-plan="${plan.id}" title="Scan groceries as you put them away"><ha-icon icon="mdi:barcode-scan"></ha-icon>Scan</button></div>`,
     ];
     for (const [key, list] of groups) {
       parts.push(html`<div class="section"><div class="section-head">${key}</div>
@@ -3080,7 +3081,7 @@ class OmniPlanCard extends HTMLElement {
             )
           : html`<div class="empty sm">Track filters, cartridges, salt and other consumables.</div>`}
           ${inventory ? html`<div class="lastdone">Inventory value: ${money(inventory, currency)}</div>` : ""}`,
-        html`<span class="grow"></span><button class="btn small" data-action="s-open" data-context="maintenance" data-object="${obj.id}" title="Scan a filter box, salt bag or other consumable"><ha-icon icon="mdi:barcode-scan"></ha-icon>📷 Scan</button>
+        html`<span class="grow"></span><button class="btn small" data-action="s-open" data-context="maintenance" data-object="${obj.id}" title="Scan a filter box, salt bag or other consumable"><ha-icon icon="mdi:barcode-scan"></ha-icon>Scan</button>
           <button class="btn small flat" data-action="m-new-part" data-id="${obj.id}"><ha-icon icon="mdi:plus"></ha-icon>Add part</button>`,
       )}
       ${this._mAccordion(
@@ -3250,7 +3251,7 @@ class OmniPlanCard extends HTMLElement {
       ${pantryPlans.length
         ? html`<div class="mcard rscan"><h3><ha-icon icon="mdi:barcode-scan"></ha-icon>Putting groceries away?</h3>
             <div class="shop-add"><span class="grow lastdone">Scan each item: staples you already track flip to In Stock, new barcodes can be linked in one tap.</span>
-              <button class="btn" data-action="s-open" data-context="pantry" data-plan="${pantryPlans[0].id}"><ha-icon icon="mdi:barcode-scan"></ha-icon>📷 Scan</button></div></div>`
+              <button class="btn" data-action="s-open" data-context="pantry" data-plan="${pantryPlans[0].id}"><ha-icon icon="mdi:barcode-scan"></ha-icon>Scan</button></div></div>`
         : ""}
       <div class="mcard"><h3><ha-icon icon="mdi:filter-outline"></ha-icon>When adding a recipe to ${plan.name}</h3>
         <label class="inline rrow"><input type="checkbox" data-action="r-skip-toggle" ${settings.skip_seasonings ? html`checked` : ""}>
@@ -3276,7 +3277,7 @@ class OmniPlanCard extends HTMLElement {
             : html`<div class="empty sm">No staples yet.</div>`}
           <div class="shop-add"><input data-pantry-input="${pp.id}" maxlength="120" placeholder="Add a staple you keep on hand… e.g. rice" enterkeyhint="done" aria-label="Add a pantry staple">
             <button class="btn" data-action="pantry-add" data-plan="${pp.id}" aria-label="Add"><ha-icon icon="mdi:plus"></ha-icon></button>
-            <button class="btn flat" data-action="s-open" data-context="pantry" data-plan="${pp.id}" aria-label="Scan a barcode" title="Scan a barcode"><ha-icon icon="mdi:barcode-scan"></ha-icon>📷 Scan</button></div>
+            <button class="btn flat" data-action="s-open" data-context="pantry" data-plan="${pp.id}" aria-label="Scan a barcode" title="Scan a barcode"><ha-icon icon="mdi:barcode-scan"></ha-icon>Scan</button></div>
         </div>`;
       })}
       ${pantryPlans.length ? "" : html`<div class="empty sm">Create a Pantry category to track the staples you keep in the house.</div>`}
@@ -4128,7 +4129,7 @@ class OmniPlanCard extends HTMLElement {
     });
     return html`<h3><ha-icon icon="mdi:format-list-bulleted"></ha-icon>Ingredients <span class="badge">${r.counts.ingredients}</span></h3>
       ${plan
-        ? html`<button class="btn caddmissing" data-action="c-add-missing" ${missing ? "" : html`disabled`}><ha-icon icon="mdi:cart-plus"></ha-icon>🛒 Add missing ingredients to ${plan.name} (${missing})</button>`
+        ? html`<button class="btn caddmissing" data-action="c-add-missing" ${missing ? "" : html`disabled`}><ha-icon icon="mdi:cart-plus"></ha-icon>Add missing ingredients to ${plan.name} (${missing})</button>`
         : ""}
       ${items.length ? items : html`<div class="empty sm">No ingredients in Mealie.</div>`}`;
   }
@@ -4140,14 +4141,14 @@ class OmniPlanCard extends HTMLElement {
   }
 
   _cookAwakeText(d) {
-    return { on: "☀️ Screen awake", paused: "Waiting to keep the screen on…", unsupported: "This browser can't keep the screen on", blocked: "The browser blocked keep-awake" }[d.awakeStatus] || "";
+    return { on: "Screen awake", paused: "Waiting to keep the screen on…", unsupported: "This browser can't keep the screen on", blocked: "The browser blocked keep-awake" }[d.awakeStatus] || "";
   }
 
   _cookHtml(d) {
     const head = html`<div class="cook-head">
         <button class="icon-btn" data-action="dialog-close" aria-label="Close recipe"><ha-icon icon="mdi:arrow-left"></ha-icon></button>
         <span class="ctitle">${d.name}</span>
-        <label class="cawake ${d.awake ? "on" : ""}"><input type="checkbox" data-action="c-awake" ${d.awake ? html`checked` : ""}>☀️ Keep screen on while viewing</label>
+        <label class="cawake ${d.awake ? "on" : ""}"><input type="checkbox" data-action="c-awake" ${d.awake ? html`checked` : ""}><ha-icon class="sun" icon="mdi:white-balance-sunny"></ha-icon>Keep screen on while viewing</label>
         <span class="cawake-status ${d.awakeStatus === "on" ? "on" : ""}" data-cook-awake aria-live="polite">${d.awake ? this._cookAwakeText(d) : ""}</span>
       </div>`;
     if (!d.detail) {
@@ -4164,7 +4165,7 @@ class OmniPlanCard extends HTMLElement {
         <div class="ctext">${s.title ? html`<strong>${s.title}</strong>` : ""}${s.text}
           ${s.timers.length
             ? html`<div class="ctimer-pills">${s.timers.map(
-                (t) => html`<button class="ctimer-pill" data-action="c-timer" data-seconds="${t.seconds}" data-label="${`Step ${i + 1}: ${t.label}`}"><ha-icon icon="mdi:timer-outline"></ha-icon>⏱️ Start ${t.label} timer</button>`,
+                (t) => html`<button class="ctimer-pill" data-action="c-timer" data-seconds="${t.seconds}" data-label="${`Step ${i + 1}: ${t.label}`}"><ha-icon icon="mdi:timer-outline"></ha-icon>Start ${t.label} timer</button>`,
               )}</div>`
             : ""}</div>
       </div>`,
@@ -4501,8 +4502,8 @@ class OmniPlanCard extends HTMLElement {
       : !backups
         ? html`<div class="empty sm">${d.error ? `Couldn't load backups: ${d.error}` : "Loading backups…"}</div>`
         : html`<div class="bk-actions">
-              <button class="btn" data-action="b-download" ${busy("download")}><ha-icon icon="mdi:download"></ha-icon>⬇️ Download portable backup (.zip)</button>
-              <button class="btn flat" data-action="b-snapshot" ${busy("snapshot")}><ha-icon icon="mdi:content-save-outline"></ha-icon>💾 Trigger local server snapshot now</button>
+              <button class="btn" data-action="b-download" ${busy("download")}><ha-icon icon="mdi:download"></ha-icon>Download portable backup (.zip)</button>
+              <button class="btn flat" data-action="b-snapshot" ${busy("snapshot")}><ha-icon icon="mdi:content-save-outline"></ha-icon>Trigger local server snapshot now</button>
             </div>
             <div class="bk-schedule">
               <label class="inline"><input type="checkbox" data-action="b-auto" ${backups.settings.enabled ? html`checked` : ""}>Daily snapshot at</label>
@@ -4519,7 +4520,7 @@ class OmniPlanCard extends HTMLElement {
                     <button class="icon-btn sm" data-action="b-snap-delete" data-id="${s.name}" aria-label="Delete ${s.name}"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div>`,
                 )
               : html`<div class="empty sm">No snapshots yet.</div>`}</div>
-            <h3 style="margin-top:16px"><ha-icon icon="mdi:upload"></ha-icon>⬆️ Upload &amp; restore a backup file</h3>
+            <h3 style="margin-top:16px"><ha-icon icon="mdi:upload"></ha-icon>Upload &amp; restore a backup file</h3>
             <div class="bk-modes" role="radiogroup" aria-label="Restore mode">
               <label><input type="radio" name="bk-mode" value="merge" data-bk-mode ${d.mode === "merge" ? html`checked` : ""}><span><strong>Merge import</strong> — adds what's missing, never deletes or overwrites anything here.</span></label>
               <label><input type="radio" name="bk-mode" value="replace" data-bk-mode ${d.mode === "replace" ? html`checked` : ""}><span><strong>Full disaster-recovery replace</strong> — <span class="bk-warn">everything here is replaced</span> by the backup.</span></label>
@@ -4833,7 +4834,7 @@ class OmniPlanCard extends HTMLElement {
         <label class="rec rec-custom" ${rec.kind === "custom" ? "" : html`hidden`}>RRULE<input name="rec_rule" value="${t.recurrence_rule || ""}" maxlength="400" placeholder="FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"></label>
         <label class="inline"><input type="checkbox" name="shift_aware" ${t.shift_aware ? html`checked` : ""}>Shift-aware (assign daily to whoever is off work)</label>
         ${isMaint
-          ? html`<div class="full banner"><ha-icon icon="mdi:home-wrench"></ha-icon>This becomes a task on the “General” object. Open the maintenance tab for intervals, sensor triggers, parts and NFC.</div>`
+          ? html`<div class="full banner"><ha-icon icon="mdi:tools"></ha-icon>This becomes a task on the “General” object. Open the maintenance tab for intervals, sensor triggers, parts and NFC.</div>`
           : ""}
         ${siblings.length && !isShopping && !isPacking
           ? html`<label class="full">Blocked by<div class="picklist">${siblings
@@ -5542,7 +5543,7 @@ class OmniPlanCard extends HTMLElement {
 
   _maintAttentionHtml(items) {
     if (!items.length) return html``;
-    return html`<div class="section"><div class="section-head"><ha-icon icon="mdi:home-wrench"></ha-icon>Home maintenance <span class="badge">${items.length}</span></div>
+    return html`<div class="section"><div class="section-head"><ha-icon icon="mdi:tools"></ha-icon>Home maintenance <span class="badge">${items.length}</span></div>
       ${items.map(
         (a) => html`<div class="mattn">${this._mPill(a.status)}
           <button class="mlink grow" data-action="m-goto" data-plan="${a.plan_id}" data-id="${a.id}"><strong>${a.name}</strong> · ${a.object_name} <span class="mcode">${a.code}</span><div class="lastdone">${a.countdown}</div></button>
