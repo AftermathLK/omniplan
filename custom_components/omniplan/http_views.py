@@ -1,4 +1,4 @@
-"""Authenticated HTTP endpoints: maintenance documents, service records and Mealie recipe images.
+"""Authenticated HTTP endpoints: maintenance documents, service records, Mealie recipe images and backups.
 
 The card uploads with ``hass.fetchWithAuth`` and opens files through
 short-lived signed paths (``auth/sign_path``), so every request carries a
@@ -12,10 +12,17 @@ Content-Security-Policy and a sanitized file name.
 Recipe images are fetched by Home Assistant from Mealie with the stored token
 (so they work away from home and the token never reaches the browser) and are
 only passed through when Mealie answers with a real image type.
+
+Backup download and restore are administrator-only. Downloads stream from disk
+(signed paths let the browser and the Companion apps save them natively);
+uploads stream to a temporary file, capped at 1 GB, and are fully verified by
+:class:`.backup_manager.BackupManager` before anything is changed.
 """
 
 from __future__ import annotations
 
+import os
+import tempfile
 from http import HTTPStatus
 from typing import Any
 from urllib.parse import unquote
@@ -25,6 +32,7 @@ from aiohttp import web
 from homeassistant.components.http import KEY_HASS, KEY_HASS_USER, HomeAssistantView
 from homeassistant.core import HomeAssistant
 
+from .backup_manager import BackupError
 from .const import DOC_CATEGORIES, DOC_CONTENT_TYPES, DOMAIN, MAX_UPLOAD_BYTES
 from .database import MDOCS
 from .maintenance import safe_filename, sniff_document_type
@@ -38,6 +46,8 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
 }
 INLINE_TYPES = ("application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp")
+MAX_RESTORE_BYTES = 1024 * 1024 * 1024
+STREAM_CHUNK = 1024 * 1024
 
 
 def async_register_views(hass: HomeAssistant) -> None:
@@ -47,6 +57,8 @@ def async_register_views(hass: HomeAssistant) -> None:
     hass.http.register_view(DocumentView())
     hass.http.register_view(ServiceRecordView())
     hass.http.register_view(MealieImageView())
+    hass.http.register_view(BackupDownloadView())
+    hass.http.register_view(BackupRestoreView())
 
 
 async def _context(request: web.Request) -> tuple[Any, Any]:
@@ -175,9 +187,126 @@ class MealieImageView(HomeAssistantView):
             validate_recipe_id(recipe_id)
         except MealieError as err:
             raise web.HTTPBadRequest() from err
+        size = request.query.get("size", "min")
+        if size not in ("min", "original"):
+            raise web.HTTPBadRequest()
         try:
-            data, content_type = await coordinator.recipes.image(recipe_id)
+            data, content_type = await coordinator.recipes.image(recipe_id, size)
         except (MealieError, PlannerError) as err:
             raise web.HTTPNotFound() from err
         headers = {**SECURITY_HEADERS, "Cache-Control": "private, max-age=86400"}
         return web.Response(body=data, content_type=content_type, headers=headers)
+
+
+def _admin_only(actor: Any) -> web.Response | None:
+    if actor.is_admin:
+        return None
+    return web.json_response({"code": "unauthorized", "message": "Only an administrator can download or restore backups"}, status=HTTPStatus.FORBIDDEN)
+
+
+class BackupDownloadView(HomeAssistantView):
+    """A fresh portable backup (or, with ``?snapshot=<name>``, one of the rolling snapshots)."""
+
+    url = "/api/omniplan/backup/download"
+    name = "api:omniplan:backup_download"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.StreamResponse:
+        coordinator, actor = await _context(request)
+        if (denied := _admin_only(actor)) is not None:
+            return denied
+        hass: HomeAssistant = request.app[KEY_HASS]
+        backups = coordinator.backups
+        temporary = False
+        try:
+            if request.query.get("snapshot"):
+                filename = request.query["snapshot"]
+                path = await hass.async_add_executor_job(backups.snapshot_path, filename)
+            else:
+                path, filename = await backups.export_download()
+                temporary = True
+        except BackupError as err:
+            status = HTTPStatus.NOT_FOUND if request.query.get("snapshot") else HTTPStatus.INTERNAL_SERVER_ERROR
+            return web.json_response({"code": "backup_error", "message": str(err)}, status=status)
+        try:
+            size = (await hass.async_add_executor_job(os.stat, path)).st_size
+            response = web.StreamResponse(
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"',
+                    "Cache-Control": "no-store",
+                    "X-Content-Type-Options": "nosniff",
+                    "Referrer-Policy": "no-referrer",
+                }
+            )
+            response.content_type = "application/zip"
+            response.content_length = size
+            await response.prepare(request)
+            handle = await hass.async_add_executor_job(open, path, "rb")
+            try:
+                while chunk := await hass.async_add_executor_job(handle.read, STREAM_CHUNK):
+                    await response.write(chunk)
+            finally:
+                await hass.async_add_executor_job(handle.close)
+                if temporary:
+                    # Gone before the browser sees the end of the download.
+                    await hass.async_add_executor_job(_remove, path)
+                    temporary = False
+            await response.write_eof()
+            return response
+        finally:
+            if temporary:
+                await hass.async_add_executor_job(_remove, path)
+
+
+class BackupRestoreView(HomeAssistantView):
+    """Upload a portable backup (.zip) or its database_dump.json and restore it (``mode`` = replace | merge)."""
+
+    url = "/api/omniplan/backup/restore"
+    name = "api:omniplan:backup_restore"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        coordinator, actor = await _context(request)
+        if (denied := _admin_only(actor)) is not None:
+            return denied
+        hass: HomeAssistant = request.app[KEY_HASS]
+        backups = coordinator.backups
+        await hass.async_add_executor_job(lambda: os.makedirs(backups.backup_dir, exist_ok=True))
+        handle_fd, path = await hass.async_add_executor_job(tempfile.mkstemp, ".tmp", ".upload-", backups.backup_dir)
+        mode = "merge"
+        received = 0
+        try:
+            handle = await hass.async_add_executor_job(os.fdopen, handle_fd, "wb")
+            try:
+                reader = await request.multipart()
+                while (part := await reader.next()) is not None:
+                    if part.name == "file":
+                        while chunk := await part.read_chunk(STREAM_CHUNK):
+                            received += len(chunk)
+                            if received > MAX_RESTORE_BYTES:
+                                return web.json_response(
+                                    {"code": "too_large", "message": "Backups can be at most 1 GB"}, status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+                                )
+                            await hass.async_add_executor_job(handle.write, chunk)
+                    elif part.name == "mode":
+                        mode = (await part.text()).strip()[:20]
+            finally:
+                await hass.async_add_executor_job(handle.close)
+            if not received:
+                return web.json_response({"code": "invalid", "message": "No backup file was uploaded"}, status=HTTPStatus.BAD_REQUEST)
+            if mode not in ("replace", "merge"):
+                return web.json_response({"code": "invalid", "message": "Pick Full replace or Merge"}, status=HTTPStatus.BAD_REQUEST)
+            try:
+                report = await backups.restore_file(path, mode)
+            except BackupError as err:
+                return web.json_response({"code": "backup_error", "message": str(err)}, status=HTTPStatus.BAD_REQUEST)
+            return self.json(report)
+        finally:
+            await hass.async_add_executor_job(_remove, path)
+
+
+def _remove(path: str) -> None:
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass

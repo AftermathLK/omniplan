@@ -20,7 +20,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from .const import ARCHETYPE_PANTRY, ARCHETYPE_SHOPPING
-from .mealie_client import MEAL_TYPES, MealieError
+from .mealie_client import IMAGE_SIZES, MEAL_TYPES, MealieError
 from .planner import Actor, PlannerError
 from .recipes import (
     DEFAULT_SEASONINGS,
@@ -30,6 +30,7 @@ from .recipes import (
     classify_ingredients,
     clean_seasonings,
     ingredient_rows,
+    recipe_detail,
     recipe_summary,
     times_cooked,
 )
@@ -42,6 +43,10 @@ IMAGE_CACHE_ENTRIES = 150
 IMAGE_CACHE_BYTES = 24 * 1024 * 1024
 IMAGE_CACHE_SECONDS = 6 * 3600
 MAX_PLAN_AHEAD_DAYS = 366
+MIN_SCALE = 0.125
+MAX_SCALE = 20.0
+# Card size names → Mealie's image files (cards use the small one, the cooking view the full one).
+IMAGE_VARIANTS = {"min": IMAGE_SIZES[0], "original": IMAGE_SIZES[2]}
 
 
 class RecipeBrowser:
@@ -94,13 +99,16 @@ class RecipeBrowser:
             assert self._cache is not None
             return {**self._cache, "settings": await self.settings()}
 
-    async def image(self, recipe_id: str) -> tuple[bytes, str]:
-        cached = self._images.get(recipe_id)
+    async def image(self, recipe_id: str, size: str = "min") -> tuple[bytes, str]:
+        if size not in IMAGE_VARIANTS:
+            raise PlannerError("invalid", "Unknown image size")
+        key = f"{recipe_id}:{size}"
+        cached = self._images.get(key)
         if cached and self._monotonic() - cached[2] < IMAGE_CACHE_SECONDS:
-            self._images.move_to_end(recipe_id)
+            self._images.move_to_end(key)
             return cached[0], cached[1]
-        data, content_type = await self._client().async_get_recipe_image(recipe_id)
-        self._images[recipe_id] = (data, content_type, self._monotonic())
+        data, content_type = await self._client().async_get_recipe_image(recipe_id, IMAGE_VARIANTS[size])
+        self._images[key] = (data, content_type, self._monotonic())
         while len(self._images) > IMAGE_CACHE_ENTRIES or sum(len(v[0]) for v in self._images.values()) > IMAGE_CACHE_BYTES:
             self._images.popitem(last=False)
         return data, content_type
@@ -137,12 +145,30 @@ class RecipeBrowser:
                 items.extend(await self.db.list_pantry(plan["id"]))
         return items
 
-    async def preview(self, slug: str, actor: Actor, *, skip_seasonings: bool | None = None) -> dict[str, Any]:
+    async def detail(self, slug: str, actor: Actor, *, skip_seasonings: bool | None = None) -> dict[str, Any]:
+        """The full recipe for the cooking view, ingredients flagged against the user's pantry."""
+        client = self._client()
+        recipe = await client.async_get_recipe(slug)
+        settings = await self.settings()
+        skip = settings["skip_seasonings"] if skip_seasonings is None else bool(skip_seasonings)
+        detail = recipe_detail(
+            recipe,
+            seasonings=settings["seasonings"],
+            skip_seasonings=skip,
+            pantry=await self._pantry(actor),
+            url=client.recipe_url(recipe.get("slug") or slug),
+        )
+        detail["slug"] = detail["slug"] or slug
+        if detail["has_image"]:
+            detail["image_url"] = f"/api/omniplan/mealie_image/{detail['id']}?size=original"
+        return detail
+
+    async def preview(self, slug: str, actor: Actor, *, skip_seasonings: bool | None = None, scale: float = 1.0) -> dict[str, Any]:
         recipe = await self._client().async_get_recipe(slug)
         settings = await self.settings()
         skip = settings["skip_seasonings"] if skip_seasonings is None else bool(skip_seasonings)
         rows = classify_ingredients(
-            ingredient_rows(recipe),
+            ingredient_rows(recipe, self._scale(scale)),
             seasonings=settings["seasonings"],
             skip_seasonings=skip,
             pantry=await self._pantry(actor),
@@ -160,6 +186,16 @@ class RecipeBrowser:
         if plan["archetype"] != ARCHETYPE_SHOPPING:
             raise PlannerError("invalid", "Recipe ingredients go to a shopping list")
         return plan
+
+    @staticmethod
+    def _scale(value: Any) -> float:
+        try:
+            scale = float(value if value is not None else 1.0)
+        except (TypeError, ValueError) as err:
+            raise PlannerError("invalid", "The batch size must be a number") from err
+        if not MIN_SCALE <= scale <= MAX_SCALE:
+            raise PlannerError("invalid", "Pick a batch size between ⅛× and 20×")
+        return scale
 
     def _meal_day(self, value: Any) -> date:
         try:
@@ -181,10 +217,14 @@ class RecipeBrowser:
         skip_seasonings: bool | None = None,
         day: Any = None,
         entry_type: str = "dinner",
+        scale: float = 1.0,
     ) -> dict[str, Any]:
-        """Add a recipe's ingredients (all wanted ones, or exactly ``indices``) to a shopping list."""
+        """Add a recipe's ingredients (all wanted ones, or exactly ``indices``) to a shopping list.
+
+        ``scale`` multiplies parsed amounts (a double batch puts "2 cups" on the list for a 1-cup line).
+        """
         plan = await self._target_plan(plan_id, actor)
-        preview = await self.preview(slug, actor, skip_seasonings=skip_seasonings)
+        preview = await self.preview(slug, actor, skip_seasonings=skip_seasonings, scale=scale)
         rows = preview["ingredients"]
         if indices is None:
             chosen = [row for row in rows if not row["skip"]]

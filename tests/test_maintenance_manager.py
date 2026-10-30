@@ -386,7 +386,7 @@ async def test_migration_moves_old_maintenance_tasks(tmp_path) -> None:
     try:
         from omniplan.database import MEVENTS, MOBJECTS, MTASKS
 
-        assert await db.schema_version() == 3
+        assert await db.schema_version() == 4
         [obj] = await db.rows(MOBJECTS)
         assert obj["name"] == "General"
         tasks = {t["name"]: t for t in await db.rows(MTASKS)}

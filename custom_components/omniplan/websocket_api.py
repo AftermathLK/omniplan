@@ -35,6 +35,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
+from .backup_manager import BackupError
 from .brain_dump import BrainDumpContext, async_parse
 from .const import (
     ARCHETYPES,
@@ -95,6 +96,9 @@ def _command(schema: dict[Any, Any], *, guard: Guard | None = None, admin: bool 
                 return
             except MealieError as err:
                 connection.send_error(msg["id"], "mealie_error", str(err))
+                return
+            except BackupError as err:
+                connection.send_error(msg["id"], "backup_error", str(err))
                 return
             connection.send_result(msg["id"], result)
 
@@ -226,6 +230,7 @@ def async_register(hass: HomeAssistant) -> None:
         ws_mealie_sync,
         ws_mealie_lists,
         ws_mealie_get_recipes,
+        ws_mealie_get_recipe_detail,
         ws_mealie_recipe_preview,
         ws_mealie_add_recipe_to_groceries,
         ws_mealie_plan_meal,
@@ -233,9 +238,12 @@ def async_register(hass: HomeAssistant) -> None:
         ws_run_shift_balance,
     ):
         websocket_api.async_register_command(hass, command)
-    from .maintenance_ws import COMMANDS as MAINTENANCE_COMMANDS  # imports this module's helpers
+    # These modules import this one's helpers, so they load here.
+    from .backup_ws import COMMANDS as BACKUP_COMMANDS
+    from .barcode_ws import COMMANDS as BARCODE_COMMANDS
+    from .maintenance_ws import COMMANDS as MAINTENANCE_COMMANDS
 
-    for command in MAINTENANCE_COMMANDS:
+    for command in (*MAINTENANCE_COMMANDS, *BARCODE_COMMANDS, *BACKUP_COMMANDS):
         websocket_api.async_register_command(hass, command)
 
 
@@ -807,6 +815,14 @@ async def ws_mealie_get_recipes(hass, connection, msg, coordinator, actor):
 
 
 @_command(
+    {vol.Required("type"): "omniplan/mealie_get_recipe_detail", vol.Required("recipe_slug"): SLUG, vol.Optional("skip_seasonings"): vol.Any(None, bool)}
+)
+async def ws_mealie_get_recipe_detail(hass, connection, msg, coordinator, actor):
+    """The whole recipe for the cooking view; images come through the authenticated proxy."""
+    return await coordinator.recipes.detail(msg["recipe_slug"], actor, skip_seasonings=msg.get("skip_seasonings"))
+
+
+@_command(
     {vol.Required("type"): "omniplan/mealie_recipe_preview", vol.Required("recipe_slug"): SLUG, vol.Optional("skip_seasonings"): vol.Any(None, bool)}
 )
 async def ws_mealie_recipe_preview(hass, connection, msg, coordinator, actor):
@@ -822,6 +838,7 @@ async def ws_mealie_recipe_preview(hass, connection, msg, coordinator, actor):
         vol.Optional("skip_seasonings"): vol.Any(None, bool),
         vol.Optional("date"): DATE,
         vol.Optional("entry_type", default="dinner"): MEAL_TYPE,
+        vol.Optional("scale", default=1.0): vol.All(vol.Coerce(float), vol.Range(min=0.125, max=20)),
     },
     guard=lambda m: {"plans": [m.get("plan_id")]},
 )
@@ -834,6 +851,7 @@ async def ws_mealie_add_recipe_to_groceries(hass, connection, msg, coordinator, 
         skip_seasonings=msg.get("skip_seasonings"),
         day=msg.get("date") or None,
         entry_type=msg["entry_type"],
+        scale=msg["scale"],
     )
 
 

@@ -12,7 +12,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError, Unauthorized, UnknownUser
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 
@@ -25,6 +25,7 @@ from .const import (
     STATUS_COMPLETED,
     STOCK_STATES,
 )
+from .backup_manager import BackupError
 from .coordinator import OmniPlanCoordinator
 from .database import MOBJECTS, MTASKS
 from .mealie_client import MealieError
@@ -44,6 +45,7 @@ SERVICE_RESET_PLAN = "reset_plan"
 SERVICE_CREATE_TRIP = "create_trip"
 SERVICE_COMPLETE_MAINTENANCE = "complete_maintenance"
 SERVICE_LOG_SALT = "log_salt_level"
+SERVICE_CREATE_BACKUP = "create_backup"
 
 PARSE_SCHEMA = vol.Schema(
     {
@@ -320,6 +322,26 @@ def async_register_services(hass: HomeAssistant) -> None:
 
     hass.services.async_register(DOMAIN, SERVICE_COMPLETE_MAINTENANCE, complete_maintenance, MAINT_COMPLETE_SCHEMA, SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, SERVICE_LOG_SALT, log_salt_level, SALT_SCHEMA, SupportsResponse.OPTIONAL)
+
+    async def create_backup(call: ServiceCall) -> ServiceResponse:
+        """A portable snapshot into <config>/backups/omniplan (e.g. before an update); old ones are pruned.
+
+        Like an admin service: users must be administrators, automations (no user) may call it.
+        (``async_register_admin_service`` cannot return a response on every supported core.)
+        """
+        if call.context.user_id:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None:
+                raise UnknownUser(context=call.context)
+            if not user.is_admin:
+                raise Unauthorized(context=call.context)
+        coordinator = _coordinator(hass)
+        try:
+            return await coordinator.backups.create_snapshot("snapshot")
+        except BackupError as err:
+            raise HomeAssistantError(str(err)) from err
+
+    hass.services.async_register(DOMAIN, SERVICE_CREATE_BACKUP, create_backup, vol.Schema({}), SupportsResponse.OPTIONAL)
 
 
 async def _maintenance_rows(coordinator: OmniPlanCoordinator, actor: Actor) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

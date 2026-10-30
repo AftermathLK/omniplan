@@ -776,6 +776,10 @@ class Planner:
         }
         return token
 
+    def clear_undo(self) -> None:
+        """Forget every pending undo (after a restore their payloads describe another database)."""
+        self._undo.clear()
+
     async def undo(self, token: str, actor: Actor) -> dict[str, Any]:
         entry = self._undo.get(token)
         if entry is None or entry["expires"] <= self.now() or entry["user_id"] != actor.user_id:

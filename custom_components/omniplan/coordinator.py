@@ -38,8 +38,11 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
+from .backup_manager import BackupManager
+from .barcode_manager import BarcodeManager
 from .const import (
     AISLES,
+    BACKUP_DIRNAME,
     ARCHETYPE_SHOPPING,
     CONF_BREAKFAST_TIME,
     CONF_CONVERSATION_AGENT,
@@ -49,6 +52,7 @@ from .const import (
     CONF_LEFTOVER_DAYS,
     CONF_LEFTOVER_TIME,
     CONF_LUNCH_TIME,
+    CONF_MAINT_NOTIFY,
     CONF_MEALIE_LOOKAHEAD_DAYS,
     CONF_MEALIE_SYNC_MINUTES,
     CONF_MEALIE_TOKEN,
@@ -89,11 +93,13 @@ from .const import (
     SOURCE_MEALIE_PREP,
     SOURCE_MEALIE_SHOPPING,
     STATUS_COMPLETED,
+    VERSION,
 )
 from .database import OmniPlanDB
 from .kitchen import build_prep_steps, ingredient_lines, leftover_summary, parse_configured_rules
 from .maintenance_runtime import MaintenanceRuntime
 from .mealie_client import InvalidMealieUrl, MealieAuthError, MealieClient, MealieError, item_hash, item_text
+from .openfoodfacts import OpenFoodFactsClient
 from .planner import SYSTEM, Actor, Planner
 from .recipe_browser import RecipeBrowser
 from .shift_balance import Chore, PersonAvailability, balance_chores, parse_keywords, shifts_for_day
@@ -146,6 +152,21 @@ class OmniPlanCoordinator:
             db=self.db,
             today=lambda: dt_util.now().date(),
             on_mealplan_changed=self._mealplan_changed,
+        )
+        self._off: OpenFoodFactsClient | None = None
+        self.barcodes = BarcodeManager(db=self.db, planner=self.planner, lookup=self._product_lookup)
+        self.backups = BackupManager(
+            db=self.db,
+            docs_dir=self.maintenance.docs_dir,
+            backup_dir=hass.config.path("backups", BACKUP_DIRNAME),
+            app_version=VERSION,
+            users=self._backup_users,
+            people=self.people_info,
+            options=self._backup_options,
+            local_now=dt_util.now,
+            run_blocking=hass.async_add_executor_job,
+            before_restore=self._before_restore,
+            on_restored=self.async_after_restore,
         )
         self._unsubs: list[CALLBACK_TYPE] = []
         self._state_unsub: CALLBACK_TYPE | None = None
@@ -299,6 +320,38 @@ class OmniPlanCoordinator:
     def recipe_url(self, slug: str | None) -> str | None:
         return self.mealie.recipe_url(slug) if self.mealie and slug else None
 
+    # ------------------------------------------------------------------
+    # Barcodes & backups
+    # ------------------------------------------------------------------
+    async def _product_lookup(self, code: str) -> dict[str, Any] | None:
+        if self._off is None:
+            self._off = OpenFoodFactsClient(async_get_clientsession(self.hass))
+        return await self._off.lookup(code)
+
+    async def _backup_users(self) -> list[dict[str, Any]]:
+        return [
+            {"id": user.id, "name": user.name, "is_admin": user.is_admin, "is_active": user.is_active, "system_generated": user.system_generated}
+            for user in await self.hass.auth.async_get_users()
+        ]
+
+    def _backup_options(self) -> dict[str, Any]:
+        return {
+            "weather_entity": self.options.get(CONF_WEATHER_ENTITY),
+            "maintenance_notify_service": self.options.get(CONF_MAINT_NOTIFY),
+            "conversation_agent": self.options.get(CONF_CONVERSATION_AGENT),
+        }
+
+    async def _before_restore(self) -> None:
+        """Write pending sensor counters now so nothing stale lands on top of the restored rows."""
+        await self.maintenance.manager.async_flush()
+
+    async def async_after_restore(self) -> None:
+        """Reload everything that caches database state, then tell every open card to refresh."""
+        self.planner.clear_undo()
+        await self.maintenance.manager.async_load()
+        plan_ids = {plan["id"] for plan in await self.db.list_plans(include_archived=True)} | set(self._known_plans)
+        self._notify(plan_ids)
+
     def conversation_agent(self) -> str | None:
         return self.options.get(CONF_CONVERSATION_AGENT) or None
 
@@ -363,6 +416,9 @@ class OmniPlanCoordinator:
     # Timers
     # ------------------------------------------------------------------
     async def _minute_tick(self, now: datetime) -> None:
+        if self.backups.restoring:
+            return
+        self._spawn(self.backups.daily_tick(), "omniplan_daily_backup")
         try:
             await self.planner.process_rollover()
             await self.planner.wake_due_snoozes()

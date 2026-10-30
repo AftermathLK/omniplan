@@ -169,11 +169,18 @@ def pantry_match(name: str, pantry: Sequence[Mapping[str, Any]]) -> Mapping[str,
     return best[1] if best else None
 
 
-def ingredient_rows(recipe: Mapping[str, Any]) -> list[dict[str, Any]]:
+def scaled_quantity(value: float) -> str:
+    """A scaled ingredient amount for a shopping-list line ("1.5", "3", "0.333")."""
+    return f"{round(float(value), 3):g}"
+
+
+def ingredient_rows(recipe: Mapping[str, Any], scale: float = 1.0) -> list[dict[str, Any]]:
     """One row per real ingredient line of a Mealie recipe (section titles are skipped).
 
     ``text`` is what goes on the shopping list ("2 cups all-purpose flour"),
-    ``name`` the food used for matching, ``label`` Mealie's food label.
+    ``name`` the food used for matching, ``label`` Mealie's food label. With
+    ``scale`` (a batch multiplier) parsed amounts are multiplied; free-text
+    lines stay as written.
     """
     rows: list[dict[str, Any]] = []
     for index, ingredient in enumerate(recipe.get("recipeIngredient") or []):
@@ -188,7 +195,7 @@ def ingredient_rows(recipe: Mapping[str, Any]) -> list[dict[str, Any]]:
         if food_name:
             quantity = ingredient.get("quantity")
             unit_name = str((unit or {}).get("abbreviation") or (unit or {}).get("name") or "").strip() if unit else ""
-            qty_text = f"{float(quantity):g} {unit_name}".strip() if quantity else ""
+            qty_text = f"{scaled_quantity(float(quantity) * scale)} {unit_name}".strip() if quantity else ""
             text = " ".join(part for part in (qty_text, food_name) if part)
             name = food_name
         else:
@@ -283,3 +290,258 @@ def catalog(recipes: Sequence[Mapping[str, Any]]) -> dict[str, list[str]]:
     categories = sorted({c for r in recipes for c in r["categories"]}, key=str.lower)
     tags = sorted({t for r in recipes for t in r["tags"]}, key=str.lower)
     return {"categories": categories, "tags": tags}
+
+
+# ---------------------------------------------------------------------------
+# Recipe detail (the cooking view)
+# ---------------------------------------------------------------------------
+_FRACTIONS = {"½": 0.5, "⅓": 1 / 3, "⅔": 2 / 3, "¼": 0.25, "¾": 0.75, "⅛": 0.125, "⅜": 0.375, "⅝": 0.625, "⅞": 0.875}
+_WORD_NUMBERS = {
+    "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+    "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20, "thirty": 30,
+    "forty": 40, "forty-five": 45, "forty five": 45, "sixty": 60, "ninety": 90,
+}
+_NUMBER = (
+    r"(?:\d+\s+\d+/\d+|\d+(?:[.,]\d+)?\s*[½⅓⅔¼¾⅛⅜⅝⅞]?|\d+/\d+|[½⅓⅔¼¾⅛⅜⅝⅞]"
+    r"|(?:forty[- ]five|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|sixty|ninety|an?)\b)"
+)
+_UNIT_SECONDS = {"h": 3600, "m": 60, "s": 1}
+_DURATION_RE = re.compile(
+    r"(?<![\w./])(?P<a>" + _NUMBER + r")(?:\s*(?:-|–|—|to|or)\s*(?P<b>" + _NUMBER + r"))?\s*"
+    r"(?P<unit>hours?|hrs?|minutes?|mins?|seconds?|secs?)\b"
+    r"(?:,?\s*(?:and\s+)?(?P<extra>\d+)\s*(?:minutes?|mins?)\b)?",
+    re.IGNORECASE,
+)
+_COMPACT_RE = re.compile(r"(?<![\w.])(?P<h>\d{1,2})h(?:\s?(?P<m>\d{1,2})m(?:in)?)?\b", re.IGNORECASE)
+_HALF_HOUR_RE = re.compile(r"\b(?:(?P<whole>an?|one)\s+hour\s+and\s+a\s+half|half\s+an?\s+hour)\b", re.IGNORECASE)
+MAX_TIMER_SECONDS = 48 * 3600
+MAX_TIMERS_PER_STEP = 6
+NUTRITION_LABELS = (
+    ("calories", "Calories"),
+    ("fatContent", "Fat"),
+    ("saturatedFatContent", "Saturated fat"),
+    ("transFatContent", "Trans fat"),
+    ("unsaturatedFatContent", "Unsaturated fat"),
+    ("cholesterolContent", "Cholesterol"),
+    ("sodiumContent", "Sodium"),
+    ("carbohydrateContent", "Carbohydrates"),
+    ("fiberContent", "Fiber"),
+    ("sugarContent", "Sugar"),
+    ("proteinContent", "Protein"),
+)
+
+
+def _amount(text: str | None) -> float | None:
+    if not text:
+        return None
+    value = text.strip().lower()
+    if value in _WORD_NUMBERS:
+        return float(_WORD_NUMBERS[value])
+    if value in _FRACTIONS:
+        return _FRACTIONS[value]
+    match = re.match(r"^(\d+)\s+(\d+)/(\d+)$", value)
+    if match:
+        return int(match[1]) + int(match[2]) / max(int(match[3]), 1)
+    match = re.match(r"^(\d+)/(\d+)$", value)
+    if match:
+        return int(match[1]) / max(int(match[2]), 1)
+    match = re.match(r"^(\d+(?:[.,]\d+)?)\s*([½⅓⅔¼¾⅛⅜⅝⅞])?$", value)
+    if match:
+        return float(match[1].replace(",", ".")) + (_FRACTIONS[match[2]] if match[2] else 0.0)
+    return None
+
+
+def timer_label(seconds: int, max_seconds: int | None = None) -> str:
+    """Short timer text: "45s", "15m", "1h 30m", "25–30m"."""
+
+    def one(total: int) -> str:
+        hours, rest = divmod(int(total), 3600)
+        minutes, secs = divmod(rest, 60)
+        if hours:
+            return f"{hours}h {minutes}m" if minutes else f"{hours}h"
+        if minutes:
+            return f"{minutes}m {secs}s" if secs else f"{minutes}m"
+        return f"{secs}s"
+
+    if max_seconds and max_seconds > seconds:
+        low, high = one(seconds), one(max_seconds)
+        if low.endswith("m") and high.endswith("m") and "h" not in low + high:
+            return f"{low[:-1]}–{high}"
+        return f"{low}–{high}"
+    return one(seconds)
+
+
+def parse_durations(text: str) -> list[dict[str, Any]]:
+    """Cooking times mentioned in an instruction ("simmer for 15 minutes", "bake 25-30 mins", "1 hr 15 min").
+
+    Ranges start at the lower bound (``max_seconds`` holds the upper one).
+    """
+    found: list[tuple[int, dict[str, Any]]] = []
+    taken: list[tuple[int, int]] = []
+
+    def add(start: int, end: int, seconds: float, max_seconds: float | None, raw: str) -> None:
+        if any(start < b and end > a for a, b in taken):
+            return
+        low = int(round(seconds))
+        high = int(round(max_seconds)) if max_seconds and max_seconds > seconds else None
+        if not 5 <= low <= MAX_TIMER_SECONDS or (high and high > MAX_TIMER_SECONDS):
+            return
+        taken.append((start, end))
+        found.append((start, {"seconds": low, "max_seconds": high, "label": timer_label(low, high), "text": raw.strip()[:60]}))
+
+    for match in _HALF_HOUR_RE.finditer(text or ""):
+        add(match.start(), match.end(), 5400 if match["whole"] else 1800, None, match[0])
+    for match in _DURATION_RE.finditer(text or ""):
+        unit = _UNIT_SECONDS[match["unit"][0].lower()]
+        first, second = _amount(match["a"]), _amount(match["b"])
+        if first is None:
+            continue
+        extra = int(match["extra"]) * 60 if match["extra"] and unit == 3600 else 0
+        add(match.start(), match.end(), first * unit + (0 if second else extra), second * unit + extra if second else None, match[0])
+    for match in _COMPACT_RE.finditer(text or ""):
+        add(match.start(), match.end(), int(match["h"]) * 3600 + int(match["m"] or 0) * 60, None, match[0])
+    found.sort(key=lambda pair: pair[0])
+    return [timer for _, timer in found[:MAX_TIMERS_PER_STEP]]
+
+
+def _number(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number and number not in (float("inf"), float("-inf")) else None
+
+
+def _servings(raw: Mapping[str, Any]) -> float | None:
+    for key in ("recipeServings", "recipeYieldQuantity"):
+        number = _number(raw.get(key))
+        if number and number > 0:
+            return number
+    match = re.match(r"^\s*(\d+(?:[.,]\d+)?)", str(raw.get("recipeYield") or ""))
+    return float(match[1].replace(",", ".")) if match else None
+
+
+def _http_url(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text[:2048] if re.match(r"^https?://[^\s]+$", text, re.IGNORECASE) else None
+
+
+def _unit(unit: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not unit:
+        return None
+    name = _short(unit.get("name"), 40)
+    if not name:
+        return None
+    return {
+        "name": name,
+        "plural": _short(unit.get("pluralName"), 40),
+        "abbreviation": _short(unit.get("abbreviation"), 20),
+        "use_abbreviation": bool(unit.get("useAbbreviation")),
+        "fraction": unit.get("fraction") is not False,
+    }
+
+
+def recipe_detail(
+    raw: Mapping[str, Any],
+    *,
+    seasonings: Iterable[str],
+    skip_seasonings: bool,
+    pantry: Sequence[Mapping[str, Any]],
+    url: str | None = None,
+) -> dict[str, Any]:
+    """Everything the cooking view shows, with pantry/seasoning flags on each ingredient.
+
+    Ingredient ``index`` values match :func:`ingredient_rows`, so the card can
+    send them straight to the grocery import. Section headers come through as
+    ``{"type": "section"}`` entries in reading order.
+    """
+    keys = seasoning_keys(seasonings)
+    in_stock = [item for item in pantry if item.get("stock_state") == "in_stock"]
+    settings = raw.get("settings") if isinstance(raw.get("settings"), Mapping) else {}
+    disable_amount = bool(settings.get("disableAmount"))
+    rows = {row["index"]: row for row in ingredient_rows(raw)}
+    ingredients: list[dict[str, Any]] = []
+    counts = {"ingredients": 0, "pantry": 0, "seasonings": 0, "missing": 0}
+    for index, ingredient in enumerate(raw.get("recipeIngredient") or []):
+        if not isinstance(ingredient, Mapping):
+            continue
+        title = _short(ingredient.get("title"), 120)
+        if title:
+            ingredients.append({"type": "section", "title": title})
+        row = rows.get(index)
+        if row is None:
+            continue
+        food = ingredient.get("food") if isinstance(ingredient.get("food"), Mapping) else None
+        unit = ingredient.get("unit") if isinstance(ingredient.get("unit"), Mapping) else None
+        quantity = _number(ingredient.get("quantity"))
+        food_name = _short((food or {}).get("name"), 120)
+        scalable = bool(food_name) and bool(quantity) and quantity > 0 and not disable_amount
+        seasoning = is_seasoning(row["name"], keys, row.get("label"))
+        covered = pantry_match(row["name"], in_stock)
+        skip = SKIP_SEASONING if skip_seasonings and seasoning else SKIP_PANTRY if covered is not None else None
+        counts["ingredients"] += 1
+        counts["pantry"] += covered is not None
+        counts["seasonings"] += seasoning
+        counts["missing"] += skip is None
+        ingredients.append(
+            {
+                "type": "ingredient",
+                "index": index,
+                "display": _short(ingredient.get("display"), 240) or row["text"],
+                "text": row["text"],
+                "quantity": round(quantity, 4) if scalable else None,
+                "unit": _unit(unit) if scalable else None,
+                "food": food_name,
+                "food_plural": _short((food or {}).get("pluralName"), 120) if food else None,
+                "note": _short(ingredient.get("note"), 200) if food_name else None,
+                "is_excluded_spice": seasoning,
+                "in_pantry": covered is not None,
+                "pantry_item": covered.get("name") if covered is not None else None,
+                "skip": skip,
+            }
+        )
+    steps: list[dict[str, Any]] = []
+    for step in raw.get("recipeInstructions") or []:
+        if isinstance(step, Mapping):
+            text = str(step.get("text") or "").strip()
+            title = _short(step.get("title") or step.get("summary"), 200)
+        else:
+            text, title = str(step or "").strip(), None
+        if not text and not title:
+            continue
+        text = text[:4000]
+        steps.append({"index": len(steps), "title": title, "text": text, "timers": parse_durations(text)})
+    notes = []
+    for note in raw.get("notes") or []:
+        if isinstance(note, Mapping) and (note.get("title") or note.get("text")):
+            notes.append({"title": _short(note.get("title"), 200), "text": str(note.get("text") or "").strip()[:4000] or None})
+    nutrition_raw = raw.get("nutrition") if isinstance(raw.get("nutrition"), Mapping) else {}
+    nutrition = [
+        {"key": key, "label": label, "value": _short(nutrition_raw.get(key), 40)}
+        for key, label in NUTRITION_LABELS
+        if _short(nutrition_raw.get(key), 40)
+    ]
+    recipe_id = str(raw.get("id") or "") or None
+    return {
+        "id": recipe_id,
+        "slug": str(raw.get("slug") or ""),
+        "name": _short(raw.get("name"), 200) or str(raw.get("slug") or "Recipe"),
+        "description": str(raw.get("description") or "").strip()[:2000] or None,
+        "has_image": bool(raw.get("image")) and bool(recipe_id),
+        "categories": _names(raw.get("recipeCategory")),
+        "tags": _names(raw.get("tags")),
+        "prep_time": _short(raw.get("prepTime"), 40),
+        "cook_time": _short(raw.get("performTime") or raw.get("cookTime"), 40),
+        "total_time": _short(raw.get("totalTime"), 40),
+        "yield": _short(raw.get("recipeYield"), 60),
+        "servings": _servings(raw),
+        "rating": raw.get("rating") if isinstance(raw.get("rating"), (int, float)) else None,
+        "url": url,
+        "source_url": _http_url(raw.get("orgURL")),
+        "skip_seasonings": bool(skip_seasonings),
+        "ingredients": ingredients,
+        "instructions": steps,
+        "notes": notes,
+        "nutrition": nutrition,
+        "counts": counts,
+    }

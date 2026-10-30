@@ -258,3 +258,10 @@ async def test_recipe_browser_websocket_and_image_proxy(hass: HomeAssistant, mea
     assert (await client.get("/api/omniplan/mealie_image/not%20an%20id")).status == 400
     assert (await (await hass_client_no_auth()).get(f"/api/omniplan/mealie_image/{ORZO_ID}")).status == 401
 
+    # The cooking view: the full recipe, its full-size image through the same proxy.
+    detail = (await call({"type": "omniplan/mealie_get_recipe_detail", "recipe_slug": "chicken-sausage-orzo"}))["result"]
+    assert detail["image_url"] == f"/api/omniplan/mealie_image/{ORZO_ID}?size=original" and "token" not in json.dumps(detail)
+    assert [row["food"] for row in detail["ingredients"]][:2] == ["chicken sausage", "orzo"]
+    assert (await client.get(detail["image_url"])).status == 200
+    assert (await client.get(f"/api/omniplan/mealie_image/{ORZO_ID}?size=huge")).status == 400
+

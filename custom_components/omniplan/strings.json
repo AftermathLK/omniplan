@@ -399,6 +399,10 @@
           "description": "For a fill: how many bags you poured in, instead of a level."
         }
       }
+    },
+    "create_backup": {
+      "name": "Create portable backup",
+      "description": "Write an OmniPlan portable backup (.zip with the database, a JSON dump, documents and the standalone bridge map) to /config/backups/omniplan and prune old snapshots. Administrators only."
     }
   }
 }

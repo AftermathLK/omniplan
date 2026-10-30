@@ -15,11 +15,14 @@ names declared in this module's schema. No f-strings build SQL here.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import os
+import re
+import sqlite3
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -410,6 +413,25 @@ CREATE INDEX IF NOT EXISTS idx_salt_object ON salt_observations(object_id, obser
 """
 
 
+SCHEMA_V4 = """
+CREATE TABLE IF NOT EXISTS barcode_mappings (
+    barcode TEXT PRIMARY KEY,
+    target_type TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    default_delta_qty INTEGER NOT NULL DEFAULT 1,
+    symbology TEXT,
+    product_name TEXT,
+    brand TEXT,
+    created_by TEXT,
+    scan_count INTEGER NOT NULL DEFAULT 0,
+    last_scanned_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_barcode_target ON barcode_mappings(target_type, target_id);
+"""
+
+
 async def _migrate_v3_data(conn: aiosqlite.Connection) -> None:
     """Move 1.1 "home maintenance" list items into the asset model.
 
@@ -527,7 +549,10 @@ MIGRATIONS: tuple[Migration, ...] = (
     (SCHEMA_V1, None),
     (SCHEMA_V2, _migrate_v2_data),
     (SCHEMA_V3, _migrate_v3_data),
+    (SCHEMA_V4, None),
 )
+# The first schema that portable backups (backup_manager.py) were written with.
+PORTABLE_MIN_SCHEMA = 4
 
 
 class _Table:
@@ -730,7 +755,16 @@ SALTOBS = _Table(
 
 MTASKPARTS = _Table("maint_task_parts", "task_id", ("task_id", "part_id", "quantity"))
 
-_TABLES = (PLANS, TASKS, PANTRY, SNOOZE, BOM, SECTIONS, TRIPS, MOBJECTS, MTASKS, MEVENTS, MPARTS, MDOCS, SALTOBS, MTASKPARTS)
+BARCODES = _Table(
+    "barcode_mappings",
+    "barcode",
+    (
+        "barcode", "target_type", "target_id", "default_delta_qty", "symbology", "product_name", "brand",
+        "created_by", "scan_count", "last_scanned_at", "created_at", "updated_at",
+    ),
+)
+
+_TABLES = (PLANS, TASKS, PANTRY, SNOOZE, BOM, SECTIONS, TRIPS, MOBJECTS, MTASKS, MEVENTS, MPARTS, MDOCS, SALTOBS, MTASKPARTS, BARCODES)
 # Every identifier that may appear in generated SQL.
 _IDENTIFIERS = frozenset(
     name for table in _TABLES for name in (table.name, table.key, *table.columns)
@@ -1257,6 +1291,7 @@ class OmniPlanDB:
             "maint_events": "SELECT COUNT(*) FROM maint_events",
             "maint_parts": "SELECT COUNT(*) FROM maint_parts",
             "maint_documents": "SELECT COUNT(*) FROM maint_documents",
+            "barcode_mappings": "SELECT COUNT(*) FROM barcode_mappings",
         }
         out: dict[str, Any] = {}
         for name, sql in queries.items():
@@ -1850,6 +1885,246 @@ class OmniPlanDB:
     async def clear_tombstone(self, external_id: str) -> None:
         async with self._tx():
             await self.conn.execute("DELETE FROM sync_tombstones WHERE external_id = ?", (external_id,))
+
+    # ------------------------------------------------------------------
+    # Barcode mappings
+    # ------------------------------------------------------------------
+    async def get_barcode(self, barcode: str) -> dict[str, Any] | None:
+        return await self._get(BARCODES, barcode)
+
+    async def save_barcode(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Insert or replace the mapping for ``data["barcode"]`` (keeps its scan statistics)."""
+        now = utc_now_iso()
+        async with self._tx():
+            existing = await self._get(BARCODES, data["barcode"])
+            if existing is None:
+                await self._insert(BARCODES, {"scan_count": 0, **data, "created_at": now, "updated_at": now})
+            else:
+                await self._update(BARCODES, data["barcode"], {**data, "updated_at": now})
+        row = await self._get(BARCODES, data["barcode"])
+        assert row is not None
+        return row
+
+    async def delete_barcode(self, barcode: str) -> None:
+        async with self._tx():
+            await self.conn.execute("DELETE FROM barcode_mappings WHERE barcode = ?", (barcode,))
+
+    async def barcodes_for(self, target_type: str, target_ids: Sequence[str]) -> list[dict[str, Any]]:
+        if not target_ids:
+            return []
+        rows = await self._fetchall(
+            "SELECT * FROM barcode_mappings WHERE target_type = ? AND target_id IN (" + _marks(len(target_ids)) + ") "
+            "ORDER BY created_at",
+            (target_type, *target_ids),
+        )
+        return [BARCODES.decode(row) for row in rows]
+
+    async def count_barcode_scan(self, barcode: str) -> None:
+        async with self._tx():
+            await self.conn.execute(
+                "UPDATE barcode_mappings SET scan_count = scan_count + 1, last_scanned_at = ? WHERE barcode = ?",
+                (utc_now_iso(), barcode),
+            )
+
+    # ------------------------------------------------------------------
+    # Portable backups (see backup_manager.py)
+    # ------------------------------------------------------------------
+    async def _live_schema(self) -> dict[str, dict[str, Any]]:
+        """Every table in the open database with its columns, primary key and parents."""
+        schema: dict[str, dict[str, Any]] = {}
+        for (name,) in await self._fetchall(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        ):
+            if not _LIVE_IDENT_RE.match(name):
+                continue
+            info = await self._fetchall("SELECT name, type, pk FROM pragma_table_info(?)", (name,))
+            columns = [row[0] for row in info if _LIVE_IDENT_RE.match(row[0])]
+            pk = [row[0] for row in sorted((r for r in info if r[2]), key=lambda r: r[2])]
+            parents = {row[0] for row in await self._fetchall('SELECT "table" FROM pragma_foreign_key_list(?)', (name,))}
+            schema[name] = {
+                "columns": columns,
+                "primary_key": pk,
+                # A lone INTEGER PRIMARY KEY is the rowid: another database's numbers mean nothing here.
+                "rowid_key": len(pk) == 1 and any(r[0] == pk[0] and str(r[1]).upper() == "INTEGER" for r in info),
+                "parents": sorted(parents - {name}),
+            }
+        return schema
+
+    @staticmethod
+    def _table_order(schema: Mapping[str, Mapping[str, Any]]) -> list[str]:
+        """Tables with every parent before its children (a cycle falls back to name order)."""
+        order: list[str] = []
+        pending = sorted(schema)
+        while pending:
+            ready = [t for t in pending if all(p in order or p not in schema for p in schema[t]["parents"])]
+            if not ready:
+                ready = pending[:1]
+            for table in ready:
+                order.append(table)
+                pending.remove(table)
+        return order
+
+    async def _dump_unlocked(self) -> dict[str, Any]:
+        schema = await self._live_schema()
+        meta = {table.name: table for table in _TABLES}
+        tables: dict[str, Any] = {}
+        for name in self._table_order(schema):
+            info = schema[name]
+            rows = [
+                {key: _portable_value(row[key]) for key in row.keys()}
+                for row in await self._fetchall("SELECT * FROM " + _live_ident(name, schema) + " ORDER BY rowid")
+            ]
+            known = meta.get(name)
+            tables[name] = {
+                "primary_key": info["primary_key"],
+                "columns": info["columns"],
+                "json_columns": sorted(known.json_fields) if known else [],
+                "bool_columns": sorted(known.bool_fields) if known else [],
+                "row_count": len(rows),
+                "rows": rows,
+            }
+        return {"db_schema_version": await self.schema_version(), "tables": tables}
+
+    async def export_portable(self, copy_path: str | None = None) -> dict[str, Any]:
+        """A JSON-ready dump of every table, plus (optionally) a hot SQLite copy taken at the same moment.
+
+        Writers hold the same lock, so the dump and the copy always agree.
+        """
+        assert self._lock is not None
+        async with self._lock:
+            dump = await self._dump_unlocked()
+            if copy_path:
+                target = await asyncio.to_thread(sqlite3.connect, copy_path, check_same_thread=False)
+                try:
+                    await self.conn.backup(target)
+                finally:
+                    await asyncio.to_thread(target.close)
+        return dump
+
+    async def restore_portable(self, tables: Mapping[str, Any], *, mode: str) -> dict[str, Any]:
+        """Load dumped tables: ``replace`` empties every table first, ``merge`` only adds missing rows.
+
+        Table and column names are checked against the live schema; anything
+        unknown is skipped with a warning. Rows that would break a foreign key
+        (a task whose plan is missing) are dropped. Runs as one transaction.
+        """
+        if mode not in ("replace", "merge"):
+            raise ValueError("Unknown restore mode")
+        schema = await self._live_schema()
+        warnings: list[str] = []
+        prepared: dict[str, tuple[list[str], list[tuple[Any, ...]]]] = {}
+        for name, data in tables.items():
+            if name not in schema:
+                warnings.append("Skipped unknown table " + str(name)[:64])
+                continue
+            if not isinstance(data, Mapping) or not isinstance(data.get("rows"), list):
+                raise ValueError("Table " + name + " has no rows list")
+            live_columns = schema[name]["columns"]
+            seen: set[str] = set()
+            for row in data["rows"]:
+                if not isinstance(row, Mapping):
+                    raise ValueError("A row in " + name + " is not an object")
+                seen.update(row)
+            unknown = sorted(str(c)[:64] for c in seen if c not in live_columns)
+            if unknown:
+                warnings.append("Ignored columns " + ", ".join(unknown[:10]) + " in " + name)
+            columns = [c for c in live_columns if c in seen]
+            if columns:
+                prepared[name] = (columns, [tuple(_sqlite_value(row.get(c), name, c) for c in columns) for row in data["rows"]])
+        order = self._table_order(schema)
+        report: dict[str, dict[str, int]] = {}
+
+        def entry(name: str) -> dict[str, int]:
+            return report.setdefault(name, {"inserted": 0, "skipped": 0, "deleted": 0, "removed": 0})
+
+        assert self._lock is not None
+        async with self._lock:
+            await self.conn.execute("PRAGMA foreign_keys = OFF")
+            try:
+                await self.conn.execute("BEGIN IMMEDIATE")
+                try:
+                    if mode == "replace":
+                        for name in reversed(order):
+                            before = self.conn.total_changes
+                            await self.conn.execute("DELETE FROM " + _live_ident(name, schema))
+                            entry(name)["deleted"] = self.conn.total_changes - before
+                    for name in order:
+                        if name not in prepared:
+                            continue
+                        columns, values = prepared[name]
+                        inserted = await self._restore_rows(name, schema, columns, values, merge=mode == "merge")
+                        entry(name)["inserted"] += inserted
+                        entry(name)["skipped"] += len(values) - inserted
+                    for _ in range(10):  # removing an orphan can orphan its own children
+                        broken = await self._fetchall("PRAGMA foreign_key_check")
+                        if not broken:
+                            break
+                        for table, rowid, _parent, _fk in broken:
+                            if table in schema and rowid is not None:
+                                await self.conn.execute("DELETE FROM " + _live_ident(table, schema) + " WHERE rowid = ?", (rowid,))
+                                entry(table)["removed"] += 1
+                except BaseException:
+                    await self.conn.execute("ROLLBACK")
+                    raise
+                await self.conn.execute("COMMIT")
+            finally:
+                await self.conn.execute("PRAGMA foreign_keys = ON")
+        return {"tables": report, "warnings": warnings}
+
+    async def _restore_rows(
+        self, name: str, schema: Mapping[str, Mapping[str, Any]], columns: list[str], values: list[tuple[Any, ...]], *, merge: bool
+    ) -> int:
+        table = _live_ident(name, schema)
+        info = schema[name]
+        if merge and info["rowid_key"] and info["primary_key"][0] in columns:
+            # Merging a log table: match rows on their content and let SQLite number the new ones.
+            key = columns.index(info["primary_key"][0])
+            rest = [c for i, c in enumerate(columns) if i != key]
+            match_sql = "SELECT 1 FROM " + table + " WHERE " + " AND ".join(_live_ident(c, schema, name) + " IS ?" for c in rest) + " LIMIT 1"
+            insert_sql = "INSERT INTO " + table + " (" + ", ".join(_live_ident(c, schema, name) for c in rest) + ") VALUES (" + _marks(len(rest)) + ")"
+            inserted = 0
+            for row in values:
+                content = tuple(v for i, v in enumerate(row) if i != key)
+                if await self._fetchone(match_sql, content) is not None:
+                    continue
+                await self.conn.execute(insert_sql, content)
+                inserted += 1
+            return inserted
+        sql = "INSERT OR IGNORE INTO " + table + " (" + ", ".join(_live_ident(c, schema, name) for c in columns) + ") VALUES (" + _marks(len(columns)) + ")"
+        before = self.conn.total_changes
+        await self.conn.executemany(sql, values)
+        return self.conn.total_changes - before
+
+
+_LIVE_IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+
+def _live_ident(name: str, schema: Mapping[str, Mapping[str, Any]], table: str | None = None) -> str:
+    """Quote a table (or, with ``table``, a column) name that exists in the live schema; refuse anything else."""
+    known = schema.get(table, {}).get("columns", ()) if table else schema
+    if not isinstance(name, str) or not _LIVE_IDENT_RE.match(name) or name not in known:
+        raise ValueError("Refusing unknown SQL identifier " + repr(name)[:80])
+    return '"' + name + '"'
+
+
+def _portable_value(value: Any) -> Any:
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return {"$base64": base64.b64encode(bytes(value)).decode("ascii")}
+    return value
+
+
+def _sqlite_value(value: Any, table: str, column: str) -> Any:
+    """A dumped JSON value back to something SQLite stores (scalars, or base64 blobs)."""
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if value is None or isinstance(value, (str, int, float)):
+        return value
+    if isinstance(value, Mapping) and set(value) == {"$base64"} and isinstance(value["$base64"], str):
+        try:
+            return base64.b64decode(value["$base64"], validate=True)
+        except (ValueError, TypeError) as err:
+            raise ValueError("Bad binary value in " + table + "." + column) from err
+    raise ValueError("Unsupported value in " + table + "." + column)
 
 
 def _split_sql(script: str) -> list[str]:

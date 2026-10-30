@@ -8,7 +8,7 @@ can be unit tested without a Home Assistant installation.
 from __future__ import annotations
 
 DOMAIN = "omniplan"
-VERSION = "1.3.0"
+VERSION = "1.3.2"
 
 DB_FILENAME = "omniplan.db"
 
@@ -26,6 +26,7 @@ EVENT_UPDATED = "omniplan_updated"
 EVENT_TASK_COMPLETED = "omniplan_task_completed"
 EVENT_TASK_UNSNOOZED = "omniplan_task_unsnoozed"
 EVENT_PANTRY_LOW = "omniplan_pantry_low"
+EVENT_BARCODE_ACTION = "omniplan_barcode_action"
 SIGNAL_UPDATED = "omniplan_updated_signal"
 SIGNAL_PLAN_ADDED = "omniplan_plan_added"
 SIGNAL_PLAN_REMOVED = "omniplan_plan_removed"
@@ -261,6 +262,7 @@ EVENT_KIND_MISSED = "missed"
 EVENT_KIND_PURCHASE = "purchase"
 EVENT_KIND_SALT = "salt"
 EVENT_KIND_REGEN = "regeneration"
+EVENT_KIND_PART_USED = "part_used"
 FEEDBACK_CHOICES = ("too_early", "just_right", "too_late")
 
 COST_MODE_PURCHASE = "purchase"  # book part cost when it is bought
@@ -298,3 +300,25 @@ EVENT_MAINT_DUE = "omniplan_maintenance_due"
 EVENT_MAINT_COMPLETED = "omniplan_maintenance_completed"
 SOURCE_MAINT_PART = "maint_part"
 CONF_MAINT_NOTIFY = "maintenance_notify_service"
+
+# ---------------------------------------------------------------------------
+# Barcode scanning
+# ---------------------------------------------------------------------------
+BARCODE_PANTRY = "pantry_item"
+BARCODE_PART = "maintenance_part"
+BARCODE_TARGETS = (BARCODE_PANTRY, BARCODE_PART)
+BARCODE_CONTEXTS = ("pantry", "maintenance", "auto")
+BARCODE_USE_ONE = "use_one"
+BARCODE_RESTOCK = "restock_qty"
+BARCODE_SET_PANTRY = "set_pantry_status"
+BARCODE_ACTIONS = (BARCODE_USE_ONE, BARCODE_RESTOCK, BARCODE_SET_PANTRY)
+BARCODE_SYMBOLOGIES = ("upc_a", "upc_e", "ean_13", "ean_8", "code_128", "code_39", "qr_code", "unknown")
+OPENFOODFACTS_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
+OPENFOODFACTS_TIMEOUT_SECONDS = 4
+
+# ---------------------------------------------------------------------------
+# Portable backups
+# ---------------------------------------------------------------------------
+BACKUP_DIRNAME = "omniplan"  # under <config>/backups/
+BACKUP_DEFAULT_RETENTION = 14
+BACKUP_DEFAULT_TIME = "03:15"

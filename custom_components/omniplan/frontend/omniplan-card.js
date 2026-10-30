@@ -14,7 +14,7 @@
  * inject markup or script into the dashboard.
  */
 
-const OP_VERSION = "1.3.0";
+const OP_VERSION = "1.3.2";
 
 const AISLES = ["Produce", "Meat", "Dairy", "Spices/Pantry", "Hardware", "Other"];
 const BUCKETS = [
@@ -113,9 +113,9 @@ function safeImageUrl(url) {
 }
 
 const ALLOWED_TAGS = new Set([
-  "A", "B", "BUTTON", "CODE", "DATALIST", "DIV", "EM", "FORM", "H2", "H3", "HA-CARD", "HA-ICON", "I", "INPUT",
+  "A", "B", "BUTTON", "CODE", "DATALIST", "DETAILS", "DIV", "EM", "FORM", "H2", "H3", "HA-CARD", "HA-ICON", "I", "INPUT",
   "LABEL", "LI", "NAV", "OPTGROUP", "OPTION", "P", "SECTION", "SELECT", "SMALL", "SPAN", "STRONG", "TABLE",
-  "TBODY", "TD", "TEXTAREA", "TH", "THEAD", "TR", "UL",
+  "SUMMARY", "TBODY", "TD", "TEXTAREA", "TH", "THEAD", "TR", "UL",
 ]);
 const ALLOWED_ATTRS = new Set([
   "accept", "capture", "label", "multiple", "autocomplete", "autofocus", "checked", "class", "colspan", "disabled", "enterkeyhint", "for", "hidden", "href",
@@ -376,6 +376,7 @@ const EVENT_LABELS = {
   purchase: "Restocked",
   salt: "Salt",
   regeneration: "Regeneration detected",
+  part_used: "Used part",
 };
 const METHOD_LABELS = {
   nfc: "Completed via NFC tag",
@@ -607,7 +608,9 @@ const RECIPE_STYLES = `
 .rimg ha-icon { --mdc-icon-size: 36px; opacity: .45; }
 .rimg img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rbody { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
-.rtitle { font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.rtitle { font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; background: none; border: none; padding: 0; text-align: left; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+.rtitle:hover { color: var(--op-accent); text-decoration: underline; }
+.rimg[data-action] { cursor: pointer; }
 .rmeta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: .78rem; color: var(--op-muted); }
 .ractions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; align-items: center; }
 .ractions .btn { flex: 1 1 auto; justify-content: center; }
@@ -633,6 +636,233 @@ const RECIPE_STYLES = `
 .rpantry label { display: flex; align-items: center; gap: 8px; padding: 6px 2px; font-size: .9rem; color: var(--op-text); cursor: pointer; }
 .rpantry input { width: 18px; height: 18px; min-height: auto; }
 .rsettings .shop-add { margin-top: 6px; }
+`;
+
+/* ------------------------------------------------------------------ */
+/* Barcode scanner, cooking view and backups: constants & styles       */
+/* ------------------------------------------------------------------ */
+
+const SCAN_FORMATS = ["upc_a", "upc_e", "ean_13", "ean_8", "code_128", "code_39", "qr_code"];
+// Bundled with the integration (Apache-2.0) and only loaded where the browser has no BarcodeDetector.
+const ZXING_SRC = "/omniplan_static/vendor/zxing-library-0.23.0.min.js";
+const ZXING_FORMATS = { upc_a: "UPC_A", upc_e: "UPC_E", ean_13: "EAN_13", ean_8: "EAN_8", code_128: "CODE_128", code_39: "CODE_39", qr_code: "QR_CODE" };
+const RESTOCK_PILLS = [1, 2, 4, 6];
+const COOK_SCALES = [0.5, 1, 2, 3];
+const KEEP_AWAKE_KEY = "omniplan.keepAwake";
+const AMOUNT_FRACTIONS = [[1 / 8, "⅛"], [1 / 4, "¼"], [1 / 3, "⅓"], [3 / 8, "⅜"], [1 / 2, "½"], [5 / 8, "⅝"], [2 / 3, "⅔"], [3 / 4, "¾"], [7 / 8, "⅞"]];
+
+let zxingPromise = null;
+
+/** Load the bundled ZXing build once; resolves to the ZXing namespace. */
+function loadZXing() {
+  if (window.ZXing?.MultiFormatReader) return Promise.resolve(window.ZXing);
+  if (!zxingPromise) {
+    zxingPromise = new Promise((resolve, reject) => {
+      // An AMD loader on the page would swallow the UMD bundle; hide it while the script runs.
+      const amd = typeof window.define === "function" && window.define.amd ? window.define : null;
+      if (amd) window.define = undefined;
+      const script = document.createElement("script");
+      script.src = ZXING_SRC;
+      script.async = true;
+      const done = (ok) => {
+        if (amd) window.define = amd;
+        if (ok && window.ZXing?.MultiFormatReader) resolve(window.ZXing);
+        else {
+          zxingPromise = null;
+          reject(new Error("The barcode reader could not be loaded"));
+        }
+      };
+      script.onload = () => done(true);
+      script.onerror = () => done(false);
+      document.head.appendChild(script);
+    });
+  }
+  return zxingPromise;
+}
+
+/** 1.5 → "1½", 0.333 → "⅓", 2 → "2", 1.27 (no fraction) → "1.27". */
+function fmtAmount(value, fraction = true) {
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const whole = Math.floor(value + 0.02);
+  const rest = value - whole;
+  if (Math.abs(rest) < 0.02) return String(whole);
+  if (fraction) {
+    const [best, glyph] = AMOUNT_FRACTIONS.reduce((acc, f) => (Math.abs(f[0] - rest) < Math.abs(acc[0] - rest) ? f : acc));
+    if (Math.abs(best - rest) < 0.03) return whole ? `${whole}${glyph}` : glyph;
+  }
+  return String(Math.round(value * 100) / 100);
+}
+
+/** An ingredient line at a batch multiplier: { amount: "1½ cups", rest: "orzo, rinsed" }. */
+function scaledIngredient(row, scale) {
+  if (row.quantity == null) return { amount: "", rest: row.display };
+  const qty = row.quantity * scale;
+  const unit = row.unit;
+  let unitText = "";
+  if (unit) unitText = unit.use_abbreviation && unit.abbreviation ? unit.abbreviation : qty > 1 && unit.plural ? unit.plural : unit.name;
+  const food = qty > 1 && row.food_plural ? row.food_plural : row.food;
+  return {
+    amount: [fmtAmount(qty, unit ? unit.fraction : true), unitText].filter(Boolean).join(" "),
+    rest: `${food || ""}${row.note ? `, ${row.note}` : ""}`,
+  };
+}
+
+const fmtClock = (seconds) => {
+  const s = Math.max(0, Math.ceil(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+};
+
+const fmtBytes = (bytes) => {
+  if (!Number.isFinite(bytes)) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+};
+
+/** The Mealie slug a task points at (recipe imports and meal-plan prep/cook tasks), if any. */
+function taskRecipeSlug(task) {
+  if (task.source === "mealie_recipe" && task.source_ref) return task.source_ref;
+  if ((task.source === "mealie_prep" || task.source === "mealie_cook") && task.link_url) {
+    const match = String(task.link_url).match(/\/r\/([^/?#]+)\/?(?:[?#].*)?$/);
+    if (match) return decodeURIComponent(match[1]);
+  }
+  return null;
+}
+
+const SCAN_STYLES = `
+.op-scan { position: fixed; inset: 0; z-index: 10000; background: #000; color: #fff; overflow: hidden; touch-action: none; }
+.op-scan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.op-scan .reticle { position: absolute; left: 50%; top: 44%; width: min(80vw, 440px); height: min(44vw, 230px); transform: translate(-50%, -50%); border-radius: 16px; border: 2px solid rgba(255,255,255,.92); box-shadow: 0 0 0 200vmax rgba(0,0,0,.5); pointer-events: none; transition: border-color .15s; }
+.op-scan .reticle::after { content: ""; position: absolute; left: 7%; right: 7%; top: 50%; height: 2px; background: #ff5252; box-shadow: 0 0 10px #ff5252; animation: op-laser 1.8s ease-in-out infinite; }
+.op-scan.hit .reticle { border-color: #69f0ae; }
+@keyframes op-laser { 0%, 100% { transform: translateY(-42px); } 50% { transform: translateY(42px); } }
+.op-scan .sbar { position: absolute; left: 0; right: 0; top: 0; z-index: 2; display: flex; gap: 8px; align-items: center; padding: max(12px, env(safe-area-inset-top)) 12px 18px; background: linear-gradient(rgba(0,0,0,.75), transparent); }
+.op-scan .sbar .grow { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.op-scan .sbtn { background: rgba(255,255,255,.18); color: #fff; border: none; border-radius: 50%; width: 46px; height: 46px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.op-scan .sbtn[hidden] { display: none; }
+.op-scan .sbtn.on { background: #ffd54f; color: #222; }
+.op-scan .sbottom { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 22px 14px max(16px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(0,0,0,.85) 35%); display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.op-scan .sstatus { text-align: center; font-size: .95rem; line-height: 1.35; }
+.op-scan .sstatus.warn { color: #ffd54f; }
+.op-scan .smanual { display: flex; gap: 8px; max-width: 460px; width: 100%; margin: 0 auto; }
+.op-scan .smanual input { flex: 1; min-width: 0; border-radius: 22px; border: none; padding: 10px 16px; font-size: 1rem; background: rgba(255,255,255,.95); color: #111; }
+.op-scan .smanual button { border-radius: 22px; border: none; padding: 0 16px; background: var(--op-accent, #03a9f4); color: #fff; font-weight: 600; }
+.op-scan .sengine { text-align: center; font-size: .75rem; opacity: .65; }
+.backdrop.sheet-wrap { align-items: flex-end; }
+.dialog.sheet { width: min(560px, 100%); border-radius: 18px 18px 0 0; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+@media (min-width: 700px) { .backdrop.sheet-wrap { align-items: center; } .dialog.sheet { border-radius: var(--op-radius); } }
+.ssheet-head { display: flex; gap: 12px; align-items: flex-start; }
+.ssheet-head .sicon { width: 44px; height: 44px; border-radius: 12px; background: var(--op-surface); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.ssheet-head h2 { margin: 0; font-size: 1.15rem; }
+.sstock { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 14px; font-size: .92rem; color: var(--op-muted); }
+.sstock strong { color: var(--op-text); font-size: 1.05rem; }
+.sstock .low { color: var(--op-danger); font-weight: 600; }
+.sactions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sactions .btn { min-height: 56px; font-size: 1.02rem; justify-content: center; }
+.sbig { background: var(--op-accent); color: #fff; }
+.spills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+.spills .chip { min-width: 54px; min-height: 42px; justify-content: center; font-size: 1rem; font-weight: 600; }
+.spills input { width: 90px; min-height: 42px; text-align: center; }
+.scode { margin-top: 14px; display: flex; gap: 8px; align-items: center; font-size: .8rem; color: var(--op-muted); flex-wrap: wrap; }
+.scode code { background: var(--op-surface); padding: 2px 6px; border-radius: 6px; }
+.slink-suggest { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: var(--op-radius); background: var(--op-surface); margin: 6px 0 12px; }
+.slink-suggest .grow { min-width: 0; }
+.slink-list { max-height: min(46vh, 360px); overflow: auto; border: 1px solid var(--op-divider); border-radius: var(--op-radius); }
+.slink-row { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--op-divider); cursor: pointer; }
+.slink-row:first-child { border-top: none; }
+.slink-row input { width: 20px; height: 20px; min-height: auto; flex: 0 0 auto; }
+.slink-row .grow { min-width: 0; overflow-wrap: anywhere; }
+.slink-row.on { background: color-mix(in srgb, var(--op-accent) 10%, transparent); }
+.slink-search { width: 100%; margin-bottom: 8px; }
+.op-toast { flex-wrap: wrap; row-gap: 2px; z-index: 10002; width: max-content; box-sizing: border-box; }
+`;
+
+const COOK_STYLES = `
+.backdrop.cook-wrap { padding: 0; }
+.dialog.cook { width: min(1120px, 96vw); height: min(92vh, 1000px); max-height: none; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+@media (max-width: 700px) { .dialog.cook { width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; } }
+.cook-head { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--op-divider); background: var(--op-bg); flex-wrap: wrap; }
+.cook-head .ctitle { flex: 1 1 160px; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cawake { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 22px; border: 2px solid var(--op-divider); font-weight: 600; cursor: pointer; user-select: none; min-height: 40px; }
+.cawake input { width: 20px; height: 20px; min-height: auto; margin: 0; }
+.cawake.on { border-color: #f9a825; background: color-mix(in srgb, #ffd54f 28%, transparent); }
+.cawake-status { font-size: .75rem; color: var(--op-muted); }
+.cawake-status.on { color: #2e7d32; }
+.cook-scroll { flex: 1; overflow: auto; padding: 0 0 16px; overscroll-behavior: contain; }
+.cook-hero { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 18px; padding: 16px; }
+@media (max-width: 700px) { .cook-hero { grid-template-columns: minmax(0, 1fr); padding: 0 0 8px; gap: 10px; } .cook-hero .cmeta { padding: 0 14px; } }
+.cook-img { aspect-ratio: 4 / 3; background: var(--op-surface); border-radius: var(--op-radius); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--op-muted); }
+.cook-img ha-icon { --mdc-icon-size: 48px; opacity: .45; }
+.cook-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+@media (max-width: 700px) { .cook-img { border-radius: 0; aspect-ratio: 16 / 9; } }
+.cmeta h2 { margin: 0 0 6px; font-size: 1.5rem; line-height: 1.2; overflow-wrap: anywhere; }
+.cmeta .cdesc { color: var(--op-muted); margin: 0 0 10px; line-height: 1.45; }
+.ctimes { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 10px 0; }
+.ctimes div { display: flex; flex-direction: column; font-size: .75rem; color: var(--op-muted); text-transform: uppercase; letter-spacing: .04em; }
+.ctimes strong { font-size: 1rem; color: var(--op-text); text-transform: none; letter-spacing: 0; }
+.cscale { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+.cscale .chip { min-width: 52px; min-height: 40px; justify-content: center; font-weight: 700; }
+.cook-cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 22px; padding: 0 16px; }
+@media (max-width: 860px) { .cook-cols { grid-template-columns: minmax(0, 1fr); padding: 0 14px; } }
+.cook-cols h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 14px 0 8px; font-size: 1.15rem; }
+.caddmissing { width: 100%; justify-content: center; min-height: 46px; margin-bottom: 8px; }
+.csection { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--op-muted); font-weight: 700; margin: 14px 0 4px; }
+.cing { display: flex; gap: 12px; align-items: flex-start; padding: 9px 2px; border-bottom: 1px solid var(--op-divider); cursor: pointer; font-size: 1.05rem; line-height: 1.4; }
+.cing input { width: 26px; height: 26px; min-height: auto; flex: 0 0 auto; margin: 0; }
+.cing .grow { min-width: 0; overflow-wrap: anywhere; }
+.cing .amt { font-weight: 700; }
+.cing.got .grow { text-decoration: line-through; opacity: .5; }
+.cing .badge { margin-left: 4px; }
+.cstep { display: flex; gap: 14px; padding: 14px 10px; border-radius: var(--op-radius); border: 2px solid transparent; cursor: pointer; margin-bottom: 6px; }
+.cstep .cnum { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; background: var(--op-surface); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.05rem; }
+.cstep .ctext { flex: 1; min-width: 0; font-size: 1.18rem; line-height: 1.6; color: var(--primary-text-color, var(--op-text)); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cstep .ctext strong { display: block; font-size: 1rem; margin-bottom: 2px; }
+.cstep.current { border-color: var(--op-accent); background: color-mix(in srgb, var(--op-accent) 8%, transparent); }
+.cstep.current .cnum { background: var(--op-accent); color: #fff; }
+.cstep.done { opacity: .5; }
+.cstep.done .cnum { background: #2e7d32; color: #fff; }
+.ctimer-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; white-space: normal; }
+.ctimer-pill { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--op-accent); color: var(--op-accent); background: none; border-radius: 22px; padding: 6px 14px; font-weight: 700; font-size: .95rem; min-height: 40px; cursor: pointer; }
+.cnotes { margin: 18px 16px 0; padding: 12px 14px; border-radius: var(--op-radius); background: color-mix(in srgb, #ffd54f 22%, transparent); border-left: 4px solid #f9a825; }
+.cnotes h3 { margin: 0 0 6px; font-size: 1rem; display: flex; gap: 6px; align-items: center; }
+.cnotes p { margin: 4px 0 10px; white-space: pre-wrap; line-height: 1.5; }
+.cnutrition { margin: 14px 16px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px 14px; font-size: .9rem; }
+.cnutrition div { display: flex; justify-content: space-between; border-bottom: 1px dotted var(--op-divider); padding: 3px 0; }
+.cook-timers { border-top: 1px solid var(--op-divider); background: var(--op-bg); padding: 8px 12px max(8px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px; }
+.cook-timers:empty { display: none; }
+.ctbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px; background: var(--op-surface); }
+.ctbar .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ctbar .ctime { font-variant-numeric: tabular-nums; font-size: 1.4rem; font-weight: 800; min-width: 74px; text-align: right; }
+.ctbar.paused .ctime { opacity: .55; }
+.ctbar.done { background: var(--op-danger); color: #fff; animation: op-pulse 1s ease-in-out infinite; }
+.ctbar.done .icon-btn { color: #fff; }
+@keyframes op-pulse { 50% { filter: brightness(1.25); } }
+`;
+
+const SETTINGS_STYLES = `
+.dialog.settings { width: min(760px, 96vw); }
+.bk-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.bk-actions .btn { flex: 1 1 220px; justify-content: center; min-height: 44px; }
+.bk-list { border: 1px solid var(--op-divider); border-radius: var(--op-radius); margin-top: 8px; max-height: 300px; overflow: auto; }
+.bk-row { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--op-divider); flex-wrap: wrap; }
+.bk-row:first-child { border-top: none; }
+.bk-row .grow { flex: 1 1 200px; min-width: 0; }
+.bk-row .grow small { display: block; color: var(--op-muted); overflow-wrap: anywhere; }
+.bk-modes { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.bk-modes label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.bk-modes input { margin-top: 3px; }
+.bk-upload { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bk-upload input[type=file] { flex: 1 1 220px; min-width: 0; }
+.bk-schedule { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
+.bk-schedule label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+.bk-schedule input[type=time] { width: 120px; }
+.bk-schedule input[type=number] { width: 80px; }
+.bk-report { margin-top: 10px; padding: 10px 12px; border-radius: var(--op-radius); background: var(--op-surface); font-size: .9rem; }
+.bk-report ul { margin: 6px 0 0; padding-left: 18px; }
+.bk-warn { color: var(--op-danger); }
 `;
 
 /* ------------------------------------------------------------------ */
@@ -667,6 +897,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--op-accent);
 .op-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px 4px; flex-wrap: wrap; position: relative; }
 .op-title { font-size: 1.25rem; font-weight: 600; flex: 0 1 auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .op-people { display: flex; gap: 6px; flex-wrap: wrap; }
+/* One row that never wraps: the category label shrinks (ellipsis) before the buttons move. */
+.op-hrow { display: flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 0; }
+.op-hrow .op-people { flex-wrap: nowrap; flex: 0 0 auto; }
+@media (max-width: 420px) { .op-hrow { gap: 4px; } .op-hrow > .icon-btn { width: 36px; height: 36px; } .op-hrow .op-people { gap: 4px; } }
 .avatar { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: .8rem; font-weight: 600; background-size: cover; background-position: center; flex: 0 0 auto; border: 2px solid transparent; }
 .avatar.sm { width: 24px; height: 24px; font-size: .65rem; border-width: 1px; }
 .avatar.lg { width: 40px; height: 40px; }
@@ -1030,6 +1264,9 @@ class OmniPlanCard extends HTMLElement {
   disconnectedCallback() {
     if (this._unsub) this._unsub();
     this._unsub = null;
+    // Never leave the camera, a wake lock or kitchen timers running for a card that is gone.
+    this._scanStop();
+    if (this._dialog?.kind === "cook") this._cookClosed(this._dialog);
     clearTimeout(this._maintPoll);
     window.removeEventListener("resize", this._onViewport);
     window.removeEventListener("scroll", this._onViewport, { capture: true });
@@ -1258,8 +1495,9 @@ class OmniPlanCard extends HTMLElement {
 
   _buildShell() {
     const root = this.shadowRoot;
+    if (this._scan) this._scanStop(); // the camera overlay lives in the shell being replaced
     const style = document.createElement("style");
-    style.textContent = STYLES + MAINT_STYLES + RECIPE_STYLES;
+    style.textContent = STYLES + MAINT_STYLES + RECIPE_STYLES + SCAN_STYLES + COOK_STYLES + SETTINGS_STYLES;
     const container = document.createElement("div");
     setHTML(
       container,
@@ -1277,7 +1515,8 @@ class OmniPlanCard extends HTMLElement {
         <div class="op-bulkbar" hidden></div>
       </ha-card>
       <div class="op-dialog-host"></div>
-      <div class="op-toast-host"></div>`,
+      <div class="op-toast-host"></div>
+      <div class="op-scan-host"></div>`,
     );
     root.replaceChildren(style, ...container.childNodes);
     if (!this._listening) {
@@ -1323,10 +1562,13 @@ class OmniPlanCard extends HTMLElement {
     setHTML(
       root.querySelector(".op-header"),
       html`<div class="op-title">${title} ${mealie}</div>
-        ${this._config.plan ? "" : this._planPickerHtml(tab)}
-        <div class="op-people">${peopleHtml}</div>
-        <button class="icon-btn" data-action="menu" title="More" aria-label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></button>
-        ${this._ui.menu ? this._menuHtml() : ""}`,
+        <div class="op-hrow">
+          ${this._config.plan ? html`<span class="op-pick"></span>` : this._planPickerHtml(tab)}
+          <div class="op-people">${peopleHtml}</div>
+          <button class="icon-btn" data-action="s-open" data-context="auto" title="Scan a barcode" aria-label="Scan a barcode"><ha-icon icon="mdi:barcode-scan"></ha-icon></button>
+          <button class="icon-btn" data-action="menu" title="More" aria-label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></button>
+          ${this._ui.menu ? this._menuHtml() : ""}
+        </div>`,
     );
     this._placeMenus(root.querySelector(".op-header"));
   }
@@ -1416,6 +1658,7 @@ class OmniPlanCard extends HTMLElement {
       <button data-action="categories"><ha-icon icon="mdi:eye-settings-outline"></ha-icon>Manage categories / hidden</button>
       ${this._board.mealie?.enabled ? html`<button data-action="mealie-sync"><ha-icon icon="mdi:sync"></ha-icon>Sync Mealie now</button>` : ""}
       <button data-action="refresh"><ha-icon icon="mdi:refresh"></ha-icon>Refresh</button>
+      <button data-action="b-open-settings"><ha-icon icon="mdi:cog-outline"></ha-icon>Settings &amp; backups</button>
     </div>`;
   }
 
@@ -1641,6 +1884,8 @@ class OmniPlanCard extends HTMLElement {
     if (task.shift_aware) out.push(html`<span class="badge" title="Assigned daily by work shifts"><ha-icon icon="mdi:account-switch"></ha-icon>Shift-aware</span>`);
     if (task.sensor_entity_id) out.push(this._sensorBadge(task));
     const link = safeUrl(task.link_url);
+    const slug = this._board.mealie?.enabled ? taskRecipeSlug(task) : null;
+    if (slug) out.push(html`<button class="badge" data-action="c-open" data-slug="${slug}" data-name="${task.summary}" data-stop title="Open the cooking view"><ha-icon icon="mdi:chef-hat"></ha-icon>Cook view</button>`);
     if (link) out.push(html`<a class="badge" href="${link}" target="_blank" rel="noopener noreferrer" data-stop><ha-icon icon="mdi:open-in-new"></ha-icon>Recipe</a>`);
     return html`${out}`;
   }
@@ -2132,14 +2377,19 @@ class OmniPlanCard extends HTMLElement {
     const parts = [
       html`<div class="section-head">${plan.name} <span class="badge ${low ? "today" : "ok"}">${low} low / out</span></div>
         <div class="inline-add"><input data-focus="pantry-${plan.id}" data-pantry-input="${plan.id}" maxlength="120" placeholder="Add staple or seasoning blend…" enterkeyhint="done">
-        <button class="btn flat" data-action="pantry-add" data-plan="${plan.id}" aria-label="Add pantry item"><ha-icon icon="mdi:plus"></ha-icon></button></div>`,
+        <button class="btn flat" data-action="pantry-add" data-plan="${plan.id}" aria-label="Add pantry item"><ha-icon icon="mdi:plus"></ha-icon></button>
+        <button class="btn" data-action="s-open" data-context="pantry" data-plan="${plan.id}" title="Scan groceries as you put them away"><ha-icon icon="mdi:barcode-scan"></ha-icon>📷 Scan</button></div>`,
     ];
     for (const [key, list] of groups) {
       parts.push(html`<div class="section"><div class="section-head">${key}</div>
         ${list.map(
           (item) => html`<div class="pantry-row">
             <div class="grow"><div class="summary">${item.is_batch ? "🧪 " : ""}${item.name}${item.quantity ? html` <span class="badge">${item.quantity}</span>` : ""}</div>
-              <div class="meta">${item.mealie_recipe_slug ? html`<span class="badge"><ha-icon icon="mdi:chef-hat"></ha-icon>${item.mealie_recipe_slug}</span>` : ""}
+              <div class="meta">${item.mealie_recipe_slug
+                ? this._board.mealie?.enabled
+                  ? html`<button class="badge" data-action="c-open" data-slug="${item.mealie_recipe_slug}" data-name="${item.name}" title="Open the recipe"><ha-icon icon="mdi:chef-hat"></ha-icon>${item.mealie_recipe_slug}</button>`
+                  : html`<span class="badge"><ha-icon icon="mdi:chef-hat"></ha-icon>${item.mealie_recipe_slug}</span>`
+                : ""}
                 <span class="badge">On low: ${actions[item.low_action] || item.low_action}</span>
                 ${item.ingredients?.length ? html`<span class="badge">${item.ingredients.length} ingredients</span>` : ""}</div></div>
             <div class="seg">${[["in_stock", "In stock"], ["low", "Low"], ["out", "Out"]].map(
@@ -2593,13 +2843,14 @@ class OmniPlanCard extends HTMLElement {
 
   _mEventHtml(event, mb) {
     const kind = event.kind;
-    const icon = { completed: "mdi:check", skipped: "mdi:skip-next", missed: "mdi:calendar-remove", purchase: "mdi:cart-check", salt: "mdi:shaker", regeneration: "mdi:sync" }[kind] || "mdi:circle-small";
+    const icon = { completed: "mdi:check", skipped: "mdi:skip-next", missed: "mdi:calendar-remove", purchase: "mdi:cart-check", salt: "mdi:shaker", regeneration: "mdi:sync", part_used: "mdi:package-down" }[kind] || "mdi:circle-small";
     const who = event.person_entity_id ? this._person(event.person_entity_id).name : event.user_name;
     let label = EVENT_LABELS[kind] || kind;
     if (kind === "completed" && METHOD_LABELS[event.method]) label = `${label} — ${METHOD_LABELS[event.method]}`;
     if (kind === "salt") label = `Salt: ${event.data?.kind === "fill" ? "filled" : event.data?.kind === "empty" ? "tank empty / bridges checked" : "level observed"}${event.data?.label ? ` (${event.data.label})` : ""}`;
     if (kind === "regeneration") label = `Regeneration detected (${event.data?.volume ?? "?"} ${event.data?.unit || "gal"}, ${event.data?.minutes ?? "?"} min)`;
-    if (kind === "purchase") label = `Restocked ${event.data?.quantity ?? ""} × ${event.data?.part_name || "part"}`;
+    if (kind === "purchase") label = `Restocked ${event.data?.quantity ?? ""} × ${event.data?.part_name || "part"}${event.method === "scan" ? " (scanned)" : ""}`;
+    if (kind === "part_used") label = `Used ${event.data?.quantity ?? 1} × ${event.data?.part_name || "part"}${event.method === "scan" ? " (scanned)" : ""}`;
     const when = new Date(event.occurred_at);
     const currency = this._mCurrency(mb);
     const parts = (event.data?.parts || []).map((p) => `${p.quantity}× ${p.part_name}`).join(", ");
@@ -2829,7 +3080,8 @@ class OmniPlanCard extends HTMLElement {
             )
           : html`<div class="empty sm">Track filters, cartridges, salt and other consumables.</div>`}
           ${inventory ? html`<div class="lastdone">Inventory value: ${money(inventory, currency)}</div>` : ""}`,
-        html`<span class="grow"></span><button class="btn small flat" data-action="m-new-part" data-id="${obj.id}"><ha-icon icon="mdi:plus"></ha-icon>Add part</button>`,
+        html`<span class="grow"></span><button class="btn small" data-action="s-open" data-context="maintenance" data-object="${obj.id}" title="Scan a filter box, salt bag or other consumable"><ha-icon icon="mdi:barcode-scan"></ha-icon>📷 Scan</button>
+          <button class="btn small flat" data-action="m-new-part" data-id="${obj.id}"><ha-icon icon="mdi:plus"></ha-icon>Add part</button>`,
       )}
       ${this._mAccordion(
         "history",
@@ -2921,9 +3173,9 @@ class OmniPlanCard extends HTMLElement {
   _recipeCardHtml(plan, r) {
     const url = safeUrl(r.url);
     return html`<div class="rcard">
-      <div class="rimg" ${r.has_image ? html`data-rimg="${r.id}"` : ""}><ha-icon icon="mdi:silverware-fork-knife"></ha-icon></div>
+      <div class="rimg" data-action="c-open" data-slug="${r.slug}" data-name="${r.name}" title="Open the recipe" ${r.has_image ? html`data-rimg="${r.id}"` : ""}><ha-icon icon="mdi:silverware-fork-knife"></ha-icon></div>
       <div class="rbody">
-        <div class="rtitle">${r.name}</div>
+        <button class="rtitle" data-action="c-open" data-slug="${r.slug}" data-name="${r.name}">${r.name}</button>
         <div class="rmeta">
           ${r.categories.slice(0, 3).map((c) => html`<span class="badge plan">${c}</span>`)}
           ${r.total_time ? html`<span class="badge"><ha-icon icon="mdi:timer-outline"></ha-icon>${r.total_time}</span>` : ""}
@@ -2995,6 +3247,11 @@ class OmniPlanCard extends HTMLElement {
     const pantryPlans = this._activePlans().filter((p) => p.archetype === "pantry_spices");
     const items = this._board.pantry || [];
     return html`<div class="rsettings">
+      ${pantryPlans.length
+        ? html`<div class="mcard rscan"><h3><ha-icon icon="mdi:barcode-scan"></ha-icon>Putting groceries away?</h3>
+            <div class="shop-add"><span class="grow lastdone">Scan each item: staples you already track flip to In Stock, new barcodes can be linked in one tap.</span>
+              <button class="btn" data-action="s-open" data-context="pantry" data-plan="${pantryPlans[0].id}"><ha-icon icon="mdi:barcode-scan"></ha-icon>📷 Scan</button></div></div>`
+        : ""}
       <div class="mcard"><h3><ha-icon icon="mdi:filter-outline"></ha-icon>When adding a recipe to ${plan.name}</h3>
         <label class="inline rrow"><input type="checkbox" data-action="r-skip-toggle" ${settings.skip_seasonings ? html`checked` : ""}>
           <span class="grow">Automatically ignore seasonings &amp; spices when adding recipes</span></label>
@@ -3018,7 +3275,8 @@ class OmniPlanCard extends HTMLElement {
               )}</div>`
             : html`<div class="empty sm">No staples yet.</div>`}
           <div class="shop-add"><input data-pantry-input="${pp.id}" maxlength="120" placeholder="Add a staple you keep on hand… e.g. rice" enterkeyhint="done" aria-label="Add a pantry staple">
-            <button class="btn" data-action="pantry-add" data-plan="${pp.id}" aria-label="Add"><ha-icon icon="mdi:plus"></ha-icon></button></div>
+            <button class="btn" data-action="pantry-add" data-plan="${pp.id}" aria-label="Add"><ha-icon icon="mdi:plus"></ha-icon></button>
+            <button class="btn flat" data-action="s-open" data-context="pantry" data-plan="${pp.id}" aria-label="Scan a barcode" title="Scan a barcode"><ha-icon icon="mdi:barcode-scan"></ha-icon>📷 Scan</button></div>
         </div>`;
       })}
       ${pantryPlans.length ? "" : html`<div class="empty sm">Create a Pantry category to track the staples you keep in the house.</div>`}
@@ -3273,15 +3531,1190 @@ class OmniPlanCard extends HTMLElement {
     }
   }
 
+  /* ---------------- Barcode scanner ---------------- */
+
+  /** Open the camera viewfinder. ``context``: pantry | maintenance | auto (header button). */
+  async _scanOpen(context, extra = {}) {
+    if (this._scan) return;
+    const scan = { context, objectId: extra.objectId || null, planId: extra.planId || null, status: "Starting the camera…", warn: false, torch: false, devices: [], deviceId: null, stream: null, track: null, engine: null, busy: false, last: null, done: false, timer: null, video: null };
+    this._scan = scan;
+    if (!this._onScanHidden) {
+      // A phone that locks or switches apps must give the camera back.
+      this._onScanHidden = () => {
+        if (document.visibilityState === "hidden" && this._scan) this._scanStop();
+      };
+      document.addEventListener("visibilitychange", this._onScanHidden);
+    }
+    this._renderScanner();
+    await this._scanStart(scan);
+  }
+
+  _renderScanner() {
+    const host = this.shadowRoot.querySelector(".op-scan-host");
+    const scan = this._scan;
+    if (!host) return;
+    if (!scan) {
+      setHTML(host, html``);
+      return;
+    }
+    const where = scan.context === "pantry" ? "Scan a pantry item" : scan.context === "maintenance" ? "Scan a part or consumable" : "Scan a barcode";
+    setHTML(
+      host,
+      html`<div class="op-scan" role="dialog" aria-modal="true" aria-label="${where}">
+        <div class="sviewport"></div>
+        <div class="reticle" aria-hidden="true"></div>
+        <div class="sbar">
+          <button class="sbtn" data-action="s-close" aria-label="Close the scanner"><ha-icon icon="mdi:close"></ha-icon></button>
+          <span class="grow">${where}</span>
+          <button class="sbtn" data-action="s-torch" aria-label="Flashlight" title="Flashlight" hidden><ha-icon icon="mdi:flashlight"></ha-icon></button>
+          <button class="sbtn" data-action="s-switch" aria-label="Switch camera" title="Switch camera" hidden><ha-icon icon="mdi:camera-flip-outline"></ha-icon></button>
+        </div>
+        <div class="sbottom">
+          <div class="sstatus" aria-live="polite"></div>
+          <div class="smanual"><input data-scan-manual inputmode="text" autocomplete="off" maxlength="256" placeholder="…or type the barcode number" enterkeyhint="go" aria-label="Barcode number">
+            <button data-action="s-manual">Look up</button></div>
+          <div class="sengine"></div>
+        </div>
+      </div>`,
+    );
+    // The live camera feed is a DOM-built element, never markup.
+    const video = document.createElement("video");
+    video.setAttribute("playsinline", "");
+    video.setAttribute("muted", "");
+    video.muted = true;
+    video.autoplay = true;
+    host.querySelector(".sviewport").replaceChildren(video);
+    scan.video = video;
+    this._scanControls();
+  }
+
+  _scanControls() {
+    const scan = this._scan;
+    const root = this.shadowRoot.querySelector(".op-scan");
+    if (!scan || !root) return;
+    const status = root.querySelector(".sstatus");
+    status.textContent = scan.status;
+    status.classList.toggle("warn", !!scan.warn);
+    const torch = root.querySelector('[data-action="s-torch"]');
+    torch.hidden = !scan.torchSupported;
+    torch.classList.toggle("on", !!scan.torch);
+    torch.setAttribute("aria-pressed", scan.torch ? "true" : "false");
+    root.querySelector('[data-action="s-switch"]').hidden = scan.devices.length < 2;
+    root.querySelector(".sengine").textContent = scan.engine ? (scan.engine.kind === "native" ? "Using the built-in barcode reader" : "Using the bundled ZXing reader") : "";
+  }
+
+  _scanStatus(message, warn = false) {
+    if (!this._scan) return;
+    this._scan.status = message;
+    this._scan.warn = warn;
+    this._scanControls();
+  }
+
+  async _scanStart(scan) {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      this._scanStatus(
+        window.isSecureContext ? "This browser can't use the camera. Type the barcode number below." : "The camera needs Home Assistant over HTTPS (or the Companion app). Type the barcode number below.",
+        true,
+      );
+      return;
+    }
+    const size = { width: { ideal: 1280 }, height: { ideal: 720 } };
+    const video = scan.deviceId ? { deviceId: { exact: scan.deviceId }, ...size } : { facingMode: { ideal: "environment" }, ...size };
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+      if (this._scan !== scan || scan.done) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      scan.stream = stream;
+      scan.video.srcObject = stream;
+      await scan.video.play().catch(() => {});
+      scan.track = stream.getVideoTracks()[0] || null;
+      const caps = scan.track?.getCapabilities?.() || {};
+      scan.torchSupported = !!caps.torch;
+      scan.torch = false;
+      try {
+        scan.devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+      } catch (_err) {
+        scan.devices = [];
+      }
+      const reported = scan.track?.getSettings?.().deviceId;
+      if (reported && scan.devices.some((d) => d.deviceId === reported)) scan.deviceId = reported;
+      if (!scan.engine) scan.engine = await this._scanEngine();
+      if (this._scan !== scan) return;
+      this._scanStatus(scan.engine ? "Hold the barcode inside the frame" : "Barcode reading isn't available in this browser. Type the number below.", !scan.engine);
+      if (scan.engine) this._scanLoop(scan);
+    } catch (err) {
+      const blocked = err?.name === "NotAllowedError" || err?.name === "SecurityError";
+      const missing = err?.name === "NotFoundError" || err?.name === "OverconstrainedError";
+      this._scanStatus(
+        blocked
+          ? "Camera access was blocked. Allow it in the browser or Companion app settings, or type the number below."
+          : missing
+            ? "No camera was found. Type the barcode number below."
+            : `The camera didn't start (${err?.name || err}). Type the barcode number below.`,
+        true,
+      );
+    }
+  }
+
+  /** The browser's BarcodeDetector when it can read our formats, otherwise the bundled ZXing reader. */
+  async _scanEngine() {
+    if ("BarcodeDetector" in window) {
+      try {
+        const supported = await window.BarcodeDetector.getSupportedFormats();
+        const formats = SCAN_FORMATS.filter((f) => supported.includes(f));
+        if (formats.length) {
+          const detector = new window.BarcodeDetector({ formats });
+          return {
+            kind: "native",
+            detect: async (video) => {
+              const codes = await detector.detect(video);
+              return codes.length ? { text: codes[0].rawValue, format: codes[0].format } : null;
+            },
+          };
+        }
+      } catch (_err) {
+        /* fall back to ZXing */
+      }
+    }
+    let ZX;
+    try {
+      ZX = await loadZXing();
+    } catch (_err) {
+      return null;
+    }
+    const hints = new Map();
+    hints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, Object.values(ZXING_FORMATS).map((name) => ZX.BarcodeFormat[name]));
+    hints.set(ZX.DecodeHintType.TRY_HARDER, true);
+    const reader = new ZX.MultiFormatReader();
+    reader.setHints(hints);
+    const names = Object.fromEntries(Object.entries(ZXING_FORMATS).map(([ours, theirs]) => [ZX.BarcodeFormat[theirs], ours]));
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    return {
+      kind: "zxing",
+      detect: async (video) => {
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (!w || !h) return null;
+        // Only the middle of the frame (where the reticle is): faster and fewer stray reads.
+        const cw = Math.round(w * 0.8);
+        const ch = Math.round(h * 0.6);
+        canvas.width = cw;
+        canvas.height = ch;
+        ctx.drawImage(video, (w - cw) / 2, (h - ch) / 2, cw, ch, 0, 0, cw, ch);
+        try {
+          const bitmap = new ZX.BinaryBitmap(new ZX.HybridBinarizer(new ZX.HTMLCanvasElementLuminanceSource(canvas)));
+          const result = reader.decodeWithState(bitmap);
+          return { text: result.getText(), format: names[result.getBarcodeFormat()] || "unknown" };
+        } catch (_err) {
+          return null; // nothing readable in this frame
+        } finally {
+          reader.reset();
+        }
+      },
+    };
+  }
+
+  _scanLoop(scan) {
+    const tick = async () => {
+      if (this._scan !== scan || scan.done) return;
+      if (!scan.busy && scan.video?.readyState >= 2) {
+        scan.busy = true;
+        try {
+          const hit = await scan.engine.detect(scan.video);
+          if (hit?.text && this._scan === scan && !scan.done) {
+            // ZXing reads one frame at a time; a 1D code must read the same twice before it counts.
+            if (scan.engine.kind === "native" || hit.format === "qr_code" || scan.last === hit.text) return void this._scanFound(scan, hit);
+            scan.last = hit.text;
+          }
+        } catch (_err) {
+          /* a frame that fails to decode is normal */
+        } finally {
+          scan.busy = false;
+        }
+      }
+      if (this._scan === scan && !scan.done) scan.timer = setTimeout(tick, scan.engine.kind === "native" ? 120 : 160);
+    };
+    tick();
+  }
+
+  async _scanFound(scan, hit) {
+    if (scan.done) return;
+    scan.done = true;
+    this.shadowRoot.querySelector(".op-scan")?.classList.add("hit");
+    try {
+      if (navigator.userActivation?.hasBeenActive !== false) navigator.vibrate?.(50);
+    } catch (_err) {
+      /* no vibration motor */
+    }
+    const context = { context: scan.context, objectId: scan.objectId, planId: scan.planId };
+    this._scanStop();
+    await this._scanLookup(hit.text, hit.format, context);
+  }
+
+  _scanStop() {
+    const scan = this._scan;
+    if (scan) {
+      scan.done = true;
+      clearTimeout(scan.timer);
+      if (scan.stream) scan.stream.getTracks().forEach((t) => t.stop());
+      if (scan.video) {
+        scan.video.pause?.();
+        scan.video.srcObject = null;
+      }
+    }
+    this._scan = null;
+    if (this._onScanHidden) {
+      document.removeEventListener("visibilitychange", this._onScanHidden);
+      this._onScanHidden = null;
+    }
+    const host = this.shadowRoot?.querySelector(".op-scan-host");
+    if (host) setHTML(host, html``);
+  }
+
+  async _scanTorch() {
+    const scan = this._scan;
+    if (!scan?.track) return;
+    const on = !scan.torch;
+    try {
+      await scan.track.applyConstraints({ advanced: [{ torch: on }] });
+      scan.torch = on;
+    } catch (_err) {
+      this._scanStatus("The flashlight isn't available on this camera", true);
+    }
+    this._scanControls();
+  }
+
+  async _scanSwitch() {
+    const scan = this._scan;
+    if (!scan || scan.devices.length < 2) return;
+    const found = scan.devices.findIndex((d) => d.deviceId === scan.deviceId);
+    const next = ((found >= 0 ? found : scan.deviceIndex ?? -1) + 1) % scan.devices.length;
+    scan.deviceIndex = next;
+    scan.deviceId = scan.devices[next].deviceId;
+    clearTimeout(scan.timer);
+    if (scan.stream) scan.stream.getTracks().forEach((t) => t.stop());
+    scan.stream = null;
+    scan.last = null;
+    this._scanStatus("Switching camera…");
+    await this._scanStart(scan);
+  }
+
+  _scanManual() {
+    const scan = this._scan;
+    const value = this.shadowRoot.querySelector("[data-scan-manual]")?.value.trim();
+    if (!scan || !value) return;
+    return this._scanFound(scan, { text: value, format: null });
+  }
+
+  /** What the code is linked to; pantry staples are marked In Stock right away. */
+  async _scanLookup(code, format, ctx) {
+    let res;
+    try {
+      const message = { type: "omniplan/barcode_lookup", barcode: code, context: ctx.context, apply_default: true };
+      if (format && SCAN_FORMATS.includes(format)) message.format = format;
+      res = await this._store.call(message);
+    } catch (err) {
+      return this._fail(err);
+    }
+    if (res.match?.target_type === "pantry_item") return this._scanPantryToast(res);
+    if (res.match?.target_type === "maintenance_part") return this._openDialog({ kind: "scan-part", res, restock: false });
+    const options = res.options || {};
+    const type = ctx.context === "pantry" ? "pantry_item" : ctx.context === "maintenance" ? "maintenance_part" : options.suggested_part_id && !options.suggested_pantry_id ? "maintenance_part" : "pantry_item";
+    const suggestion = res.suggestion;
+    return this._openDialog({
+      kind: "scan-link",
+      res,
+      type,
+      mode: "pick",
+      query: "",
+      selected: { pantry_item: options.suggested_pantry_id || null, maintenance_part: options.suggested_part_id || null },
+      name: suggestion?.title || "",
+      planId: ctx.planId || options.pantry_plans?.[0]?.id || "",
+      objectId: ctx.objectId || "",
+      stock: "",
+      reorder: "",
+      delta: 1,
+      busy: false,
+    });
+  }
+
+  _scanPantryToast(res) {
+    const item = res.match.item;
+    const applied = res.applied;
+    const code = res.barcode;
+    const message = res.created
+      ? `Added ${item.name} to the pantry as In Stock — Mealie recipe imports will skip it`
+      : applied && applied.previous !== "in_stock"
+        ? `Marked ${item.name} as In Stock — Mealie recipe imports will skip it`
+        : `${item.name} is already in stock — recipe imports skip it`;
+    const set = (status, lowAction, label) => ({
+      label,
+      run: async () => {
+        const out = await this._call({ type: "omniplan/barcode_apply_action", barcode: code, action: "set_pantry_status", status, low_action: lowAction });
+        if (out.action_needed) return this._openDialog({ kind: "pantry-low", item: { ...out.match.item, ingredients: [] }, state: status });
+        const added = (out.created || []).find((c) => c.type === "shopping");
+        this._showToast(
+          status === "low" ? `${item.name} marked low` : added ? `${item.name} is out — added to ${this._idx.plans.get(added.plan_id)?.name || "the list"}` : `${item.name} marked out`,
+          this._undoWith(out.undo),
+        );
+      },
+    });
+    this._showToast(message, applied?.undo ? this._undoWith(applied.undo) : null, [set("low", null, "Mark low"), set("out", "shopping", "Out + add to list")]);
+  }
+
+  /* -------- scan result: part sheet -------- */
+
+  _scanPartHtml(d) {
+    const m = d.res.match;
+    const p = m.part;
+    const delta = m.default_delta_qty || 1;
+    const object = p.object_name ? `${p.object_name}${p.object_number ? ` (#${p.object_number})` : ""}` : "Not linked to an object";
+    return html`<div class="ssheet-head"><span class="sicon"><ha-icon icon="mdi:package-variant-closed"></ha-icon></span>
+        <div class="grow"><h2>${p.part_name}</h2><div class="lastdone">${p.plan_name || ""}</div></div>${this._closeButton()}</div>
+      <div class="sstock"><span>Current stock: <strong class="${p.low ? "low" : ""}">${p.current_stock}</strong></span>
+        <span>Linked object: <strong>${object}</strong></span><span>Reorder at ${p.reorder_threshold}</span>
+        ${p.storage_location ? html`<span>${p.storage_location}</span>` : ""}</div>
+      <div class="sactions">
+        <button class="btn sbig" data-action="s-use" autofocus><ha-icon icon="mdi:minus-circle-outline"></ha-icon>−${delta} Use part</button>
+        <button class="btn flat" data-action="s-restock-open" aria-expanded="${d.restock ? "true" : "false"}"><ha-icon icon="mdi:plus-circle-outline"></ha-icon>Restock</button>
+      </div>
+      ${d.restock
+        ? html`<div class="spills" role="group" aria-label="How many did you add?">
+            ${RESTOCK_PILLS.map((n) => html`<button class="chip" data-action="s-restock" data-id="${n}">+${n}</button>`)}
+            <input type="number" min="1" max="10000" step="1" inputmode="numeric" data-scan-qty placeholder="Other" aria-label="Other amount">
+            <button class="btn small" data-action="s-restock-custom">Add</button></div>`
+        : ""}
+      <div class="scode"><ha-icon icon="mdi:barcode"></ha-icon><code>${d.res.display}</code>${m.mapped ? html`<button class="link" data-action="s-unlink">Unlink this barcode</button>` : html`<span>matched by the part's MPN/GTIN</span>`}</div>`;
+  }
+
+  async _scanApplyPart(action, quantity) {
+    const d = this._dialog;
+    if (d?.kind !== "scan-part") return;
+    const message = { type: "omniplan/barcode_apply_action", barcode: d.res.barcode, action };
+    if (quantity) message.quantity = quantity;
+    const res = await this._call(message);
+    this._closeDialog();
+    const p = res.match.part;
+    let text = action === "use_one" ? `Used ${res.quantity} × ${p.part_name} — ${p.current_stock} left` : `Restocked ${res.quantity} × ${p.part_name} — ${p.current_stock} in stock`;
+    if (res.reorder) text += ` · added to ${this._idx.plans.get(res.reorder.plan_id)?.name || "the shopping list"}`;
+    if (res.closed) text += ` · checked off ${res.closed.summary}`;
+    this._showToast(text, this._undoWith(res.undo));
+    this._mRefresh?.();
+  }
+
+  /* -------- scan result: link an unknown barcode -------- */
+
+  _scanLinkOptions(d) {
+    const options = d.res.options || {};
+    const q = d.query.trim().toLowerCase();
+    const list =
+      d.type === "pantry_item"
+        ? (options.pantry || []).map((i) => ({ id: i.id, name: i.name, sub: [i.plan_name, i.category, i.stock_state.replace("_", " ")].filter(Boolean).join(" · ") }))
+        : (options.parts || []).map((p) => ({ id: p.id, name: p.part_name, sub: [p.object_name, `${p.current_stock} in stock`, p.storage_location].filter(Boolean).join(" · ") }));
+    return q ? list.filter((o) => `${o.name} ${o.sub}`.toLowerCase().includes(q)) : list;
+  }
+
+  _scanLinkListHtml(d) {
+    const options = this._scanLinkOptions(d);
+    const suggested = d.type === "pantry_item" ? d.res.options?.suggested_pantry_id : d.res.options?.suggested_part_id;
+    const chosen = d.selected[d.type];
+    if (!options.length) return html`<div class="empty sm">${d.query ? "Nothing matches." : d.type === "pantry_item" ? "No pantry items yet — create one." : "No parts yet — create one."}</div>`;
+    return html`${options.slice(0, 200).map(
+      (o) => html`<label class="slink-row ${chosen === o.id ? "on" : ""}"><input type="radio" name="slink-pick" data-slink-pick="${o.id}" ${chosen === o.id ? html`checked` : ""}>
+        <span class="grow"><strong>${o.name}</strong>${o.id === suggested ? html` <span class="badge ok">Suggested</span>` : ""}<div class="lastdone">${o.sub}</div></span></label>`,
+    )}`;
+  }
+
+  _scanLinkHtml(d) {
+    const res = d.res;
+    const options = res.options || {};
+    const s = res.suggestion;
+    const lookupNote = {
+      not_found: "Open Food Facts doesn't know this code.",
+      error: "Open Food Facts couldn't be reached.",
+      disabled: "Product lookups are off (Settings).",
+      not_retail: "",
+    }[res.lookup];
+    const isPantry = d.type === "pantry_item";
+    const pickable = this._scanLinkOptions({ ...d, query: "" }).length;
+    return html`<h2><span class="grow">Link barcode <code>${res.display}</code></span>${this._closeButton()}</h2>
+      ${s
+        ? html`<div class="slink-suggest"><ha-icon icon="mdi:food-variant"></ha-icon><span class="grow"><strong>${s.name}</strong>
+            <div class="lastdone">${[s.brand, s.quantity, "from Open Food Facts"].filter(Boolean).join(" · ")}</div></span></div>`
+        : lookupNote
+          ? html`<div class="hint">${lookupNote}</div>`
+          : ""}
+      <div class="seg slink-type" role="group" aria-label="Link to">
+        <button class="${isPantry ? "on" : ""}" data-action="s-link-type" data-id="pantry_item"><ha-icon icon="mdi:shaker-outline"></ha-icon>Pantry item</button>
+        <button class="${isPantry ? "" : "on"}" data-action="s-link-type" data-id="maintenance_part"><ha-icon icon="mdi:package-variant-closed"></ha-icon>Maintenance part</button>
+      </div>
+      <div class="msubnav" style="margin-top:10px">
+        <button class="tab ${d.mode === "pick" ? "on" : ""}" data-action="s-link-mode" data-id="pick">Pick existing${pickable ? html` <span class="badge">${pickable}</span>` : ""}</button>
+        <button class="tab ${d.mode === "create" ? "on" : ""}" data-action="s-link-mode" data-id="create">Create new</button>
+      </div>
+      ${d.mode === "pick"
+        ? html`<input type="search" class="slink-search" data-slink-search data-focus="slink-search" value="${d.query}" maxlength="80" placeholder="Search ${isPantry ? "pantry items" : "parts"}…" aria-label="Search">
+            <div class="slink-list">${this._scanLinkListHtml(d)}</div>`
+        : html`<div class="form slink-form">
+            <label class="full">Name<input name="s-name" value="${d.name}" maxlength="120" placeholder="${isPantry ? "e.g. Peanut butter" : "e.g. Furnace filter 16x25x4"}" autofocus></label>
+            ${isPantry
+              ? (options.pantry_plans || []).length > 1
+                ? html`<label>Pantry<select name="s-plan">${options.pantry_plans.map((p) => html`<option value="${p.id}" ${d.planId === p.id ? html`selected` : ""}>${p.name}</option>`)}</select></label>`
+                : ""
+              : html`<label>Object<select name="s-object"><option value="">No object</option>${(options.objects || []).map(
+                    (o) => html`<option value="${o.id}" ${d.objectId === o.id ? html`selected` : ""}>${o.name} (#${o.number})</option>`,
+                  )}</select></label>
+                <label>In stock now<input name="s-stock" type="number" min="0" step="1" inputmode="numeric" value="${d.stock}" placeholder="0"></label>
+                <label>Reorder at<input name="s-reorder" type="number" min="0" step="1" inputmode="numeric" value="${d.reorder}" placeholder="0"></label>`}
+          </div>`}
+      ${isPantry ? "" : html`<label class="inline" style="margin-top:10px">Each scan uses <input name="s-delta" type="number" min="1" max="1000" step="1" value="${d.delta}" style="width:72px"> item(s)</label>`}
+      <div class="dialog-actions"><span class="grow"></span>
+        <button class="btn flat" data-action="dialog-close">Cancel</button>
+        <button class="btn" data-action="s-link-save" ${d.busy ? html`disabled` : ""}><ha-icon icon="mdi:link-variant"></ha-icon>${isPantry ? "Link & mark in stock" : "Link barcode"}</button>
+      </div>`;
+  }
+
+  _scanSyncLink() {
+    const d = this._dialog;
+    if (d?.kind !== "scan-link") return;
+    const value = (name) => this.shadowRoot.querySelector(`.dialog [name="${name}"]`)?.value;
+    if (value("s-name") !== undefined) d.name = value("s-name");
+    if (value("s-plan") !== undefined) d.planId = value("s-plan");
+    if (value("s-object") !== undefined) d.objectId = value("s-object");
+    if (value("s-stock") !== undefined) d.stock = value("s-stock");
+    if (value("s-reorder") !== undefined) d.reorder = value("s-reorder");
+    if (value("s-delta") !== undefined) d.delta = Math.max(1, Math.min(1000, Number(value("s-delta")) || 1));
+  }
+
+  async _scanLinkSave() {
+    this._scanSyncLink();
+    const d = this._dialog;
+    if (d?.kind !== "scan-link" || d.busy) return;
+    const message = { type: "omniplan/barcode_bind", barcode: d.res.barcode, target_type: d.type, default_delta_qty: d.delta, apply_default: true };
+    if (d.res.symbology && SCAN_FORMATS.includes(d.res.symbology)) message.format = d.res.symbology;
+    if (d.res.suggestion) {
+      message.product_name = d.res.suggestion.name || null;
+      message.brand = d.res.suggestion.brand || null;
+    }
+    if (d.mode === "pick") {
+      const chosen = d.selected[d.type];
+      if (!chosen) return this._showToast(`Pick a ${d.type === "pantry_item" ? "pantry item" : "part"}, or create a new one`);
+      message.target_id = chosen;
+    } else {
+      const name = d.name.trim();
+      if (!name) return this._showToast("Give it a name");
+      const create = { name };
+      if (d.type === "pantry_item") {
+        if (d.planId) create.plan_id = d.planId;
+      } else {
+        if (d.objectId) create.object_id = d.objectId;
+        if (d.stock !== "") create.current_stock = Number(d.stock);
+        if (d.reorder !== "") create.reorder_threshold = Number(d.reorder);
+      }
+      message.create = create;
+    }
+    d.busy = true;
+    this._renderDialog();
+    let res;
+    try {
+      res = await this._call(message);
+    } catch (_err) {
+      d.busy = false;
+      if (this._dialog === d) this._renderDialog();
+      return;
+    }
+    this._closeDialog();
+    const name = (res.match.item || {}).name || (res.match.part || {}).part_name;
+    const replaced = res.replaced ? ` (was ${res.replaced.name})` : "";
+    if (res.match.target_type === "pantry_item") {
+      this._scanPantryToast({ ...res, barcode: d.res.barcode, applied: res.applied });
+      return;
+    }
+    this._showToast(`Linked ${d.res.display} to ${name}${replaced}`);
+    this._openDialog({ kind: "scan-part", res: { ...d.res, match: res.match }, restock: false });
+    this._mRefresh?.();
+  }
+
+  async _scanAction(action, el) {
+    const d = this._dialog;
+    switch (action) {
+      case "s-open":
+        return this._scanOpen(el.dataset.context || "auto", { objectId: el.dataset.object, planId: el.dataset.plan });
+      case "s-close":
+        return this._scanStop();
+      case "s-torch":
+        return this._scanTorch();
+      case "s-switch":
+        return this._scanSwitch();
+      case "s-manual":
+        return this._scanManual();
+      case "s-use":
+        return this._scanApplyPart("use_one");
+      case "s-restock-open":
+        d.restock = !d.restock;
+        this._renderDialog();
+        return void setTimeout(() => this.shadowRoot.querySelector("[data-scan-qty]")?.focus(), 40);
+      case "s-restock":
+        return this._scanApplyPart("restock_qty", Number(el.dataset.id));
+      case "s-restock-custom": {
+        const qty = Number(this.shadowRoot.querySelector("[data-scan-qty]")?.value);
+        if (!(qty > 0)) return this._showToast("Enter how many you added");
+        return this._scanApplyPart("restock_qty", qty);
+      }
+      case "s-unlink": {
+        if (!confirm(`Unlink ${d.res.display} from ${d.res.match.part.part_name}?`)) return;
+        await this._call({ type: "omniplan/barcode_unbind", barcode: d.res.barcode });
+        this._closeDialog();
+        return this._showToast("Barcode unlinked");
+      }
+      case "s-link-type":
+        this._scanSyncLink();
+        d.type = el.dataset.id;
+        d.query = "";
+        return this._renderDialog();
+      case "s-link-mode":
+        this._scanSyncLink();
+        d.mode = el.dataset.id;
+        return this._renderDialog();
+      case "s-link-save":
+        return this._scanLinkSave();
+      default:
+        return;
+    }
+  }
+
+  /* ---------------- Cooking view (recipe detail) ---------------- */
+
+  _keepAwakeDefault() {
+    return storage.get(KEEP_AWAKE_KEY, "0") === "1";
+  }
+
+  async _cookOpen(slug, name) {
+    if (!slug) return;
+    const d = { kind: "cook", slug, name: name || "Recipe", detail: null, error: null, scale: 1, got: new Set(), done: new Set(), awake: this._keepAwakeDefault(), awakeStatus: null };
+    this._openDialog(d);
+    if (d.awake) this._wakeOn(d);
+    try {
+      d.detail = await this._store.call({ type: "omniplan/mealie_get_recipe_detail", recipe_slug: slug });
+      d.name = d.detail.name;
+    } catch (err) {
+      d.error = err.message || String(err);
+    }
+    if (this._dialog === d) this._renderDialog();
+  }
+
+  _cookYield(d) {
+    const r = d.detail;
+    if (r.servings) return `${fmtAmount(r.servings * d.scale, false)} serving${r.servings * d.scale === 1 ? "" : "s"}`;
+    if (r.yield) return d.scale === 1 ? r.yield : `${r.yield} × ${fmtAmount(d.scale)}`;
+    return null;
+  }
+
+  _cookIngredientsHtml(d) {
+    const r = d.detail;
+    const rows = r.ingredients;
+    const missing = rows.filter((row) => row.type === "ingredient" && !row.skip).length;
+    const plan = this._groceryPlan();
+    const items = rows.map((row) => {
+      if (row.type === "section") return html`<div class="csection">${row.title}</div>`;
+      const { amount, rest } = scaledIngredient(row, d.scale);
+      const got = d.got.has(row.index);
+      return html`<label class="cing ${got ? "got" : ""}"><input type="checkbox" data-action="c-ing" data-index="${row.index}" ${got ? html`checked` : ""}>
+        <span class="grow">${amount ? html`<span class="amt">${amount}</span> ` : ""}${rest}
+          ${row.in_pantry ? html`<span class="badge ok" title="${row.pantry_item ? `In stock: ${row.pantry_item}` : "In stock"}">In pantry</span>` : row.is_excluded_spice ? html`<span class="badge ok">Seasoning</span>` : ""}</span></label>`;
+    });
+    return html`<h3><ha-icon icon="mdi:format-list-bulleted"></ha-icon>Ingredients <span class="badge">${r.counts.ingredients}</span></h3>
+      ${plan
+        ? html`<button class="btn caddmissing" data-action="c-add-missing" ${missing ? "" : html`disabled`}><ha-icon icon="mdi:cart-plus"></ha-icon>🛒 Add missing ingredients to ${plan.name} (${missing})</button>`
+        : ""}
+      ${items.length ? items : html`<div class="empty sm">No ingredients in Mealie.</div>`}`;
+  }
+
+  _cookStepClasses(d, index) {
+    const r = d.detail;
+    const current = r.instructions.find((s) => !d.done.has(s.index));
+    return `cstep${d.done.has(index) ? " done" : ""}${current && current.index === index ? " current" : ""}`;
+  }
+
+  _cookAwakeText(d) {
+    return { on: "☀️ Screen awake", paused: "Waiting to keep the screen on…", unsupported: "This browser can't keep the screen on", blocked: "The browser blocked keep-awake" }[d.awakeStatus] || "";
+  }
+
+  _cookHtml(d) {
+    const head = html`<div class="cook-head">
+        <button class="icon-btn" data-action="dialog-close" aria-label="Close recipe"><ha-icon icon="mdi:arrow-left"></ha-icon></button>
+        <span class="ctitle">${d.name}</span>
+        <label class="cawake ${d.awake ? "on" : ""}"><input type="checkbox" data-action="c-awake" ${d.awake ? html`checked` : ""}>☀️ Keep screen on while viewing</label>
+        <span class="cawake-status ${d.awakeStatus === "on" ? "on" : ""}" data-cook-awake aria-live="polite">${d.awake ? this._cookAwakeText(d) : ""}</span>
+      </div>`;
+    if (!d.detail) {
+      return html`${head}<div class="cook-scroll"><div class="empty">${d.error ? `Couldn't load the recipe: ${d.error}` : "Loading the recipe…"}</div></div>`;
+    }
+    const r = d.detail;
+    const url = safeUrl(r.url);
+    const source = safeUrl(r.source_url);
+    const time = (label, value) => (value ? html`<div>${label}<strong>${value}</strong></div>` : "");
+    const yieldText = this._cookYield(d);
+    const steps = r.instructions.map(
+      (s, i) => html`<div class="${this._cookStepClasses(d, s.index)}" data-action="c-step" data-index="${s.index}" role="button" tabindex="0" aria-pressed="${d.done.has(s.index) ? "true" : "false"}">
+        <span class="cnum">${d.done.has(s.index) ? "✓" : i + 1}</span>
+        <div class="ctext">${s.title ? html`<strong>${s.title}</strong>` : ""}${s.text}
+          ${s.timers.length
+            ? html`<div class="ctimer-pills">${s.timers.map(
+                (t) => html`<button class="ctimer-pill" data-action="c-timer" data-seconds="${t.seconds}" data-label="${`Step ${i + 1}: ${t.label}`}"><ha-icon icon="mdi:timer-outline"></ha-icon>⏱️ Start ${t.label} timer</button>`,
+              )}</div>`
+            : ""}</div>
+      </div>`,
+    );
+    return html`${head}
+      <div class="cook-scroll">
+        <div class="cook-hero">
+          <div class="cook-img" ${r.has_image && r.image_url ? html`data-cookimg="${r.id}"` : ""}><ha-icon icon="mdi:silverware-fork-knife"></ha-icon></div>
+          <div class="cmeta">
+            <h2>${r.name}</h2>
+            ${r.description ? html`<p class="cdesc">${r.description}</p>` : ""}
+            <div class="rmeta">${r.categories.map((c) => html`<span class="badge plan">${c}</span>`)}${r.tags.map((t) => html`<span class="badge">#${t}</span>`)}</div>
+            <div class="ctimes">${time("Prep", r.prep_time)}${time("Cook", r.cook_time)}${time("Total", r.total_time)}${yieldText ? html`<div>Makes<strong data-cook-yield>${yieldText}</strong></div>` : ""}</div>
+            <div class="cscale" role="group" aria-label="Batch size">${COOK_SCALES.map(
+              (s) => html`<button class="chip ${d.scale === s ? "on" : ""}" data-action="c-scale" data-id="${s}" aria-pressed="${d.scale === s ? "true" : "false"}">${fmtAmount(s)}×</button>`,
+            )}</div>
+            <div class="rmeta">${url ? html`<a class="badge" href="${url}"><ha-icon icon="mdi:open-in-new"></ha-icon>Open in Mealie</a>` : ""}${source ? html`<a class="badge" href="${source}"><ha-icon icon="mdi:web"></ha-icon>Original recipe</a>` : ""}</div>
+          </div>
+        </div>
+        <div class="cook-cols">
+          <section class="cook-ings">${this._cookIngredientsHtml(d)}</section>
+          <section class="cook-steps"><h3><ha-icon icon="mdi:chef-hat"></ha-icon>Instructions <span class="lastdone">tap a step when it's done</span></h3>
+            ${steps.length ? steps : html`<div class="empty sm">No instructions in Mealie.</div>`}</section>
+        </div>
+        ${r.notes.length
+          ? html`<div class="cnotes"><h3><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon>Notes</h3>${r.notes.map((n) => html`${n.title ? html`<strong>${n.title}</strong>` : ""}${n.text ? html`<p>${n.text}</p>` : ""}`)}</div>`
+          : ""}
+        ${r.nutrition.length ? html`<div class="cnutrition">${r.nutrition.map((n) => html`<div><span>${n.label}</span><strong>${n.value}</strong></div>`)}</div>` : ""}
+      </div>
+      <div class="cook-timers" data-cook-timers></div>`;
+  }
+
+  /** After a full render of the cooking view: hero image, live timers, keep-awake badge. */
+  _cookMounted(d) {
+    this._timersRender(true);
+    const slot = this.shadowRoot.querySelector("[data-cookimg]");
+    if (slot && d.detail?.image_url) this._cookImage(slot, d.detail);
+  }
+
+  async _cookImage(slot, detail) {
+    if (!this._rimg) this._rimg = new Map();
+    const key = `${detail.id}:original`;
+    if (!this._rimg.has(key)) {
+      try {
+        const response = await this._hass.fetchWithAuth(detail.image_url);
+        if (!response.ok) throw new Error(String(response.status));
+        const blob = await response.blob();
+        if (!/^image\/(webp|jpeg|png|gif)$/.test(blob.type)) throw new Error("not an image");
+        this._rimg.set(key, URL.createObjectURL(blob));
+      } catch (_err) {
+        this._rimg.set(key, null);
+      }
+    }
+    if (slot.isConnected) this._showRecipeImage(slot, this._rimg.get(key));
+  }
+
+  _cookRefreshSteps(d) {
+    for (const el of this.shadowRoot.querySelectorAll(".cook-steps .cstep")) {
+      const index = Number(el.dataset.index);
+      el.className = this._cookStepClasses(d, index);
+      el.setAttribute("aria-pressed", d.done.has(index) ? "true" : "false");
+      const position = d.detail.instructions.findIndex((s) => s.index === index);
+      el.querySelector(".cnum").textContent = d.done.has(index) ? "✓" : String(position + 1);
+    }
+    this.shadowRoot.querySelector(".cook-steps .cstep.current")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+
+  _cookAwakeBadge(d) {
+    const badge = this.shadowRoot.querySelector("[data-cook-awake]");
+    if (!badge || this._dialog !== d) return;
+    badge.textContent = d.awake ? this._cookAwakeText(d) : "";
+    badge.classList.toggle("on", d.awake && d.awakeStatus === "on");
+    this.shadowRoot.querySelector(".cawake")?.classList.toggle("on", d.awake);
+  }
+
+  async _wakeOn(d) {
+    if (!this._onWakeVisible) {
+      // Phones drop the lock when the app is hidden; take it again when the recipe is back on screen.
+      this._onWakeVisible = () => {
+        const cur = this._dialog;
+        if (cur?.kind === "cook" && cur.awake && document.visibilityState === "visible") this._wakeOn(cur);
+      };
+      document.addEventListener("visibilitychange", this._onWakeVisible);
+    }
+    if (!("wakeLock" in navigator)) {
+      d.awakeStatus = "unsupported";
+      return this._cookAwakeBadge(d);
+    }
+    if (this._wakeLock && !this._wakeLock.released) {
+      d.awakeStatus = "on";
+      return this._cookAwakeBadge(d);
+    }
+    try {
+      const lock = await navigator.wakeLock.request("screen");
+      if (this._dialog !== d || !d.awake) {
+        lock.release().catch(() => {});
+        return;
+      }
+      this._wakeLock = lock;
+      d.awakeStatus = "on";
+      lock.addEventListener("release", () => {
+        if (this._wakeLock === lock && this._dialog === d && d.awake) {
+          d.awakeStatus = "paused";
+          this._cookAwakeBadge(d);
+        }
+      });
+    } catch (_err) {
+      d.awakeStatus = document.visibilityState === "visible" ? "blocked" : "paused";
+    }
+    this._cookAwakeBadge(d);
+  }
+
+  _wakeOff() {
+    if (this._onWakeVisible) {
+      document.removeEventListener("visibilitychange", this._onWakeVisible);
+      this._onWakeVisible = null;
+    }
+    const lock = this._wakeLock;
+    this._wakeLock = null;
+    if (lock && !lock.released) lock.release().catch(() => {});
+  }
+
+  /** Called whenever a dialog closes or is replaced. */
+  _cookClosed(d) {
+    if (d?.kind !== "cook") return;
+    this._wakeOff();
+    this._timers = [];
+    clearInterval(this._timerTick);
+    this._timerTick = null;
+  }
+
+  /* -------- kitchen timers -------- */
+
+  _timerStart(seconds, label) {
+    if (!(seconds > 0)) return;
+    try {
+      // Created inside the tap so iOS lets it play later.
+      this._audio = this._audio || new (window.AudioContext || window.webkitAudioContext)();
+      this._audio.resume?.();
+    } catch (_err) {
+      this._audio = null;
+    }
+    this._timerSeq = (this._timerSeq || 0) + 1;
+    this._timers = [...(this._timers || []), { id: this._timerSeq, label, total: seconds, endsAt: Date.now() + seconds * 1000, left: seconds, paused: false, done: false }];
+    if (!this._timerTick) this._timerTick = setInterval(() => this._timersTick(), 500);
+    this._timersRender(true);
+  }
+
+  _timersTick() {
+    const now = Date.now();
+    let changed = false;
+    for (const t of this._timers || []) {
+      if (t.paused || t.done) continue;
+      t.left = (t.endsAt - now) / 1000;
+      if (t.left <= 0) {
+        t.left = 0;
+        t.done = true;
+        changed = true;
+        this._timerAlarm(t);
+      }
+    }
+    if (!(this._timers || []).some((t) => !t.done && !t.paused) && !(this._timers || []).some((t) => t.done)) {
+      clearInterval(this._timerTick);
+      this._timerTick = null;
+    }
+    this._timersRender(changed);
+  }
+
+  _timerAlarm(t) {
+    try {
+      if (navigator.userActivation?.hasBeenActive !== false) navigator.vibrate?.([300, 120, 300, 120, 300]);
+    } catch (_err) {
+      /* no vibration */
+    }
+    const ctx = this._audio;
+    if (ctx) {
+      try {
+        const now = ctx.currentTime;
+        for (const offset of [0, 0.4, 0.8, 1.6, 2.0, 2.4]) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "square";
+          osc.frequency.value = 880;
+          gain.gain.setValueAtTime(0.0001, now + offset);
+          gain.gain.exponentialRampToValueAtTime(0.25, now + offset + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.3);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.32);
+        }
+      } catch (_err) {
+        /* audio blocked */
+      }
+    }
+    this._showToast(`⏱️ ${t.label} — time's up!`);
+  }
+
+  /** ``structure``: rebuild the bar (timers added/removed/finished); otherwise only the clocks change. */
+  _timersRender(structure = false) {
+    const bar = this.shadowRoot.querySelector("[data-cook-timers]");
+    if (!bar) return;
+    const timers = this._timers || [];
+    if (structure || bar.childElementCount !== timers.length) {
+      setHTML(
+        bar,
+        html`${timers.map(
+          (t) => html`<div class="ctbar ${t.done ? "done" : t.paused ? "paused" : ""}" data-timer="${t.id}" role="timer">
+            <ha-icon icon="${t.done ? "mdi:bell-ring" : "mdi:timer-outline"}"></ha-icon><span class="grow">${t.label}</span>
+            <span class="ctime">${t.done ? "Done!" : fmtClock(t.left)}</span>
+            ${t.done
+              ? html`<button class="btn small" data-action="c-timer-cancel" data-id="${t.id}">Dismiss</button>`
+              : html`<button class="icon-btn sm" data-action="c-timer-pause" data-id="${t.id}" aria-label="${t.paused ? "Resume" : "Pause"}"><ha-icon icon="${t.paused ? "mdi:play" : "mdi:pause"}"></ha-icon></button>
+                <button class="icon-btn sm" data-action="c-timer-add" data-id="${t.id}" aria-label="Add a minute" title="+1 min"><ha-icon icon="mdi:plus"></ha-icon></button>
+                <button class="icon-btn sm" data-action="c-timer-cancel" data-id="${t.id}" aria-label="Cancel timer"><ha-icon icon="mdi:close"></ha-icon></button>`}
+          </div>`,
+        )}`,
+      );
+      return;
+    }
+    for (const t of timers) {
+      const clock = bar.querySelector(`[data-timer="${t.id}"] .ctime`);
+      if (clock && !t.done) clock.textContent = fmtClock(t.left);
+    }
+  }
+
+  _timerFind(id) {
+    return (this._timers || []).find((t) => t.id === Number(id));
+  }
+
+  async _cookAction(action, el) {
+    const d = this._dialog;
+    switch (action) {
+      case "c-open":
+        return this._cookOpen(el.dataset.slug, el.dataset.name);
+      case "c-awake":
+        d.awake = el.checked;
+        if (d.awake) return this._wakeOn(d);
+        this._wakeOff();
+        d.awakeStatus = null;
+        return this._cookAwakeBadge(d);
+      case "c-scale": {
+        d.scale = Number(el.dataset.id) || 1;
+        for (const chip of this.shadowRoot.querySelectorAll(".cscale .chip")) {
+          const on = Number(chip.dataset.id) === d.scale;
+          chip.classList.toggle("on", on);
+          chip.setAttribute("aria-pressed", on ? "true" : "false");
+        }
+        const section = this.shadowRoot.querySelector(".cook-ings");
+        if (section) setHTML(section, this._cookIngredientsHtml(d));
+        const yieldEl = this.shadowRoot.querySelector("[data-cook-yield]");
+        if (yieldEl) yieldEl.textContent = this._cookYield(d) || "";
+        return;
+      }
+      case "c-ing": {
+        const index = Number(el.dataset.index);
+        if (el.checked) d.got.add(index);
+        else d.got.delete(index);
+        el.closest(".cing")?.classList.toggle("got", el.checked);
+        return;
+      }
+      case "c-step": {
+        const index = Number(el.dataset.index);
+        if (d.done.has(index)) d.done.delete(index);
+        else d.done.add(index);
+        return this._cookRefreshSteps(d);
+      }
+      case "c-timer":
+        return this._timerStart(Number(el.dataset.seconds), el.dataset.label || "Timer");
+      case "c-timer-pause": {
+        const t = this._timerFind(el.dataset.id);
+        if (!t) return;
+        if (t.paused) {
+          t.endsAt = Date.now() + t.left * 1000;
+          t.paused = false;
+          if (!this._timerTick) this._timerTick = setInterval(() => this._timersTick(), 500);
+        } else {
+          t.left = Math.max(0, (t.endsAt - Date.now()) / 1000);
+          t.paused = true;
+        }
+        return this._timersRender(true);
+      }
+      case "c-timer-add": {
+        const t = this._timerFind(el.dataset.id);
+        if (!t) return;
+        if (t.paused) t.left += 60;
+        else t.endsAt += 60000;
+        t.left = t.paused ? t.left : (t.endsAt - Date.now()) / 1000;
+        return this._timersRender(false);
+      }
+      case "c-timer-cancel":
+        this._timers = (this._timers || []).filter((t) => t.id !== Number(el.dataset.id));
+        return this._timersRender(true);
+      case "c-add-missing": {
+        const plan = this._groceryPlan();
+        const indices = d.detail.ingredients.filter((row) => row.type === "ingredient" && !row.skip).map((row) => row.index);
+        if (!plan || !indices.length) return;
+        el.disabled = true;
+        try {
+          const res = await this._call({ type: "omniplan/mealie_add_recipe_to_groceries", recipe_slug: d.slug, plan_id: plan.id, ingredients: indices, scale: d.scale });
+          this._recipeResultToast(res);
+        } finally {
+          el.disabled = false;
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  /* ---------------- Settings, backup, restore & standalone bridge ---------------- */
+
+  async _settingsOpen() {
+    const admin = !!this._board.user?.is_admin;
+    const d = { kind: "settings", admin, barcode: null, backups: null, error: null, mode: "merge", report: null, busy: null };
+    this._openDialog(d);
+    const jobs = [this._store.call({ type: "omniplan/barcode_settings" }).then((s) => (d.barcode = s))];
+    if (admin) jobs.push(this._store.call({ type: "omniplan/backup_list" }).then((b) => (d.backups = b)));
+    try {
+      await Promise.all(jobs);
+    } catch (err) {
+      d.error = err.message || String(err);
+    }
+    if (this._dialog === d) this._renderDialog();
+  }
+
+  _settingsHtml(d) {
+    const keepAwake = this._keepAwakeDefault();
+    const backups = d.backups;
+    const snapshots = backups?.snapshots || [];
+    const busy = (key) => (d.busy === key ? html`disabled` : "");
+    const backupCard = !d.admin
+      ? html`<div class="empty sm">Only a Home Assistant administrator can download, snapshot or restore OmniPlan backups.</div>`
+      : !backups
+        ? html`<div class="empty sm">${d.error ? `Couldn't load backups: ${d.error}` : "Loading backups…"}</div>`
+        : html`<div class="bk-actions">
+              <button class="btn" data-action="b-download" ${busy("download")}><ha-icon icon="mdi:download"></ha-icon>⬇️ Download portable backup (.zip)</button>
+              <button class="btn flat" data-action="b-snapshot" ${busy("snapshot")}><ha-icon icon="mdi:content-save-outline"></ha-icon>💾 Trigger local server snapshot now</button>
+            </div>
+            <div class="bk-schedule">
+              <label class="inline"><input type="checkbox" data-action="b-auto" ${backups.settings.enabled ? html`checked` : ""}>Daily snapshot at</label>
+              <input type="time" data-bk-setting="time" value="${backups.settings.time}" aria-label="Snapshot time">
+              <label class="inline">keep the last <input type="number" min="1" max="365" data-bk-setting="retention" value="${backups.settings.retention}" aria-label="Snapshots to keep"> snapshots</label>
+            </div>
+            <div class="lastdone">Snapshots are written to <code>/config/${backups.directory}/</code> on the Home Assistant server. Automations can call <code>omniplan.create_backup</code> before updates.</div>
+            <div class="bk-list">${snapshots.length
+              ? snapshots.map(
+                  (s) => html`<div class="bk-row"><span class="grow"><strong>${new Date(s.taken_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</strong>
+                      ${s.kind === "pre_restore" ? html` <span class="badge today">before a restore</span>` : ""}<small>${s.name} · ${fmtBytes(s.size)}</small></span>
+                    <button class="btn small flat" data-action="b-snap-download" data-id="${s.name}"><ha-icon icon="mdi:download"></ha-icon>Download</button>
+                    <button class="btn small flat" data-action="b-snap-restore" data-id="${s.name}" ${busy("restore")}><ha-icon icon="mdi:backup-restore"></ha-icon>Restore</button>
+                    <button class="icon-btn sm" data-action="b-snap-delete" data-id="${s.name}" aria-label="Delete ${s.name}"><ha-icon icon="mdi:delete-outline"></ha-icon></button></div>`,
+                )
+              : html`<div class="empty sm">No snapshots yet.</div>`}</div>
+            <h3 style="margin-top:16px"><ha-icon icon="mdi:upload"></ha-icon>⬆️ Upload &amp; restore a backup file</h3>
+            <div class="bk-modes" role="radiogroup" aria-label="Restore mode">
+              <label><input type="radio" name="bk-mode" value="merge" data-bk-mode ${d.mode === "merge" ? html`checked` : ""}><span><strong>Merge import</strong> — adds what's missing, never deletes or overwrites anything here.</span></label>
+              <label><input type="radio" name="bk-mode" value="replace" data-bk-mode ${d.mode === "replace" ? html`checked` : ""}><span><strong>Full disaster-recovery replace</strong> — <span class="bk-warn">everything here is replaced</span> by the backup.</span></label>
+            </div>
+            <div class="bk-upload"><input type="file" data-bk-file accept=".zip,.json,application/zip,application/json" aria-label="Backup file">
+              <button class="btn" data-action="b-upload" ${busy("restore")}><ha-icon icon="mdi:backup-restore"></ha-icon>Restore</button></div>
+            <div class="lastdone">A safety snapshot of the current data is written first, and every file is checked against its SHA-256 before anything changes. Restores from snapshots above use the same mode.</div>
+            ${d.report ? this._settingsReportHtml(d.report) : ""}
+            <details style="margin-top:12px"><summary>What's in a portable backup?</summary>
+              <div class="lastdone">A <code>.zip</code> with <code>manifest_bridge.json</code> (checksums, a portable profile for every person and a map of every Home Assistant entity, NFC tag, area and service OmniPlan uses), <code>database_dump.json</code> (every table as plain JSON), a hot copy of <code>omniplan.db</code> and every uploaded manual, receipt and photo. It's enough to rebuild OmniPlan on another Home Assistant, or to move it to a standalone app later.</div>
+            </details>`;
+    return html`<h2><span class="grow">OmniPlan settings</span>${this._closeButton()}</h2>
+      <div class="mcard"><h3><ha-icon icon="mdi:cellphone"></ha-icon>On this device</h3>
+        <label class="inline rrow"><input type="checkbox" data-action="b-keep-awake" ${keepAwake ? html`checked` : ""}><span class="grow">Keep the screen on whenever I open a recipe</span></label>
+      </div>
+      <div class="mcard"><h3><ha-icon icon="mdi:barcode-scan"></ha-icon>Barcode scanning</h3>
+        ${d.barcode
+          ? html`<label class="inline rrow"><input type="checkbox" data-action="b-off" ${d.barcode.openfoodfacts ? html`checked` : ""} ${d.admin ? "" : html`disabled`}>
+              <span class="grow">Look up unknown barcodes on Open Food Facts</span></label>
+            <div class="lastdone">Only the barcode number is sent, from Home Assistant, to suggest a product name.${d.admin ? "" : " An administrator can change this."}</div>`
+          : html`<div class="empty sm">${d.error ? d.error : "Loading…"}</div>`}
+      </div>
+      <div class="mcard"><h3><ha-icon icon="mdi:database-export-outline"></ha-icon>Backup, Restore &amp; Standalone Bridge</h3>${backupCard}</div>`;
+  }
+
+  _settingsReportHtml(report) {
+    if (report.error) return html`<div class="bk-report bk-warn"><strong>Restore failed:</strong> ${report.error}</div>`;
+    const totals = report.totals || {};
+    return html`<div class="bk-report"><strong>${report.mode === "replace" ? "Replaced" : "Merged"} from ${report.source || "the uploaded file"}</strong>
+      <ul><li>${totals.inserted || 0} rows restored${totals.skipped ? `, ${totals.skipped} already here` : ""}${totals.removed ? `, ${totals.removed} orphaned rows dropped` : ""}</li>
+        <li>${report.documents?.restored || 0} documents restored${report.documents?.missing ? `, ${report.documents.missing} were missing from the backup` : ""}</li>
+        <li>Safety snapshot: ${report.safety_snapshot}</li>
+        ${(report.warnings || []).map((w) => html`<li>${w}</li>`)}</ul></div>`;
+  }
+
+  async _settingsReload(d) {
+    try {
+      d.backups = await this._store.call({ type: "omniplan/backup_list" });
+    } catch (err) {
+      d.error = err.message || String(err);
+    }
+    if (this._dialog === d) this._renderDialog();
+  }
+
+  _afterRestore(d, report) {
+    d.report = report;
+    this._maintBoards = {};
+    this._mRefresh();
+    this._recipes = null;
+    this._store.refresh();
+    this._showToast(`Restore finished — safety snapshot ${report.safety_snapshot}`);
+    return this._settingsReload(d);
+  }
+
+  async _settingsAction(action, el) {
+    const d = this._dialog;
+    switch (action) {
+      case "b-open-settings":
+        return this._settingsOpen();
+      case "b-keep-awake":
+        storage.set(KEEP_AWAKE_KEY, el.checked ? "1" : "0");
+        return;
+      case "b-off":
+        try {
+          d.barcode = await this._call({ type: "omniplan/barcode_settings", settings: { openfoodfacts: el.checked } });
+        } catch (_err) {
+          el.checked = !el.checked;
+        }
+        return;
+      case "b-auto":
+        return this._settingsSave(d, { enabled: el.checked });
+      case "b-download":
+        return this._mOpenSigned("/api/omniplan/backup/download");
+      case "b-snap-download":
+        return this._mOpenSigned(`/api/omniplan/backup/download?snapshot=${encodeURIComponent(el.dataset.id)}`);
+      case "b-snapshot": {
+        d.busy = "snapshot";
+        this._renderDialog();
+        try {
+          const snap = await this._call({ type: "omniplan/backup_create" });
+          this._showToast(`Snapshot saved: ${snap.name} (${fmtBytes(snap.size)})`);
+        } catch (_err) {
+          /* shown by _call */
+        }
+        d.busy = null;
+        return this._settingsReload(d);
+      }
+      case "b-snap-delete": {
+        if (!confirm(`Delete the snapshot ${el.dataset.id}?`)) return;
+        await this._call({ type: "omniplan/backup_delete", name: el.dataset.id });
+        return this._settingsReload(d);
+      }
+      case "b-snap-restore": {
+        const mode = d.mode;
+        const warning = mode === "replace" ? "Everything in OmniPlan will be REPLACED by this snapshot." : "Missing items from this snapshot will be added; nothing is deleted.";
+        if (!confirm(`${warning}\n\nA safety snapshot is taken first. Restore ${el.dataset.id}?`)) return;
+        d.busy = "restore";
+        this._renderDialog();
+        try {
+          const report = await this._call({ type: "omniplan/backup_restore_snapshot", name: el.dataset.id, mode });
+          d.busy = null;
+          return this._afterRestore(d, report);
+        } catch (err) {
+          d.busy = null;
+          d.report = { error: err.message || String(err) };
+          return this._renderDialog();
+        }
+      }
+      case "b-upload": {
+        const file = this.shadowRoot.querySelector("[data-bk-file]")?.files?.[0];
+        if (!file) return this._showToast("Choose a backup file first");
+        const mode = d.mode;
+        if (mode === "replace" && !confirm(`Everything in OmniPlan will be REPLACED by ${file.name}.\n\nA safety snapshot is taken first. Continue?`)) return;
+        d.busy = "restore";
+        this._renderDialog();
+        try {
+          const body = new FormData();
+          body.append("mode", mode);
+          body.append("file", file, file.name);
+          const response = await this._hass.fetchWithAuth("/api/omniplan/backup/restore", { method: "POST", body });
+          const data = await response.json().catch(() => ({}));
+          d.busy = null;
+          if (!response.ok) {
+            d.report = { error: data.message || `HTTP ${response.status}` };
+            return this._renderDialog();
+          }
+          return this._afterRestore(d, { ...data, source: file.name });
+        } catch (err) {
+          d.busy = null;
+          d.report = { error: err.message || String(err) };
+          return this._renderDialog();
+        }
+      }
+      default:
+        return;
+    }
+  }
+
+  async _settingsSave(d, changes) {
+    try {
+      const settings = await this._call({ type: "omniplan/backup_settings", settings: changes });
+      if (d.backups) d.backups.settings = settings;
+    } catch (_err) {
+      /* shown by _call */
+    }
+    return this._settingsReload(d);
+  }
+
+  /** change events inside the scan link drawer, the settings dialog and the cooking view. */
+  _extrasChange(el) {
+    const data = el.dataset || {};
+    const d = this._dialog;
+    if (data.slinkPick !== undefined && d?.kind === "scan-link") {
+      d.selected[d.type] = data.slinkPick;
+      for (const row of this.shadowRoot.querySelectorAll(".slink-row")) row.classList.toggle("on", row.querySelector("input")?.dataset.slinkPick === data.slinkPick);
+      return true;
+    }
+    if (data.bkMode !== undefined && d?.kind === "settings") {
+      d.mode = el.value;
+      return true;
+    }
+    if (data.bkSetting && d?.kind === "settings") {
+      const value = data.bkSetting === "retention" ? Number(el.value) : el.value;
+      if (data.bkSetting === "retention" && !(value >= 1 && value <= 365)) return true;
+      this._settingsSave(d, { [data.bkSetting]: value });
+      return true;
+    }
+    return false;
+  }
+
+  /** input events (typing) for the scan link drawer search. */
+  _extrasInput(el) {
+    const d = this._dialog;
+    if (el.dataset?.slinkSearch !== undefined && d?.kind === "scan-link") {
+      d.query = el.value;
+      const list = this.shadowRoot.querySelector(".slink-list");
+      if (list) setHTML(list, this._scanLinkListHtml(d));
+      return true;
+    }
+    return false;
+  }
+
   /* ---------------- Dialogs ---------------- */
 
   _openDialog(dialog) {
+    if (this._dialog && this._dialog !== dialog) this._cookClosed(this._dialog);
     this._dialog = dialog;
     this._renderDialog();
   }
 
   _closeDialog() {
+    const previous = this._dialog;
+    if (previous?.kind === "cook" && (this._timers || []).some((t) => !t.done) && !confirm("Close the recipe and stop its running timers?")) return;
     this._dialog = null;
+    this._cookClosed(previous);
     this._renderDialog();
   }
 
@@ -3312,11 +4745,20 @@ class OmniPlanCard extends HTMLElement {
       "maint-template": () => this._mTemplateDialogHtml(d),
       "recipe-review": () => this._recipeReviewHtml(d),
       "recipe-plan": () => this._recipePlanHtml(d),
+      "scan-part": () => this._scanPartHtml(d),
+      "scan-link": () => this._scanLinkHtml(d),
+      cook: () => this._cookHtml(d),
+      settings: () => this._settingsHtml(d),
     };
     const inner = renderers[d.kind] ? renderers[d.kind]() : html``;
-    setHTML(host, html`<div class="backdrop" data-action="dialog-backdrop"><div class="dialog" role="dialog" aria-modal="true">${inner}</div></div>`);
+    const frame = { "scan-part": ["sheet-wrap", "sheet"], cook: ["cook-wrap", "cook"], settings: ["", "settings"] }[d.kind] || ["", ""];
+    setHTML(
+      host,
+      html`<div class="backdrop ${frame[0]}" data-action="${d.kind === "cook" ? "noop" : "dialog-backdrop"}"><div class="dialog ${frame[1]}" role="dialog" aria-modal="true" aria-label="${d.kind === "cook" ? d.name : ""}">${inner}</div></div>`,
+    );
     if (d.kind === "plan") this._mountIconPicker();
     if (d.kind === "maint-qr") this._mMountQr();
+    if (d.kind === "cook") this._cookMounted(d);
     const first = host.querySelector("[autofocus]");
     if (first) setTimeout(() => first.focus(), 30);
   }
@@ -3711,15 +5153,19 @@ class OmniPlanCard extends HTMLElement {
 
   /* ---------------- Toast ---------------- */
 
-  _showToast(message, undo = null) {
+  /** ``actions``: extra buttons, [{ label, run }] (e.g. "Mark low" after a pantry scan). */
+  _showToast(message, undo = null, actions = []) {
     clearTimeout(this._toastTimer);
-    this._toast = { message, undo };
+    this._toast = { message, undo, actions };
     const host = this.shadowRoot.querySelector(".op-toast-host");
-    setHTML(host, html`<div class="op-toast" role="status"><span>${message}</span>${undo ? html`<button data-action="undo">Undo</button>` : ""}</div>`);
+    setHTML(
+      host,
+      html`<div class="op-toast" role="status"><span>${message}</span>${actions.map((a, i) => html`<button data-action="toast-act" data-index="${i}">${a.label}</button>`)}${undo ? html`<button data-action="undo">Undo</button>` : ""}</div>`,
+    );
     this._toastTimer = setTimeout(() => {
       this._toast = null;
       setHTML(host, html``);
-    }, undo ? UNDO_MS : 3500);
+    }, actions.length ? 9000 : undo ? UNDO_MS : 3500);
   }
 
   _fail(err) {
@@ -5290,14 +6736,35 @@ class OmniPlanCard extends HTMLElement {
         if (undo) await undo();
         return;
       }
+      case "toast-act": {
+        const act = this._toast?.actions?.[Number(el.dataset.index)];
+        clearTimeout(this._toastTimer);
+        setHTML(this.shadowRoot.querySelector(".op-toast-host"), html``);
+        this._toast = null;
+        if (act) await act.run();
+        return;
+      }
       default:
         if (action.startsWith("m-")) return this._maintAction(action, el, event);
         if (action.startsWith("r-")) return this._recipeAction(action, el, event);
+        if (action.startsWith("s-")) return this._scanAction(action, el, event);
+        if (action.startsWith("c-")) return this._cookAction(action, el, event);
+        if (action.startsWith("b-")) return this._settingsAction(action, el, event);
         return;
     }
   }
 
   _onKeyDown(event) {
+    if (event.key === "Escape" && this._scan) {
+      this._scanStop();
+      return;
+    }
+    const focused = event.composedPath()[0];
+    if ((event.key === "Enter" || event.key === " ") && focused?.classList?.contains("cstep")) {
+      event.preventDefault();
+      this._cookAction("c-step", focused);
+      return;
+    }
     if (event.key === "Escape") {
       if (this._ui.planMenu || this._ui.menu) {
         this._ui.planMenu = this._ui.menu = false;
@@ -5337,6 +6804,8 @@ class OmniPlanCard extends HTMLElement {
       [data.bomInput || data.bomQty, () => this._bomAdd(data.bomInput || data.bomQty)],
       [data.pantryInput, () => this._pantryAdd(data.pantryInput)],
       [data.seasoningInput !== undefined, () => this._seasoningAdd(el)],
+      [data.scanManual !== undefined, () => this._scanManual()],
+      [data.scanQty !== undefined, () => this._scanAction("s-restock-custom", el)],
       [data.quickInput, () => this._quickAdd(data.quickInput)],
       [data.sectionInput !== undefined && data.plan, () => this._sectionTaskAdd(el)],
       [data.newSection, () => this._sectionAdd(data.newSection)],
@@ -5351,6 +6820,7 @@ class OmniPlanCard extends HTMLElement {
 
   _onInput(event) {
     const el = event.composedPath()[0];
+    if (this._extrasInput(el)) return;
     if (el.classList?.contains("op-search")) {
       this._ui.search = el.value;
       clearTimeout(this._searchTimer);
@@ -5372,6 +6842,7 @@ class OmniPlanCard extends HTMLElement {
     const el = event.composedPath()[0];
     if (this._maintChange(el)) return;
     if (this._recipeChange(el)) return;
+    if (this._extrasChange(el)) return;
     if (el.dataset?.bulk && el.value) {
       const value = el.value;
       el.value = "";
