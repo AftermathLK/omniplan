@@ -9,9 +9,9 @@ from datetime import timedelta
 import pytest
 from conftest import plan_by_name
 
-from omniplan.database import SCHEMA_V1, SCHEMA_V2, OmniPlanDB
-from omniplan.maintenance_manager import MaintenanceManager
-from omniplan.planner import SYSTEM, Actor, PlannerError
+from taskdragon.database import SCHEMA_V1, SCHEMA_V2, TaskDragonDB
+from taskdragon.maintenance_manager import MaintenanceManager
+from taskdragon.planner import SYSTEM, Actor, PlannerError
 
 ALEX = Actor(user_id="u-alex", user_name="Alex", person="person.alex", is_admin=True)
 SAM = Actor(user_id="u-sam", user_name="Sam", person="person.sam")
@@ -289,7 +289,7 @@ async def test_templates_fleet_documents_and_pdf(planner, maint) -> None:
 
 
 async def test_service_record_counts_parts_once(planner, maint) -> None:
-    from omniplan.database import MEVENTS
+    from taskdragon.database import MEVENTS
 
     plan = await _plan(planner)
     obj = await maint.save_object({"plan_id": plan["id"], "name": "Furnace"}, ALEX)
@@ -318,7 +318,7 @@ async def test_delete_object_undo_and_privacy(planner, maint) -> None:
     task = await maint.save_task({"object_id": obj["id"], "name": "Clean Vent", "interval_value": 1, "interval_unit": "years"}, ALEX)
     await maint.complete(task["id"], ALEX)
     payload = await maint.delete_object(obj["id"])
-    assert await maint.db.row(__import__("omniplan.database", fromlist=["MTASKS"]).MTASKS, task["id"]) is None
+    assert await maint.db.row(__import__("taskdragon.database", fromlist=["MTASKS"]).MTASKS, task["id"]) is None
     token = planner.stash_undo("maint_object", payload, ALEX)
     await planner.undo(token, ALEX)
     assert len(await maint.history(task_id=task["id"])) == 1
@@ -335,7 +335,7 @@ async def test_delete_object_undo_and_privacy(planner, maint) -> None:
     planner.test_events.clear()
     await maint.complete(blade["id"], SAM)
     event, data = planner.test_events[-1]
-    assert event == "omniplan_maintenance_completed" and data["private"] and data["name"] is None
+    assert event == "taskdragon_maintenance_completed" and data["private"] and data["name"] is None
 
 
 async def test_plain_tasks_and_promotions_become_maintenance_tasks(planner, maint) -> None:
@@ -381,10 +381,10 @@ async def test_migration_moves_old_maintenance_tasks(tmp_path) -> None:
     conn.commit()
     conn.close()
 
-    db = OmniPlanDB(str(path))
+    db = TaskDragonDB(str(path))
     await db.async_open()
     try:
-        from omniplan.database import MEVENTS, MOBJECTS, MTASKS
+        from taskdragon.database import MEVENTS, MOBJECTS, MTASKS
 
         assert await db.schema_version() == 4
         [obj] = await db.rows(MOBJECTS)

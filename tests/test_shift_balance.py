@@ -6,7 +6,7 @@ from datetime import date, datetime
 
 from conftest import TZ, plan_by_name
 
-from omniplan.shift_balance import (
+from taskdragon.shift_balance import (
     Chore,
     PersonAvailability,
     ShiftWindow,

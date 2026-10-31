@@ -1,10 +1,10 @@
 """Portable backup, restore and standalone-migration bridge (no Home Assistant imports).
 
-A backup is one ``omniplan_portable_backup_YYYYMMDD_HHMMSS.zip`` holding:
+A backup is one ``taskdragon_portable_backup_YYYYMMDD_HHMMSS.zip`` holding:
 
 ``manifest_bridge.json``
     Format version, export time, SHA-256 of every other file, plus two bridge
-    tables a future standalone OmniPlan can use to stand up without Home
+    tables a future standalone TaskDragon can use to stand up without Home
     Assistant: ``users_bridge_map`` (each Home Assistant user / ``person.*``
     entity as a platform-independent profile with a stable UUID) and
     ``hardware_bindings_bridge`` (every entity, NFC tag, area, notify service
@@ -12,7 +12,7 @@ A backup is one ``omniplan_portable_backup_YYYYMMDD_HHMMSS.zip`` holding:
     binding id, a suggested MQTT topic and a webhook id for re-binding).
 ``database_dump.json``
     Every SQLite table as plain JSON rows (the canonical, version-independent copy).
-``omniplan.db``
+``taskdragon.db``
     A hot, consistent copy of the database from SQLite's online backup API.
 ``documents/<sha256>``
     Every uploaded manual, receipt and photo still referenced by the data.
@@ -44,20 +44,22 @@ from typing import Any
 
 from .const import BACKUP_DEFAULT_RETENTION, BACKUP_DEFAULT_TIME
 from .database import PORTABLE_MIN_SCHEMA
+from .migration import LEGACY_DUMP_FORMAT
 
 _LOGGER = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "1.0.0-portable"
 SOURCE_PLATFORM = "home_assistant_custom_component"
-DUMP_FORMAT = "omniplan-database-dump"
+DUMP_FORMAT = "taskdragon-database-dump"
 MANIFEST = "manifest_bridge.json"
 DUMP = "database_dump.json"
-DB_COPY = "omniplan.db"
-PREFIX = "omniplan_portable_backup_"
+DB_COPY = "taskdragon.db"
+PREFIX = "taskdragon_portable_backup_"
 SETTINGS_META = "backup_settings"
 BINDINGS_META = "bridge_bindings"
 KIND_SUFFIX = {"pre_restore": "_pre-restore"}
-NAME_RE = re.compile(r"^omniplan_portable_backup_(\d{8})_(\d{6})(?:_(\d{1,3}))?(_pre-restore)?\.zip$")
+# Snapshots written before the rename (omniplan_portable_backup_*.zip) still list and restore.
+NAME_RE = re.compile(r"^(?:taskdragon|omniplan)_portable_backup_(\d{8})_(\d{6})(?:_(\d{1,3}))?(_pre-restore)?\.zip$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 ENTITY_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
@@ -81,7 +83,7 @@ PERSON_FIELDS = (
 
 
 class BackupError(Exception):
-    """A backup could not be written, or an upload is not a valid OmniPlan backup."""
+    """A backup could not be written, or an upload is not a valid TaskDragon backup."""
 
 
 def _now_utc() -> datetime:
@@ -258,7 +260,7 @@ class BackupManager:
                 os.remove(os.path.join(self.backup_dir, item["name"]))
                 removed.append(item["name"])
             except OSError as err:
-                _LOGGER.warning("Could not remove old OmniPlan backup %s: %s", item["name"], err)
+                _LOGGER.warning("Could not remove old TaskDragon backup %s: %s", item["name"], err)
         return removed
 
     def snapshot_path(self, name: str) -> str:
@@ -321,7 +323,7 @@ class BackupManager:
         try:
             return await self.create_snapshot("snapshot")
         except (BackupError, OSError, sqlite3.Error) as err:
-            _LOGGER.error("The scheduled OmniPlan backup failed: %s", err)
+            _LOGGER.error("The scheduled TaskDragon backup failed: %s", err)
             return None
 
     # ------------------------------------------------------------------
@@ -342,7 +344,7 @@ class BackupManager:
             }
             documents = self._documents(dump["tables"])
             manifest = {
-                "format": "omniplan-portable-backup",
+                "format": "taskdragon-portable-backup",
                 "schema_version": SCHEMA_VERSION,
                 "exported_at": exported_at,
                 "source_platform": SOURCE_PLATFORM,
@@ -528,7 +530,7 @@ class BackupManager:
             key = kind + "|" + ref
             entry = ids.get(key)
             if not isinstance(entry, Mapping) or not entry.get("binding_id") or not entry.get("webhook_id"):
-                entry = {"binding_id": "bnd_" + secrets.token_hex(6), "webhook_id": "omniplan_" + secrets.token_urlsafe(24)}
+                entry = {"binding_id": "bnd_" + secrets.token_hex(6), "webhook_id": "taskdragon_" + secrets.token_urlsafe(24)}
                 ids[key] = entry
                 changed = True
             is_entity = bool(ENTITY_RE.match(ref)) and kind not in ("nfc_tag", "area", "service", "notify_service", "mealie_shopping_list", "conversation_agent")
@@ -539,7 +541,7 @@ class BackupManager:
                     "ha_entity_id": ref if is_entity else None,
                     "ha_ref": None if is_entity else ref,
                     "domain": ref.split(".", 1)[0] if is_entity else None,
-                    "mqtt_topic_fallback": f"omniplan/bindings/{entry['binding_id']}/state",
+                    "mqtt_topic_fallback": f"taskdragon/bindings/{entry['binding_id']}/state",
                     "webhook_id": entry["webhook_id"],
                     "used_by": used_by[:200],
                 }
@@ -598,12 +600,12 @@ class BackupManager:
         if head.startswith(b"PK\x03\x04"):
             return self._read_zip(path, current_schema)
         if os.path.getsize(path) > MAX_DUMP_BYTES:
-            raise BackupError("That file is too large to be an OmniPlan backup")
+            raise BackupError("That file is too large to be an TaskDragon backup")
         try:
             with open(path, "rb") as handle:
                 payload = json.loads(handle.read().decode("utf-8-sig"))
         except (UnicodeDecodeError, ValueError) as err:
-            raise BackupError("That file is neither an OmniPlan backup .zip nor its database_dump.json") from err
+            raise BackupError("That file is neither an TaskDragon backup .zip nor its database_dump.json") from err
         tables = self._check_dump(payload, current_schema)
         return {"format": "json", "manifest": {"exported_at": payload.get("exported_at"), "app_version": payload.get("app_version")}, "tables": tables, "documents": [], "warnings": ["Documents are not part of a .json backup; uploaded files were left as they are"]}
 
@@ -616,10 +618,10 @@ class BackupManager:
         with archive:
             members = {info.filename: info for info in archive.infolist()}
             if MANIFEST not in members:
-                raise BackupError("That .zip is not an OmniPlan portable backup (manifest_bridge.json is missing)")
+                raise BackupError("That .zip is not an TaskDragon portable backup (manifest_bridge.json is missing)")
             manifest = self._member_json(archive, members[MANIFEST], MAX_MANIFEST_BYTES)
             if not isinstance(manifest, Mapping) or not str(manifest.get("schema_version") or "").startswith("1.") or not str(manifest.get("schema_version")).endswith("-portable"):
-                raise BackupError("This backup was written by an OmniPlan version this one cannot read")
+                raise BackupError("This backup was written by an TaskDragon version this one cannot read")
             files = manifest.get("files") if isinstance(manifest.get("files"), Mapping) else {}
             temp_db = None
             if DUMP in members:
@@ -640,7 +642,7 @@ class BackupManager:
                 finally:
                     _remove_quietly(temp_db)
                 temp_db = None
-                warnings.append("Restored from omniplan.db because database_dump.json was missing")
+                warnings.append("Restored from taskdragon.db because database_dump.json was missing")
             else:
                 raise BackupError("The backup holds no database")
             documents = []
@@ -687,13 +689,13 @@ class BackupManager:
 
     @staticmethod
     def _check_dump(payload: Any, current_schema: int) -> Mapping[str, Any]:
-        if not isinstance(payload, Mapping) or payload.get("format") != DUMP_FORMAT or not isinstance(payload.get("tables"), Mapping):
-            raise BackupError("That file is not an OmniPlan database dump")
+        if not isinstance(payload, Mapping) or payload.get("format") not in (DUMP_FORMAT, LEGACY_DUMP_FORMAT) or not isinstance(payload.get("tables"), Mapping):
+            raise BackupError("That file is not an TaskDragon database dump")
         version = payload.get("db_schema_version")
         if not isinstance(version, int) or version < PORTABLE_MIN_SCHEMA:
             raise BackupError("The dump has no usable database schema version")
         if version > current_schema:
-            raise BackupError("This backup comes from a newer OmniPlan; update OmniPlan before restoring it")
+            raise BackupError("This backup comes from a newer TaskDragon; update TaskDragon before restoring it")
         return payload["tables"]
 
     @staticmethod
@@ -701,14 +703,14 @@ class BackupManager:
         try:
             conn = sqlite3.connect("file:" + path.replace("?", "%3f").replace("#", "%23") + "?mode=ro", uri=True)
         except sqlite3.Error as err:
-            raise BackupError("omniplan.db in the backup cannot be opened") from err
+            raise BackupError("taskdragon.db in the backup cannot be opened") from err
         try:
             conn.row_factory = sqlite3.Row
             if conn.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                raise BackupError("omniplan.db in the backup is damaged")
+                raise BackupError("taskdragon.db in the backup is damaged")
             version = int(conn.execute("PRAGMA user_version").fetchone()[0])
             if version < PORTABLE_MIN_SCHEMA or version > current_schema:
-                raise BackupError("omniplan.db in the backup has an incompatible schema version")
+                raise BackupError("taskdragon.db in the backup has an incompatible schema version")
             tables: dict[str, Any] = {}
             for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").fetchall():
                 if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$", name):
@@ -717,7 +719,7 @@ class BackupManager:
                 tables[name] = {"rows": [{key: _blob(row[key]) for key in row.keys()} for row in cursor.fetchall()]}
             return tables
         except sqlite3.DatabaseError as err:
-            raise BackupError("omniplan.db in the backup is not a usable database") from err
+            raise BackupError("taskdragon.db in the backup is not a usable database") from err
         finally:
             conn.close()
 

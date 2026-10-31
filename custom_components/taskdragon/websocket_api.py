@@ -1,9 +1,9 @@
-"""Custom WebSocket API for the OmniPlan card and panel.
+"""Custom WebSocket API for the TaskDragon card and panel.
 
 Every command answers with the affected record(s); clients also hold an
-``omniplan/subscribe`` subscription that pushes ``{"plan_ids": [...]}`` whenever
+``taskdragon/subscribe`` subscription that pushes ``{"plan_ids": [...]}`` whenever
 data they may see changes, so every open dashboard refreshes instantly. (The bus
-event ``omniplan_updated`` is fired too, for automations — but non-admin users
+event ``taskdragon_updated`` is fired too, for automations — but non-admin users
 may not subscribe to arbitrary bus events, hence the dedicated subscription.)
 
 Security model:
@@ -61,14 +61,14 @@ from .const import (
     TRIP_STATUSES,
     VERSION,
 )
-from .coordinator import OmniPlanCoordinator
+from .coordinator import TaskDragonCoordinator
 from .mealie_client import MealieError
 from .planner import Actor, PlannerError
 
 _LOGGER = logging.getLogger(__name__)
 
 Handler = Callable[
-    [HomeAssistant, websocket_api.ActiveConnection, dict[str, Any], OmniPlanCoordinator, Actor], Awaitable[Any]
+    [HomeAssistant, websocket_api.ActiveConnection, dict[str, Any], TaskDragonCoordinator, Actor], Awaitable[Any]
 ]
 Guard = Callable[[dict[str, Any]], dict[str, list[str | None]]]
 
@@ -79,9 +79,9 @@ def _command(schema: dict[Any, Any], *, guard: Guard | None = None, admin: bool 
     def decorator(func: Handler) -> Any:
         @functools.wraps(func)
         async def handler(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-            coordinator: OmniPlanCoordinator | None = hass.data.get(DOMAIN)
+            coordinator: TaskDragonCoordinator | None = hass.data.get(DOMAIN)
             if coordinator is None:
-                connection.send_error(msg["id"], "not_loaded", "OmniPlan is not set up")
+                connection.send_error(msg["id"], "not_loaded", "TaskDragon is not set up")
                 return
             if connection.user is None:
                 connection.send_error(msg["id"], "unauthorized", "Sign in first")
@@ -250,7 +250,7 @@ def async_register(hass: HomeAssistant) -> None:
 # ----------------------------------------------------------------------
 # Board, subscription & preferences
 # ----------------------------------------------------------------------
-@_command({vol.Required("type"): "omniplan/get_board", vol.Optional("plan_id"): ID}, guard=lambda m: {"plans": [m.get("plan_id")]})
+@_command({vol.Required("type"): "taskdragon/get_board", vol.Optional("plan_id"): ID}, guard=lambda m: {"plans": [m.get("plan_id")]})
 async def ws_get_board(hass, connection, msg, coordinator, actor):
     board = await coordinator.planner.get_board(msg.get("plan_id"), actor)
     board["people"] = coordinator.people_info()
@@ -268,7 +268,7 @@ async def ws_get_board(hass, connection, msg, coordinator, actor):
     return board
 
 
-@websocket_api.websocket_command({vol.Required("type"): "omniplan/subscribe"})
+@websocket_api.websocket_command({vol.Required("type"): "taskdragon/subscribe"})
 @callback
 def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     if connection.user is None:
@@ -277,7 +277,7 @@ def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection
     user_id = connection.user.id
 
     async def deliver(plan_ids: set[str]) -> None:
-        coordinator: OmniPlanCoordinator | None = hass.data.get(DOMAIN)
+        coordinator: TaskDragonCoordinator | None = hass.data.get(DOMAIN)
         if coordinator is None or coordinator.closing:
             return
         try:
@@ -290,9 +290,9 @@ def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection
 
     @callback
     def forward(plan_ids: set[str]) -> None:
-        coordinator: OmniPlanCoordinator | None = hass.data.get(DOMAIN)
+        coordinator: TaskDragonCoordinator | None = hass.data.get(DOMAIN)
         if coordinator is not None:
-            coordinator.spawn(deliver(set(plan_ids)), "omniplan_ws_forward")
+            coordinator.spawn(deliver(set(plan_ids)), "taskdragon_ws_forward")
 
     connection.subscriptions[msg["id"]] = async_dispatcher_connect(hass, SIGNAL_UPDATED, forward)
     connection.send_result(msg["id"])
@@ -300,7 +300,7 @@ def ws_subscribe(hass: HomeAssistant, connection: websocket_api.ActiveConnection
 
 @_command(
     {
-        vol.Required("type"): "omniplan/set_prefs",
+        vol.Required("type"): "taskdragon/set_prefs",
         vol.Required("prefs"): {
             **{vol.Optional(key): vol.All([_text(200)], vol.Length(max=MAX_LIST)) for key in PREF_KEYS},
             vol.Optional(PREF_MAINT_VIEWS): vol.All([dict], vol.Length(max=30)),
@@ -314,24 +314,24 @@ async def ws_set_prefs(hass, connection, msg, coordinator, actor):
 # ----------------------------------------------------------------------
 # Tasks
 # ----------------------------------------------------------------------
-@_command({vol.Required("type"): "omniplan/save_task", vol.Required("task"): TASK_SCHEMA}, guard=_task_guard)
+@_command({vol.Required("type"): "taskdragon/save_task", vol.Required("task"): TASK_SCHEMA}, guard=_task_guard)
 async def ws_save_task(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.save_task(msg["task"], actor)
 
 
-@_command({vol.Required("type"): "omniplan/delete_tasks", vol.Required("uids"): IDS}, guard=lambda m: {"tasks": m["uids"]})
+@_command({vol.Required("type"): "taskdragon/delete_tasks", vol.Required("uids"): IDS}, guard=lambda m: {"tasks": m["uids"]})
 async def ws_delete_tasks(hass, connection, msg, coordinator, actor):
     snapshot = await coordinator.planner.delete_tasks(msg["uids"])
     return {"count": len(snapshot["tasks"]), "undo": coordinator.planner.stash_undo("tasks", snapshot, actor)}
 
 
-@_command({vol.Required("type"): "omniplan/undo", vol.Required("token"): ID})
+@_command({vol.Required("type"): "taskdragon/undo", vol.Required("token"): ID})
 async def ws_undo(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.undo(msg["token"], actor)
 
 
 @_command(
-    {vol.Required("type"): "omniplan/set_completed", vol.Required("uid"): ID, vol.Required("completed"): bool},
+    {vol.Required("type"): "taskdragon/set_completed", vol.Required("uid"): ID, vol.Required("completed"): bool},
     guard=lambda m: {"tasks": [m["uid"]]},
 )
 async def ws_set_completed(hass, connection, msg, coordinator, actor):
@@ -340,7 +340,7 @@ async def ws_set_completed(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/move_task",
+        vol.Required("type"): "taskdragon/move_task",
         vol.Required("uid"): ID,
         vol.Optional("previous_uid"): OPT_ID,
         vol.Optional("plan_id"): ID,
@@ -371,7 +371,7 @@ async def ws_move_task(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/transfer_task",
+        vol.Required("type"): "taskdragon/transfer_task",
         vol.Required("uid"): ID,
         vol.Required("plan_id"): ID,
         vol.Optional("changes", default={}): TRANSFER_CHANGES,
@@ -382,14 +382,14 @@ async def ws_transfer_task(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.transfer_task(msg["uid"], msg["plan_id"], msg["changes"], actor)
 
 
-@_command({vol.Required("type"): "omniplan/claim_task", vol.Required("uid"): ID}, guard=lambda m: {"tasks": [m["uid"]]})
+@_command({vol.Required("type"): "taskdragon/claim_task", vol.Required("uid"): ID}, guard=lambda m: {"tasks": [m["uid"]]})
 async def ws_claim_task(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.claim_task(msg["uid"], actor.person, actor)
 
 
 @_command(
     {
-        vol.Required("type"): "omniplan/bulk_action",
+        vol.Required("type"): "taskdragon/bulk_action",
         vol.Required("uids"): IDS,
         vol.Required("action"): vol.In(("complete", "uncomplete", "delete", "assign", "move", "priority", "snooze", "tag")),
         vol.Optional("value"): vol.Any(None, _text(255)),
@@ -403,14 +403,14 @@ async def ws_bulk_action(hass, connection, msg, coordinator, actor):
     return result
 
 
-@_command({vol.Required("type"): "omniplan/clear_completed", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
+@_command({vol.Required("type"): "taskdragon/clear_completed", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
 async def ws_clear_completed(hass, connection, msg, coordinator, actor):
     snapshot = await coordinator.planner.clear_completed(msg["plan_id"])
     return {"count": len(snapshot["tasks"]), "undo": coordinator.planner.stash_undo("tasks", snapshot, actor)}
 
 
 @_command(
-    {vol.Required("type"): "omniplan/snooze", vol.Required("uid"): ID, vol.Required("until"): _text(40)},
+    {vol.Required("type"): "taskdragon/snooze", vol.Required("uid"): ID, vol.Required("until"): _text(40)},
     guard=lambda m: {"tasks": [m["uid"]]},
 )
 async def ws_snooze(hass, connection, msg, coordinator, actor):
@@ -419,7 +419,7 @@ async def ws_snooze(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/snooze_context",
+        vol.Required("type"): "taskdragon/snooze_context",
         vol.Required("uid"): ID,
         vol.Required("rule_type"): vol.In(SNOOZE_RULE_TYPES),
         vol.Optional("config", default={}): vol.Schema(
@@ -441,13 +441,13 @@ async def ws_snooze_context(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.snooze_context(msg["uid"], msg["rule_type"], msg["config"], actor)
 
 
-@_command({vol.Required("type"): "omniplan/unsnooze", vol.Required("uid"): ID}, guard=lambda m: {"tasks": [m["uid"]]})
+@_command({vol.Required("type"): "taskdragon/unsnooze", vol.Required("uid"): ID}, guard=lambda m: {"tasks": [m["uid"]]})
 async def ws_unsnooze(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.unsnooze(msg["uid"], reason="manual")
 
 
 @_command(
-    {vol.Required("type"): "omniplan/task_history", vol.Required("uid"): ID, vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=200))},
+    {vol.Required("type"): "taskdragon/task_history", vol.Required("uid"): ID, vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=200))},
     guard=lambda m: {"tasks": [m["uid"]]},
 )
 async def ws_task_history(hass, connection, msg, coordinator, actor):
@@ -455,7 +455,7 @@ async def ws_task_history(hass, connection, msg, coordinator, actor):
 
 
 @_command(
-    {vol.Required("type"): "omniplan/add_dependency", vol.Required("uid"): ID, vol.Required("blocked_by_uid"): ID},
+    {vol.Required("type"): "taskdragon/add_dependency", vol.Required("uid"): ID, vol.Required("blocked_by_uid"): ID},
     guard=lambda m: {"tasks": [m["uid"], m["blocked_by_uid"]]},
 )
 async def ws_add_dependency(hass, connection, msg, coordinator, actor):
@@ -463,7 +463,7 @@ async def ws_add_dependency(hass, connection, msg, coordinator, actor):
 
 
 @_command(
-    {vol.Required("type"): "omniplan/remove_dependency", vol.Required("uid"): ID, vol.Required("blocked_by_uid"): ID},
+    {vol.Required("type"): "taskdragon/remove_dependency", vol.Required("uid"): ID, vol.Required("blocked_by_uid"): ID},
     guard=lambda m: {"tasks": [m["uid"]]},
 )
 async def ws_remove_dependency(hass, connection, msg, coordinator, actor):
@@ -474,9 +474,9 @@ async def ws_remove_dependency(hass, connection, msg, coordinator, actor):
 # Brain dump
 # ----------------------------------------------------------------------
 async def run_brain_dump(
-    coordinator: OmniPlanCoordinator, text: str, actor: Actor, *, dry_run: bool = False, agent_id: str | None = None
+    coordinator: TaskDragonCoordinator, text: str, actor: Actor, *, dry_run: bool = False, agent_id: str | None = None
 ) -> dict[str, Any]:
-    """Shared by the WebSocket command and the ``omniplan.parse_brain_dump`` service.
+    """Shared by the WebSocket command and the ``taskdragon.parse_brain_dump`` service.
 
     The parser (and any LLM prompt) only ever sees plans the actor may access.
     """
@@ -492,13 +492,13 @@ async def run_brain_dump(
 
 
 @_command(
-    {vol.Required("type"): "omniplan/brain_dump", vol.Required("text"): _text(4000), vol.Optional("dry_run", default=False): bool}
+    {vol.Required("type"): "taskdragon/brain_dump", vol.Required("text"): _text(4000), vol.Optional("dry_run", default=False): bool}
 )
 async def ws_brain_dump(hass, connection, msg, coordinator, actor):
     return await run_brain_dump(coordinator, msg["text"], actor, dry_run=msg["dry_run"])
 
 
-@_command({vol.Required("type"): "omniplan/apply_actions", vol.Required("actions"): vol.All([dict], vol.Length(max=50))})
+@_command({vol.Required("type"): "taskdragon/apply_actions", vol.Required("actions"): vol.All([dict], vol.Length(max=50))})
 async def ws_apply_actions(hass, connection, msg, coordinator, actor):
     # apply_actions authorizes every action's plan itself.
     return {"results": await coordinator.planner.apply_actions(msg["actions"], actor)}
@@ -509,7 +509,7 @@ async def ws_apply_actions(hass, connection, msg, coordinator, actor):
 # ----------------------------------------------------------------------
 @_command(
     {
-        vol.Required("type"): "omniplan/add_shopping_item",
+        vol.Required("type"): "taskdragon/add_shopping_item",
         vol.Required("plan_id"): ID,
         vol.Required("text"): SUMMARY,
         vol.Optional("category"): OPT_NAME,
@@ -524,7 +524,7 @@ async def ws_add_shopping_item(hass, connection, msg, coordinator, actor):
 
 
 @_command(
-    {vol.Required("type"): "omniplan/item_history", vol.Required("plan_id"): ID, vol.Optional("limit", default=40): vol.All(int, vol.Range(min=1, max=200))},
+    {vol.Required("type"): "taskdragon/item_history", vol.Required("plan_id"): ID, vol.Optional("limit", default=40): vol.All(int, vol.Range(min=1, max=200))},
     guard=lambda m: {"plans": [m["plan_id"]]},
 )
 async def ws_item_history(hass, connection, msg, coordinator, actor):
@@ -532,7 +532,7 @@ async def ws_item_history(hass, connection, msg, coordinator, actor):
 
 
 @_command(
-    {vol.Required("type"): "omniplan/delete_history_item", vol.Required("plan_id"): ID, vol.Required("name_key"): _text(MAX_SUMMARY)},
+    {vol.Required("type"): "taskdragon/delete_history_item", vol.Required("plan_id"): ID, vol.Required("name_key"): _text(MAX_SUMMARY)},
     guard=lambda m: {"plans": [m["plan_id"]]},
 )
 async def ws_delete_history_item(hass, connection, msg, coordinator, actor):
@@ -555,7 +555,7 @@ async def _household_users(hass: HomeAssistant, user_ids: list[str]) -> list[str
 
 @_command(
     {
-        vol.Required("type"): "omniplan/save_plan",
+        vol.Required("type"): "taskdragon/save_plan",
         vol.Required("plan"): vol.Schema(
             {
                 vol.Optional("id"): ID,
@@ -581,13 +581,13 @@ async def ws_save_plan(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.create_plan(plan, actor)
 
 
-@_command({vol.Required("type"): "omniplan/delete_plan", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]}, admin=True)
+@_command({vol.Required("type"): "taskdragon/delete_plan", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]}, admin=True)
 async def ws_delete_plan(hass, connection, msg, coordinator, actor):
     await coordinator.planner.delete_plan(msg["plan_id"], actor)
     return {"ok": True}
 
 
-@_command({vol.Required("type"): "omniplan/delete_private_plan", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
+@_command({vol.Required("type"): "taskdragon/delete_private_plan", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
 async def ws_delete_private_plan(hass, connection, msg, coordinator, actor):
     """Owners delete their own private lists without being administrators."""
     plan = await coordinator.db.get_plan(msg["plan_id"])
@@ -599,7 +599,7 @@ async def ws_delete_private_plan(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/clone_plan",
+        vol.Required("type"): "taskdragon/clone_plan",
         vol.Required("plan_id"): ID,
         vol.Optional("name"): OPT_NAME,
         vol.Optional("start_date"): DATE,
@@ -610,7 +610,7 @@ async def ws_clone_plan(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.clone_plan(msg["plan_id"], msg.get("name"), msg.get("start_date"), actor)
 
 
-@_command({vol.Required("type"): "omniplan/reset_plan", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
+@_command({vol.Required("type"): "taskdragon/reset_plan", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
 async def ws_reset_plan(hass, connection, msg, coordinator, actor):
     return {"reset": await coordinator.planner.reset_plan(msg["plan_id"])}
 
@@ -620,7 +620,7 @@ async def ws_reset_plan(hass, connection, msg, coordinator, actor):
 # ----------------------------------------------------------------------
 @_command(
     {
-        vol.Required("type"): "omniplan/save_section",
+        vol.Required("type"): "taskdragon/save_section",
         vol.Required("section"): vol.Schema({vol.Optional("id"): ID, vol.Optional("plan_id"): ID, vol.Required("name"): NAME}),
     },
     guard=lambda m: {"sections": [m["section"].get("id")], "plans": [m["section"].get("plan_id")]},
@@ -629,14 +629,14 @@ async def ws_save_section(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.save_section(msg["section"])
 
 
-@_command({vol.Required("type"): "omniplan/delete_section", vol.Required("section_id"): ID}, guard=lambda m: {"sections": [m["section_id"]]})
+@_command({vol.Required("type"): "taskdragon/delete_section", vol.Required("section_id"): ID}, guard=lambda m: {"sections": [m["section_id"]]})
 async def ws_delete_section(hass, connection, msg, coordinator, actor):
     payload = await coordinator.planner.delete_section(msg["section_id"])
     return {"moved": len(payload["task_uids"]), "undo": coordinator.planner.stash_undo("section", payload, actor)}
 
 
 @_command(
-    {vol.Required("type"): "omniplan/reorder_sections", vol.Required("plan_id"): ID, vol.Required("section_ids"): IDS},
+    {vol.Required("type"): "taskdragon/reorder_sections", vol.Required("plan_id"): ID, vol.Required("section_ids"): IDS},
     guard=lambda m: {"plans": [m["plan_id"]], "sections": m["section_ids"]},
 )
 async def ws_reorder_sections(hass, connection, msg, coordinator, actor):
@@ -648,7 +648,7 @@ async def ws_reorder_sections(hass, connection, msg, coordinator, actor):
 # ----------------------------------------------------------------------
 @_command(
     {
-        vol.Required("type"): "omniplan/save_trip",
+        vol.Required("type"): "taskdragon/save_trip",
         vol.Required("trip"): vol.Schema(
             {
                 vol.Optional("id"): ID,
@@ -671,19 +671,19 @@ async def ws_save_trip(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.create_trip(trip["plan_id"], trip["name"], trip.get("start_date"), trip.get("end_date"), actor)
 
 
-@_command({vol.Required("type"): "omniplan/delete_trip", vol.Required("trip_id"): ID}, guard=lambda m: {"trips": [m["trip_id"]]})
+@_command({vol.Required("type"): "taskdragon/delete_trip", vol.Required("trip_id"): ID}, guard=lambda m: {"trips": [m["trip_id"]]})
 async def ws_delete_trip(hass, connection, msg, coordinator, actor):
     payload = await coordinator.planner.delete_trip(msg["trip_id"])
     return {"undo": coordinator.planner.stash_undo("trip", payload, actor)}
 
 
-@_command({vol.Required("type"): "omniplan/reset_trip", vol.Required("trip_id"): ID}, guard=lambda m: {"trips": [m["trip_id"]]})
+@_command({vol.Required("type"): "taskdragon/reset_trip", vol.Required("trip_id"): ID}, guard=lambda m: {"trips": [m["trip_id"]]})
 async def ws_reset_trip(hass, connection, msg, coordinator, actor):
     return {"reset": await coordinator.planner.reset_trip(msg["trip_id"])}
 
 
 @_command(
-    {vol.Required("type"): "omniplan/set_repeatable", vol.Required("uid"): ID, vol.Required("repeatable"): bool},
+    {vol.Required("type"): "taskdragon/set_repeatable", vol.Required("uid"): ID, vol.Required("repeatable"): bool},
     guard=lambda m: {"tasks": [m["uid"]]},
 )
 async def ws_set_repeatable(hass, connection, msg, coordinator, actor):
@@ -695,7 +695,7 @@ async def ws_set_repeatable(hass, connection, msg, coordinator, actor):
 # ----------------------------------------------------------------------
 @_command(
     {
-        vol.Required("type"): "omniplan/save_pantry_item",
+        vol.Required("type"): "taskdragon/save_pantry_item",
         vol.Required("item"): vol.Schema(
             {
                 vol.Optional("id"): ID,
@@ -718,7 +718,7 @@ async def ws_save_pantry_item(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.save_pantry_item(msg["item"])
 
 
-@_command({vol.Required("type"): "omniplan/delete_pantry_item", vol.Required("item_id"): ID}, guard=lambda m: {"pantry": [m["item_id"]]})
+@_command({vol.Required("type"): "taskdragon/delete_pantry_item", vol.Required("item_id"): ID}, guard=lambda m: {"pantry": [m["item_id"]]})
 async def ws_delete_pantry_item(hass, connection, msg, coordinator, actor):
     item = await coordinator.planner.delete_pantry_item(msg["item_id"])
     return {"undo": coordinator.planner.stash_undo("pantry", item, actor) if item else None}
@@ -726,7 +726,7 @@ async def ws_delete_pantry_item(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/trigger_pantry_low",
+        vol.Required("type"): "taskdragon/trigger_pantry_low",
         vol.Required("item_id"): ID,
         vol.Required("state"): vol.In(STOCK_STATES),
         vol.Optional("action"): vol.Any(None, vol.In(LOW_ACTIONS)),
@@ -737,7 +737,7 @@ async def ws_trigger_pantry_low(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.set_pantry_state(msg["item_id"], msg["state"], msg.get("action"), actor)
 
 
-@_command({vol.Required("type"): "omniplan/pantry_fetch_recipe", vol.Required("item_id"): ID}, guard=lambda m: {"pantry": [m["item_id"]]})
+@_command({vol.Required("type"): "taskdragon/pantry_fetch_recipe", vol.Required("item_id"): ID}, guard=lambda m: {"pantry": [m["item_id"]]})
 async def ws_pantry_fetch_recipe(hass, connection, msg, coordinator, actor):
     item = await coordinator.db.get_pantry_item(msg["item_id"])
     if item is None:
@@ -755,7 +755,7 @@ async def ws_pantry_fetch_recipe(hass, connection, msg, coordinator, actor):
 # ----------------------------------------------------------------------
 @_command(
     {
-        vol.Required("type"): "omniplan/save_bom_item",
+        vol.Required("type"): "taskdragon/save_bom_item",
         vol.Required("item"): vol.Schema(
             {
                 vol.Optional("id"): ID,
@@ -774,14 +774,14 @@ async def ws_save_bom_item(hass, connection, msg, coordinator, actor):
     return await coordinator.planner.save_bom_item(msg["item"])
 
 
-@_command({vol.Required("type"): "omniplan/delete_bom_item", vol.Required("item_id"): ID}, guard=lambda m: {"bom": [m["item_id"]]})
+@_command({vol.Required("type"): "taskdragon/delete_bom_item", vol.Required("item_id"): ID}, guard=lambda m: {"bom": [m["item_id"]]})
 async def ws_delete_bom_item(hass, connection, msg, coordinator, actor):
     await coordinator.planner.delete_bom_item(msg["item_id"])
     return {"ok": True}
 
 
 @_command(
-    {vol.Required("type"): "omniplan/push_bom", vol.Required("plan_id"): ID, vol.Optional("item_ids"): IDS},
+    {vol.Required("type"): "taskdragon/push_bom", vol.Required("plan_id"): ID, vol.Optional("item_ids"): IDS},
     guard=lambda m: {"plans": [m["plan_id"]], "bom": m.get("item_ids") or []},
 )
 async def ws_push_bom(hass, connection, msg, coordinator, actor):
@@ -791,13 +791,13 @@ async def ws_push_bom(hass, connection, msg, coordinator, actor):
 # ----------------------------------------------------------------------
 # Integrations
 # ----------------------------------------------------------------------
-@_command({vol.Required("type"): "omniplan/mealie_sync"})
+@_command({vol.Required("type"): "taskdragon/mealie_sync"})
 async def ws_mealie_sync(hass, connection, msg, coordinator, actor):
     status = await coordinator.async_sync_mealie()
     return {k: status.get(k) for k in ("enabled", "ok", "last_sync", "error")}
 
 
-@_command({vol.Required("type"): "omniplan/mealie_lists"}, admin=True)
+@_command({vol.Required("type"): "taskdragon/mealie_lists"}, admin=True)
 async def ws_mealie_lists(hass, connection, msg, coordinator, actor):
     return await coordinator.async_mealie_lists()
 
@@ -809,13 +809,13 @@ SLUG = vol.All(str, vol.Length(min=1, max=200))
 MEAL_TYPE = vol.In(("breakfast", "lunch", "dinner", "side", "snack", "dessert", "drink"))
 
 
-@_command({vol.Required("type"): "omniplan/mealie_get_recipes", vol.Optional("refresh", default=False): bool})
+@_command({vol.Required("type"): "taskdragon/mealie_get_recipes", vol.Optional("refresh", default=False): bool})
 async def ws_mealie_get_recipes(hass, connection, msg, coordinator, actor):
     return await coordinator.recipes.recipes(refresh=msg["refresh"])
 
 
 @_command(
-    {vol.Required("type"): "omniplan/mealie_get_recipe_detail", vol.Required("recipe_slug"): SLUG, vol.Optional("skip_seasonings"): vol.Any(None, bool)}
+    {vol.Required("type"): "taskdragon/mealie_get_recipe_detail", vol.Required("recipe_slug"): SLUG, vol.Optional("skip_seasonings"): vol.Any(None, bool)}
 )
 async def ws_mealie_get_recipe_detail(hass, connection, msg, coordinator, actor):
     """The whole recipe for the cooking view; images come through the authenticated proxy."""
@@ -823,7 +823,7 @@ async def ws_mealie_get_recipe_detail(hass, connection, msg, coordinator, actor)
 
 
 @_command(
-    {vol.Required("type"): "omniplan/mealie_recipe_preview", vol.Required("recipe_slug"): SLUG, vol.Optional("skip_seasonings"): vol.Any(None, bool)}
+    {vol.Required("type"): "taskdragon/mealie_recipe_preview", vol.Required("recipe_slug"): SLUG, vol.Optional("skip_seasonings"): vol.Any(None, bool)}
 )
 async def ws_mealie_recipe_preview(hass, connection, msg, coordinator, actor):
     return await coordinator.recipes.preview(msg["recipe_slug"], actor, skip_seasonings=msg.get("skip_seasonings"))
@@ -831,7 +831,7 @@ async def ws_mealie_recipe_preview(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/mealie_add_recipe_to_groceries",
+        vol.Required("type"): "taskdragon/mealie_add_recipe_to_groceries",
         vol.Required("recipe_slug"): SLUG,
         vol.Optional("plan_id"): OPT_ID,
         vol.Optional("ingredients"): vol.Any(None, vol.All([vol.All(int, vol.Range(min=0, max=999))], vol.Length(max=200))),
@@ -857,7 +857,7 @@ async def ws_mealie_add_recipe_to_groceries(hass, connection, msg, coordinator, 
 
 @_command(
     {
-        vol.Required("type"): "omniplan/mealie_plan_meal",
+        vol.Required("type"): "taskdragon/mealie_plan_meal",
         vol.Required("recipe_slug"): SLUG,
         vol.Required("date"): _text(40),
         vol.Optional("entry_type", default="dinner"): MEAL_TYPE,
@@ -881,7 +881,7 @@ async def ws_mealie_plan_meal(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/mealie_import_settings",
+        vol.Required("type"): "taskdragon/mealie_import_settings",
         vol.Optional("settings"): vol.Schema(
             {
                 vol.Optional("skip_seasonings"): bool,
@@ -897,6 +897,6 @@ async def ws_mealie_import_settings(hass, connection, msg, coordinator, actor):
     return await coordinator.recipes.settings()
 
 
-@_command({vol.Required("type"): "omniplan/run_shift_balance"}, admin=True)
+@_command({vol.Required("type"): "taskdragon/run_shift_balance"}, admin=True)
 async def ws_run_shift_balance(hass, connection, msg, coordinator, actor):
     return await coordinator.async_run_shift_balance()

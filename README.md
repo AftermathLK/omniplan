@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/banner.webp" alt="OmniPlan: the household planner that lives inside Home Assistant" width="100%">
+  <img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/banner.webp" alt="TaskDragon: the household planner that lives inside Home Assistant" width="100%">
 </p>
 
 <p align="center">
   <a href="https://hacs.xyz/"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/badges/hacs.svg" alt="HACS custom repository"></a>
   <a href="https://www.home-assistant.io/"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/badges/home-assistant.svg" alt="Home Assistant 2024.11 or newer"></a>
-  <img src="https://img.shields.io/github/manifest-json/v/AftermathLK/omniplan?filename=custom_components%2Fomniplan%2Fmanifest.json&style=for-the-badge&label=version&color=0A84E0" alt="Version">
+  <img src="https://img.shields.io/github/manifest-json/v/AftermathLK/omniplan?filename=custom_components%2Ftaskdragon%2Fmanifest.json&style=for-the-badge&label=version&color=0A84E0" alt="Version">
   <img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/badges/no-cloud.svg" alt="No cloud">
 </p>
 
@@ -26,7 +26,7 @@
 
 ---
 
-OmniPlan is a Home Assistant custom integration plus a dashboard card and sidebar panel. It keeps a household's lists in one SQLite file inside Home Assistant (`.storage/omniplan.db`), exposes every shared plan as a native `todo.*` entity, and adds what plain to-do lists can't do: recurring chores with streaks, a shopping grid that merges quantities, a Mealie recipe browser and cooking view, an asset register with sensor-driven maintenance, a camera barcode scanner, and portable backups.
+TaskDragon is a Home Assistant custom integration plus a dashboard card and sidebar panel. It keeps a household's lists in one SQLite file inside Home Assistant (`.storage/taskdragon.db`), exposes every shared plan as a native `todo.*` entity, and adds what plain to-do lists can't do: recurring chores with streaks, a shopping grid that merges quantities, a Mealie recipe browser and cooking view, an asset register with sensor-driven maintenance, a camera barcode scanner, and portable backups.
 
 <table>
   <tr>
@@ -101,7 +101,7 @@ OmniPlan is a Home Assistant custom integration plus a dashboard card and sideba
 <p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/maintenance.webp" alt="Maintenance dashboard with status, progress and actions, and a water softener's salt gauge" width="100%"></p>
 
 - Every appliance, system or vehicle is an **object** (`#3`) with **tasks** (`#3.1`), a parts inventory, manuals and invoices, and a full service history.
-- Tasks fall due on **rolling or planned intervals**, seasonal windows, or **sensor triggers**: thresholds, counters (gallons, miles, kWh), runtime hours, cycle counts and leak sensors. Feedback (*too early / just right / too late*) teaches OmniPlan a better interval.
+- Tasks fall due on **rolling or planned intervals**, seasonal windows, or **sensor triggers**: thresholds, counters (gallons, miles, kWh), runtime hours, cycle counts and leak sensors. Feedback (*too early / just right / too late*) teaches TaskDragon a better interval.
 - Complete by tapping, scanning an **NFC tag** at the appliance, or a printed **QR code**. Print a **PDF service record** for any date range.
 - A **water softener** with a water meter gets a live salt estimate: level, gallons and days until refill, learned from what you see in the tank.
 
@@ -117,13 +117,13 @@ OmniPlan is a Home Assistant custom integration plus a dashboard card and sideba
 <p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/backups.webp" alt="Settings and backups: download, snapshots, schedule and restore" width="100%"></p>
 
 - **Download a portable backup** (`.zip`) with the database, a plain-JSON dump of every table, every uploaded document and a checksum manifest.
-- **Daily snapshots** at 03:15 into `/config/backups/omniplan/` (the last 14 are kept), plus the `omniplan.create_backup` service for automations.
+- **Daily snapshots** at 03:15 into `/config/backups/taskdragon/` (the last 14 are kept), plus the `taskdragon.create_backup` service for automations.
 - **Restore** with *Merge import* or *Full replace*. Checksums and the schema are verified, and a safety snapshot is taken first.
-- The manifest maps every person and every Home Assistant entity, tag and service OmniPlan uses to portable ids, enough to move OmniPlan to a standalone app later.
+- The manifest maps every person and every Home Assistant entity, tag and service TaskDragon uses to portable ids, enough to move TaskDragon to a standalone app later.
 
 ### Light and dark
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/dark-mode.webp" alt="OmniPlan following a dark Home Assistant theme" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/dark-mode.webp" alt="TaskDragon following a dark Home Assistant theme" width="100%"></p>
 
 The card uses your Home Assistant theme's colors, so it follows light, dark and custom themes.
 
@@ -131,15 +131,15 @@ The card uses your Home Assistant theme's colors, so it follows light, dark and 
 
 ### HACS (recommended)
 
-[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=AftermathLK&repository=omniplan&category=integration)
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=AftermathLK&repository=taskdragon&category=integration)
 
 1. Click the button above, or in HACS open **⋮ → Custom repositories**, add `https://github.com/AftermathLK/omniplan` with type **Integration**.
-2. Find **OmniPlan** in HACS and **Download** it.
+2. Find **TaskDragon** in HACS and **Download** it.
 3. **Restart Home Assistant.** The Python requirements (`aiosqlite`, `python-dateutil`) install automatically.
 
 ### Manual
 
-1. Download this repository and copy `custom_components/omniplan` into your Home Assistant `config/custom_components/` folder.
+1. Download this repository and copy `custom_components/taskdragon` into your Home Assistant `config/custom_components/` folder.
 2. Restart Home Assistant.
 
 ### Requirements
@@ -148,19 +148,34 @@ The card uses your Home Assistant theme's colors, so it follows light, dark and 
 - Optional: [Mealie](https://mealie.io/) v1 or v2 for recipes, meal plans and shopping sync.
 - For the barcode scanner, Home Assistant must be reached over **HTTPS** (or through the Companion app), because browsers only allow the camera on secure pages.
 
+### Coming from OmniPlan?
+
+TaskDragon is the new name of the integration previously published as OmniPlan. Nothing is lost when you switch:
+
+1. Install TaskDragon (above) and restart. On its first start TaskDragon copies the old database (lists, maintenance history, barcodes, settings) and the uploaded documents into its own files. The old ones are left untouched.
+2. **Add integration → TaskDragon** offers to **import your existing setup** (people, schedule and Mealie connection) in one step.
+3. Update what refers to the old name:
+   - automations and scripts: `omniplan.*` services become `taskdragon.*`, and `omniplan_*` events become `taskdragon_*`;
+   - to-do entities are recreated as `todo.taskdragon_*`;
+   - dashboards: change `type: custom:omniplan-card` to `custom:taskdragon-card` (old cards keep working meanwhile);
+   - the sidebar panel moves to `/taskdragon`. Printed QR labels that point at `/omniplan` keep opening the right item.
+4. Remove OmniPlan: **Settings → Devices & services → OmniPlan → Delete**, then remove it in HACS.
+
+Old portable backups (`/config/backups/omniplan/`) restore through **Upload & restore**.
+
 ## Ten-minute setup
 
 1. **Add the integration.**
 
-   [![Open your Home Assistant instance and start setting up OmniPlan.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=omniplan)
+   [![Open your Home Assistant instance and start setting up TaskDragon.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=taskdragon)
 
-   Or go to **Settings → Devices & services → Add integration → OmniPlan**, then walk through:
+   Or go to **Settings → Devices & services → Add integration → TaskDragon**, then walk through:
    - **Household**: your `person.*` entities, a `weather.*` entity, and optionally an Assist agent for Brain Dump.
    - **Work shifts**: per person, an optional work calendar and shift keywords for shift-aware chores.
-   - **Mealie** (optional): URL and API token (Mealie → Profile → API Tokens). OmniPlan tests them before saving and never sends the token to the browser.
+   - **Mealie** (optional): URL and API token (Mealie → Profile → API Tokens). TaskDragon tests them before saving and never sends the token to the browser.
    - **Schedule**: rollover hour, shift and weekend-weather check times, meal times, leftovers, prep rules and the sidebar panel.
 2. **Link people to users.** In **Settings → People**, link each household member's person to their Home Assistant user, so My Day, Claim and "Last done by" know who is who.
-3. **Open OmniPlan.** Use the **OmniPlan** sidebar panel, or add the card to a dashboard (it's in the card picker; no resource to add). OmniPlan starts with Quick List, Daily Chores, Groceries, Hardware, Projects, Home Maintenance, Trip Packing and Pantry & Spices.
+3. **Open TaskDragon.** Use the **TaskDragon** sidebar panel, or add the card to a dashboard (it's in the card picker; no resource to add). TaskDragon starts with Quick List, Daily Chores, Groceries, Hardware, Projects, Home Maintenance, Trip Packing and Pantry & Spices.
 4. **Try it.**
    - Type into the Brain Dump bar: *"call the dentist tomorrow and add milk to groceries"*.
    - In **Groceries → Browse Mealie Recipes**, tap a recipe's photo to cook, or **Add ingredients**.
@@ -172,30 +187,30 @@ The [user guide](docs/GUIDE.md) walks through every screen.
 
 ## Card configuration
 
-The card's JavaScript is served and registered automatically. Add it from the card picker ("OmniPlan") or in YAML:
+The card's JavaScript is served and registered automatically. Add it from the card picker ("TaskDragon") or in YAML:
 
 ```yaml
 # Opens on the Quick List (the default)
-type: custom:omniplan-card
+type: custom:taskdragon-card
 view_mode: quick       # quick | auto | personal | kiosk_split
 ```
 
 ```yaml
 # Phone / Companion app: opens on "My Day" for whoever is logged in
-type: custom:omniplan-card
+type: custom:taskdragon-card
 view_mode: auto
 ```
 
 ```yaml
 # Wall tablet: family split view
-type: custom:omniplan-card
+type: custom:taskdragon-card
 view_mode: kiosk_split
 title: Today
 ```
 
 ```yaml
 # One plan only, no category dropdown (e.g. the grocery list on the fridge tablet)
-type: custom:omniplan-card
+type: custom:taskdragon-card
 plan: Groceries        # plan name or id
 ```
 
@@ -205,7 +220,7 @@ plan: Groceries        # plan name or id
 | `plan` | none | Show one plan only (name or id). |
 | `plans` | all | Plan names or ids to offer in the category dropdown. |
 | `person` | your person | Force whose My Day is shown. |
-| `title` | `OmniPlan` | Card title. |
+| `title` | `TaskDragon` | Card title. |
 | `show_brain_dump` | `true` | Show the Brain Dump bar and microphone. |
 
 ## Documentation
@@ -239,5 +254,5 @@ See the [reference](docs/REFERENCE.md#development) for the module map.
 
 - Built for [Home Assistant](https://www.home-assistant.io/); icons are [Material Design Icons](https://pictogrammers.com/library/mdi/) as shipped with Home Assistant.
 - Recipe features use the [Mealie](https://mealie.io/) API. Product suggestions come from [Open Food Facts](https://world.openfoodfacts.org/).
-- The barcode fallback is [ZXing](https://github.com/zxing-js/library) 0.23.0 (Apache License 2.0), bundled unmodified in `custom_components/omniplan/frontend/vendor/`.
-- Screenshots show demo data in a test harness; recipe photos are illustrations.
+- The barcode fallback is [ZXing](https://github.com/zxing-js/library) 0.23.0 (Apache License 2.0), bundled unmodified in `custom_components/taskdragon/frontend/vendor/`.
+- Screenshots show demo data in a test harness; recipe photos are illustrations. The TaskDragon emblem is an original ouroboros design.

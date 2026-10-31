@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 from conftest import plan_by_name
 
-from omniplan.barcode_manager import BarcodeManager
-from omniplan.database import MEVENTS, MPARTS
-from omniplan.maintenance_manager import MaintenanceManager
-from omniplan.openfoodfacts import LookupFailed
-from omniplan.planner import Actor, PlannerError
+from taskdragon.barcode_manager import BarcodeManager
+from taskdragon.database import MEVENTS, MPARTS
+from taskdragon.maintenance_manager import MaintenanceManager
+from taskdragon.openfoodfacts import LookupFailed
+from taskdragon.planner import Actor, PlannerError
 
 ALEX = Actor(user_id="u-alex", user_name="Alex", person="person.alex", is_admin=True)
 SAM = Actor(user_id="u-sam", user_name="Sam", person="person.sam")
@@ -109,7 +109,7 @@ async def test_two_brands_share_a_part_use_and_restock(planner, scan) -> None:
         await scan.apply_action(SALT_BAG, ALEX, action="set_pantry_status", status="in_stock")
     with pytest.raises(PlannerError):
         await scan.apply_action("12345678", ALEX, action="use_one", symbology="code_128")
-    assert any(event == "omniplan_barcode_action" for event, _ in planner.test_events)
+    assert any(event == "taskdragon_barcode_action" for event, _ in planner.test_events)
 
 
 async def test_pantry_scan_marks_in_stock_with_undo_and_override(planner, scan) -> None:

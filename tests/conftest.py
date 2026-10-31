@@ -1,9 +1,9 @@
 """Test bootstrap.
 
-The pure-logic modules of OmniPlan (units, dependencies, recurrence, shift
+The pure-logic modules of TaskDragon (units, dependencies, recurrence, shift
 balancing, snooze rules, kitchen, brain dump parsing, database and planner)
 import nothing from Home Assistant. To test them without installing Home
-Assistant we register the integration directory as a bare ``omniplan`` package
+Assistant we register the integration directory as a bare ``taskdragon`` package
 so its ``__init__.py`` (which does import Home Assistant) is never executed.
 """
 
@@ -13,12 +13,12 @@ import sys
 import types
 from pathlib import Path
 
-PACKAGE_DIR = Path(__file__).resolve().parents[1] / "custom_components" / "omniplan"
+PACKAGE_DIR = Path(__file__).resolve().parents[1] / "custom_components" / "taskdragon"
 
-if "omniplan" not in sys.modules:
-    package = types.ModuleType("omniplan")
+if "taskdragon" not in sys.modules:
+    package = types.ModuleType("taskdragon")
     package.__path__ = [str(PACKAGE_DIR)]  # type: ignore[attr-defined]
-    sys.modules["omniplan"] = package
+    sys.modules["taskdragon"] = package
 
 
 # ---------------------------------------------------------------------------
@@ -29,8 +29,8 @@ from zoneinfo import ZoneInfo  # noqa: E402
 
 import pytest  # noqa: E402
 
-from omniplan.database import OmniPlanDB  # noqa: E402
-from omniplan.planner import Planner  # noqa: E402
+from taskdragon.database import TaskDragonDB  # noqa: E402
+from taskdragon.planner import Planner  # noqa: E402
 
 TZ = ZoneInfo("America/Chicago")
 
@@ -56,7 +56,7 @@ def clock() -> Clock:
 
 @pytest.fixture
 async def db(tmp_path):
-    database = OmniPlanDB(str(tmp_path / "omniplan.db"))
+    database = TaskDragonDB(str(tmp_path / "taskdragon.db"))
     await database.async_open()
     yield database
     await database.async_close()

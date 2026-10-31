@@ -15,9 +15,9 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util import dt as dt_util
 
-from custom_components.omniplan.const import DOMAIN
-from custom_components.omniplan.diagnostics import async_get_config_entry_diagnostics
-from custom_components.omniplan.mealie_client import MealieClient, MealieError
+from custom_components.taskdragon.const import DOMAIN
+from custom_components.taskdragon.diagnostics import async_get_config_entry_diagnostics
+from custom_components.taskdragon.mealie_client import MealieClient, MealieError
 
 OPTIONS = {"people": [{"entity_id": "person.alex", "calendar": None, "keywords": "Shift"}], "rollover_hour": 0}
 SECRET_TOKEN = "TOP-SECRET-TOKEN-0123456789"
@@ -50,7 +50,7 @@ class WS:
 @pytest.fixture
 async def entry(hass: HomeAssistant) -> MockConfigEntry:
     hass.states.async_set("person.alex", "home", {"friendly_name": "Alex"})
-    config_entry = MockConfigEntry(domain=DOMAIN, title="OmniPlan", version=1, minor_version=2, data={}, options=OPTIONS)
+    config_entry = MockConfigEntry(domain=DOMAIN, title="TaskDragon", version=1, minor_version=2, data={}, options=OPTIONS)
     config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
@@ -72,43 +72,43 @@ def _plan(board: dict, name: str) -> dict:
 
 async def test_private_lists_are_filtered_on_the_server(hass: HomeAssistant, entry, clients) -> None:
     admin, member = clients
-    a_board = (await admin.call({"type": "omniplan/get_board"}))["result"]
-    m_board = (await member.call({"type": "omniplan/get_board"}))["result"]
+    a_board = (await admin.call({"type": "taskdragon/get_board"}))["result"]
+    m_board = (await member.call({"type": "taskdragon/get_board"}))["result"]
     a_private, m_private = a_board["quick"]["private"], m_board["quick"]["private"]
     assert a_private and m_private and a_private != m_private
     assert a_board["quick"]["shared"] == m_board["quick"]["shared"]
     assert (a_board["user"]["is_admin"], m_board["user"]["is_admin"]) == (True, False)
 
-    assert (await member.call({"type": "omniplan/subscribe"}))["success"]
-    secret = (await admin.call({"type": "omniplan/save_task", "task": {"plan_id": a_private, "summary": "Engagement ring"}}))["result"]
+    assert (await member.call({"type": "taskdragon/subscribe"}))["success"]
+    secret = (await admin.call({"type": "taskdragon/save_task", "task": {"plan_id": a_private, "summary": "Engagement ring"}}))["result"]
     await hass.async_block_till_done()
     await member.flush()
     assert member.events == []  # no live update leaks for someone else's private list
 
-    m_board = (await member.call({"type": "omniplan/get_board"}))["result"]
+    m_board = (await member.call({"type": "taskdragon/get_board"}))["result"]
     assert a_private not in {p["id"] for p in m_board["plans"]}
     assert "Engagement ring" not in json.dumps(m_board)
 
-    mine = (await member.call({"type": "omniplan/save_task", "task": {"plan_id": m_board["quick"]["shared"], "summary": "Mine"}}))["result"]
+    mine = (await member.call({"type": "taskdragon/save_task", "task": {"plan_id": m_board["quick"]["shared"], "summary": "Mine"}}))["result"]
     attempts = [
-        {"type": "omniplan/set_completed", "uid": secret["uid"], "completed": True},
-        {"type": "omniplan/save_task", "task": {"uid": secret["uid"], "summary": "renamed"}},
-        {"type": "omniplan/save_task", "task": {"plan_id": a_private, "summary": "planted"}},
-        {"type": "omniplan/delete_tasks", "uids": [secret["uid"]]},
-        {"type": "omniplan/task_history", "uid": secret["uid"]},
-        {"type": "omniplan/get_board", "plan_id": a_private},
-        {"type": "omniplan/transfer_task", "uid": mine["uid"], "plan_id": a_private},
-        {"type": "omniplan/move_task", "uid": mine["uid"], "plan_id": a_private},
-        {"type": "omniplan/bulk_action", "uids": [mine["uid"]], "action": "move", "value": a_private},
-        {"type": "omniplan/save_section", "section": {"plan_id": a_private, "name": "x"}},
-        {"type": "omniplan/add_dependency", "uid": mine["uid"], "blocked_by_uid": secret["uid"]},
-        {"type": "omniplan/save_plan", "plan": {"id": a_private, "name": "mine now"}},
-        {"type": "omniplan/clear_completed", "plan_id": a_private},
+        {"type": "taskdragon/set_completed", "uid": secret["uid"], "completed": True},
+        {"type": "taskdragon/save_task", "task": {"uid": secret["uid"], "summary": "renamed"}},
+        {"type": "taskdragon/save_task", "task": {"plan_id": a_private, "summary": "planted"}},
+        {"type": "taskdragon/delete_tasks", "uids": [secret["uid"]]},
+        {"type": "taskdragon/task_history", "uid": secret["uid"]},
+        {"type": "taskdragon/get_board", "plan_id": a_private},
+        {"type": "taskdragon/transfer_task", "uid": mine["uid"], "plan_id": a_private},
+        {"type": "taskdragon/move_task", "uid": mine["uid"], "plan_id": a_private},
+        {"type": "taskdragon/bulk_action", "uids": [mine["uid"]], "action": "move", "value": a_private},
+        {"type": "taskdragon/save_section", "section": {"plan_id": a_private, "name": "x"}},
+        {"type": "taskdragon/add_dependency", "uid": mine["uid"], "blocked_by_uid": secret["uid"]},
+        {"type": "taskdragon/save_plan", "plan": {"id": a_private, "name": "mine now"}},
+        {"type": "taskdragon/clear_completed", "plan_id": a_private},
     ]
     for message in attempts:
         reply = await member.call(message)
         assert reply["success"] is False and reply["error"]["code"] == "not_found", message
-    applied = (await member.call({"type": "omniplan/apply_actions", "actions": [{"type": "task", "summary": "x", "plan_id": a_private}]}))["result"]
+    applied = (await member.call({"type": "taskdragon/apply_actions", "actions": [{"type": "task", "summary": "x", "plan_id": a_private}]}))["result"]
     assert applied["results"][0]["ok"] is False
 
     stored = await entry.runtime_data.db.get_task(secret["uid"])
@@ -116,7 +116,7 @@ async def test_private_lists_are_filtered_on_the_server(hass: HomeAssistant, ent
     assert await entry.runtime_data.db.list_tasks(a_private) == [stored]
 
     # Household lists stay shared and live.
-    await admin.call({"type": "omniplan/save_task", "task": {"plan_id": a_board["quick"]["shared"], "summary": "Call plumber"}})
+    await admin.call({"type": "taskdragon/save_task", "task": {"plan_id": a_board["quick"]["shared"], "summary": "Call plumber"}})
     await hass.async_block_till_done()
     await member.flush()
     assert any(a_board["quick"]["shared"] in event["event"]["plan_ids"] for event in member.events)
@@ -124,16 +124,16 @@ async def test_private_lists_are_filtered_on_the_server(hass: HomeAssistant, ent
 
 async def test_sharing_a_private_list_with_a_household_member(hass: HomeAssistant, entry, clients, hass_read_only_user) -> None:
     admin, member = clients
-    created = (await admin.call({"type": "omniplan/save_plan", "plan": {"name": "Surprise party", "archetype": "quick_list", "is_private": True}}))["result"]
+    created = (await admin.call({"type": "taskdragon/save_plan", "plan": {"name": "Surprise party", "archetype": "quick_list", "is_private": True}}))["result"]
     assert created["is_private"] and created["owner_user_id"]
-    reply = await member.call({"type": "omniplan/get_board", "plan_id": created["id"]})
+    reply = await member.call({"type": "taskdragon/get_board", "plan_id": created["id"]})
     assert reply["error"]["code"] == "not_found"
-    shared = (await admin.call({"type": "omniplan/save_plan", "plan": {"id": created["id"], "shared_with": [hass_read_only_user.id, "no-such-user"]}}))["result"]
+    shared = (await admin.call({"type": "taskdragon/save_plan", "plan": {"id": created["id"], "shared_with": [hass_read_only_user.id, "no-such-user"]}}))["result"]
     assert shared["shared_with"] == [hass_read_only_user.id]  # unknown users are dropped
-    board = (await member.call({"type": "omniplan/get_board", "plan_id": created["id"]}))["result"]
+    board = (await member.call({"type": "taskdragon/get_board", "plan_id": created["id"]}))["result"]
     assert [p["id"] for p in board["plans"] if p["id"] == created["id"]] == [created["id"]]
     # Shared-with users can use the list but not manage it.
-    reply = await member.call({"type": "omniplan/delete_private_plan", "plan_id": created["id"]})
+    reply = await member.call({"type": "taskdragon/delete_private_plan", "plan_id": created["id"]})
     assert reply["error"]["code"] == "unauthorized"
     # Private lists never get a todo entity (entity state is readable by every user).
     assert not any("surprise" in state.entity_id for state in hass.states.async_all("todo"))
@@ -141,66 +141,66 @@ async def test_sharing_a_private_list_with_a_household_member(hass: HomeAssistan
 
 async def test_admin_only_commands(hass: HomeAssistant, entry, clients) -> None:
     admin, member = clients
-    board = (await member.call({"type": "omniplan/get_board"}))["result"]
+    board = (await member.call({"type": "taskdragon/get_board"}))["result"]
     groceries = _plan(board, "Groceries")
     for message in (
-        {"type": "omniplan/delete_plan", "plan_id": groceries["id"]},
-        {"type": "omniplan/mealie_lists"},
-        {"type": "omniplan/run_shift_balance"},
-        {"type": "omniplan/save_plan", "plan": {"id": groceries["id"], "settings": {"mealie_list_id": "L1"}}},
-        {"type": "omniplan/save_plan", "plan": {"id": groceries["id"], "settings": {"role": "chores"}}},
-        {"type": "omniplan/save_plan", "plan": {"id": groceries["id"], "archived": True}},
-        {"type": "omniplan/save_plan", "plan": {"id": groceries["id"], "is_private": True}},
+        {"type": "taskdragon/delete_plan", "plan_id": groceries["id"]},
+        {"type": "taskdragon/mealie_lists"},
+        {"type": "taskdragon/run_shift_balance"},
+        {"type": "taskdragon/save_plan", "plan": {"id": groceries["id"], "settings": {"mealie_list_id": "L1"}}},
+        {"type": "taskdragon/save_plan", "plan": {"id": groceries["id"], "settings": {"role": "chores"}}},
+        {"type": "taskdragon/save_plan", "plan": {"id": groceries["id"], "archived": True}},
+        {"type": "taskdragon/save_plan", "plan": {"id": groceries["id"], "is_private": True}},
     ):
         reply = await member.call(message)
         assert reply["success"] is False and reply["error"]["code"] == "unauthorized", message
     # Everyday edits of household lists are fine for everyone.
-    assert (await member.call({"type": "omniplan/save_plan", "plan": {"id": groceries["id"], "name": "Grocery run"}}))["success"]
+    assert (await member.call({"type": "taskdragon/save_plan", "plan": {"id": groceries["id"], "name": "Grocery run"}}))["success"]
 
     # A member owns and deletes their own private category without being an admin.
-    mine = (await member.call({"type": "omniplan/save_plan", "plan": {"name": "My garden", "archetype": "projects_diy", "is_private": True}}))["result"]
-    assert (await member.call({"type": "omniplan/delete_plan", "plan_id": mine["id"]}))["error"]["code"] == "unauthorized"
-    other = (await member.call({"type": "omniplan/save_plan", "plan": {"name": "Spare", "archetype": "quick_list", "is_private": True}}))["result"]
+    mine = (await member.call({"type": "taskdragon/save_plan", "plan": {"name": "My garden", "archetype": "projects_diy", "is_private": True}}))["result"]
+    assert (await member.call({"type": "taskdragon/delete_plan", "plan_id": mine["id"]}))["error"]["code"] == "unauthorized"
+    other = (await member.call({"type": "taskdragon/save_plan", "plan": {"name": "Spare", "archetype": "quick_list", "is_private": True}}))["result"]
     # Administrators get no back door into someone's private list.
-    assert (await admin.call({"type": "omniplan/delete_plan", "plan_id": other["id"]}))["error"]["code"] == "not_found"
-    assert (await member.call({"type": "omniplan/delete_private_plan", "plan_id": mine["id"]}))["success"]
-    assert (await member.call({"type": "omniplan/delete_private_plan", "plan_id": groceries["id"]}))["error"]["code"] == "unauthorized"
-    assert (await admin.call({"type": "omniplan/delete_plan", "plan_id": groceries["id"]}))["success"]
+    assert (await admin.call({"type": "taskdragon/delete_plan", "plan_id": other["id"]}))["error"]["code"] == "not_found"
+    assert (await member.call({"type": "taskdragon/delete_private_plan", "plan_id": mine["id"]}))["success"]
+    assert (await member.call({"type": "taskdragon/delete_private_plan", "plan_id": groceries["id"]}))["error"]["code"] == "unauthorized"
+    assert (await admin.call({"type": "taskdragon/delete_plan", "plan_id": groceries["id"]}))["success"]
 
 
 async def test_input_validation(hass: HomeAssistant, entry, clients) -> None:
     admin, _member = clients
-    board = (await admin.call({"type": "omniplan/get_board"}))["result"]
+    board = (await admin.call({"type": "taskdragon/get_board"}))["result"]
     chores = _plan(board, "Daily Chores")
-    too_long = await admin.call({"type": "omniplan/save_task", "task": {"plan_id": chores["id"], "summary": "x" * 501}})
+    too_long = await admin.call({"type": "taskdragon/save_task", "task": {"plan_id": chores["id"], "summary": "x" * 501}})
     assert too_long["success"] is False
-    bad_link = await admin.call({"type": "omniplan/save_task", "task": {"plan_id": chores["id"], "summary": "x", "link_url": "javascript:alert(1)"}})
+    bad_link = await admin.call({"type": "taskdragon/save_task", "task": {"plan_id": chores["id"], "summary": "x", "link_url": "javascript:alert(1)"}})
     assert bad_link["error"]["code"] == "invalid"
-    bad_icon = await admin.call({"type": "omniplan/save_plan", "plan": {"name": "x", "archetype": "quick_list", "icon": "x\" onload=\"alert(1)"}})
+    bad_icon = await admin.call({"type": "taskdragon/save_plan", "plan": {"name": "x", "archetype": "quick_list", "icon": "x\" onload=\"alert(1)"}})
     assert bad_icon["success"] is False
-    bad_prefs = await admin.call({"type": "omniplan/set_prefs", "prefs": {"hidden_tabs": ["x"] * 501}})
+    bad_prefs = await admin.call({"type": "taskdragon/set_prefs", "prefs": {"hidden_tabs": ["x"] * 501}})
     assert bad_prefs["success"] is False
-    ok = await admin.call({"type": "omniplan/set_prefs", "prefs": {"hidden_tabs": ["family"], "collapsed": ["sec:1"]}})
+    ok = await admin.call({"type": "taskdragon/set_prefs", "prefs": {"hidden_tabs": ["family"], "collapsed": ["sec:1"]}})
     assert ok["result"]["hidden_tabs"] == ["family"]
 
 
 async def test_undo_tokens_belong_to_their_user(hass: HomeAssistant, entry, clients) -> None:
     admin, member = clients
-    board = (await admin.call({"type": "omniplan/get_board"}))["result"]
+    board = (await admin.call({"type": "taskdragon/get_board"}))["result"]
     chores = _plan(board, "Daily Chores")
-    task = (await admin.call({"type": "omniplan/save_task", "task": {"plan_id": chores["id"], "summary": "Dust"}}))["result"]
-    deleted = (await admin.call({"type": "omniplan/delete_tasks", "uids": [task["uid"]]}))["result"]
-    assert (await member.call({"type": "omniplan/undo", "token": deleted["undo"]}))["error"]["code"] == "undo_expired"
-    assert (await admin.call({"type": "omniplan/undo", "token": deleted["undo"]}))["result"]["restored"] == [task["uid"]]
+    task = (await admin.call({"type": "taskdragon/save_task", "task": {"plan_id": chores["id"], "summary": "Dust"}}))["result"]
+    deleted = (await admin.call({"type": "taskdragon/delete_tasks", "uids": [task["uid"]]}))["result"]
+    assert (await member.call({"type": "taskdragon/undo", "token": deleted["undo"]}))["error"]["code"] == "undo_expired"
+    assert (await admin.call({"type": "taskdragon/undo", "token": deleted["undo"]}))["result"]["restored"] == [task["uid"]]
     # The old raw-snapshot restore command no longer exists.
-    assert (await admin.call({"type": "omniplan/restore", "snapshot": {"tasks": []}}))["error"]["code"] == "unknown_command"
+    assert (await admin.call({"type": "taskdragon/restore", "snapshot": {"tasks": []}}))["error"]["code"] == "unknown_command"
 
 
 async def test_todo_entities_only_touch_their_own_plan(hass: HomeAssistant, entry, clients) -> None:
     coordinator = entry.runtime_data
     chores = await coordinator.planner.chores_plan()
     other = await coordinator.planner.save_task({"plan_id": chores["id"], "summary": "Not a grocery"})
-    entity = hass.data["todo"].get_entity("todo.omniplan_groceries")
+    entity = hass.data["todo"].get_entity("todo.taskdragon_groceries")
     with pytest.raises(ServiceValidationError):
         await entity.async_delete_todo_items([other["uid"]])
     with pytest.raises(ServiceValidationError):
@@ -208,7 +208,7 @@ async def test_todo_entities_only_touch_their_own_plan(hass: HomeAssistant, entr
     assert await coordinator.db.get_task(other["uid"]) is not None
 
     admin, _member = clients
-    reply = await admin.call({"type": "todo/item/move", "entity_id": "todo.omniplan_groceries", "uid": other["uid"]})
+    reply = await admin.call({"type": "todo/item/move", "entity_id": "todo.taskdragon_groceries", "uid": other["uid"]})
     assert reply["success"] is False
 
 
@@ -234,8 +234,8 @@ class QuietMealie:
 async def test_legacy_mealie_options_migrate_and_secrets_stay_on_the_server(hass: HomeAssistant, hass_ws_client) -> None:
     hass.states.async_set("person.alex", "home", {"friendly_name": "Alex"})
     with (
-        patch("custom_components.omniplan.coordinator.MealieClient", QuietMealie),
-        patch("custom_components.omniplan.coordinator.async_get_clientsession"),
+        patch("custom_components.taskdragon.coordinator.MealieClient", QuietMealie),
+        patch("custom_components.taskdragon.coordinator.async_get_clientsession"),
     ):
         entry = MockConfigEntry(
             domain=DOMAIN,
@@ -254,9 +254,9 @@ async def test_legacy_mealie_options_migrate_and_secrets_stay_on_the_server(hass
         assert entry.runtime_data.mealie is not None
 
         client = WS(await hass_ws_client(hass))
-        board = (await client.call({"type": "omniplan/get_board"}))["result"]
-        sync = (await client.call({"type": "omniplan/mealie_sync"}))["result"]
-        lists = (await client.call({"type": "omniplan/mealie_lists"}))["result"]
+        board = (await client.call({"type": "taskdragon/get_board"}))["result"]
+        sync = (await client.call({"type": "taskdragon/mealie_sync"}))["result"]
+        lists = (await client.call({"type": "taskdragon/mealie_lists"}))["result"]
         for payload in (board, sync, lists):
             dumped = json.dumps(payload)
             assert SECRET_TOKEN not in dumped and SECRET_HOST not in dumped

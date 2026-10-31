@@ -76,7 +76,7 @@ class RecipeBrowser:
     def _client(self) -> Any:
         client = self._mealie()
         if client is None:
-            raise PlannerError("mealie_disabled", "Connect Mealie in OmniPlan's options to browse recipes")
+            raise PlannerError("mealie_disabled", "Connect Mealie in TaskDragon's options to browse recipes")
         return client
 
     # ------------------------------------------------------------------
@@ -160,7 +160,7 @@ class RecipeBrowser:
         )
         detail["slug"] = detail["slug"] or slug
         if detail["has_image"]:
-            detail["image_url"] = f"/api/omniplan/mealie_image/{detail['id']}?size=original"
+            detail["image_url"] = f"/api/taskdragon/mealie_image/{detail['id']}?size=original"
         return detail
 
     async def preview(self, slug: str, actor: Actor, *, skip_seasonings: bool | None = None, scale: float = 1.0) -> dict[str, Any]:

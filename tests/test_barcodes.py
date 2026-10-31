@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from omniplan.barcodes import (
+from taskdragon.barcodes import (
     BarcodeError,
     best_match,
     display_barcode,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from conftest import plan_by_name
 
-from omniplan.planner import Actor, PlannerError
+from taskdragon.planner import Actor, PlannerError
 
 ALEX = Actor(user_id="u1", user_name="Alex", person="person.alex")
 
@@ -90,7 +90,7 @@ async def test_pantry_low_pushes_ingredients(planner) -> None:
     assert [c["summary"] for c in result["created"]] == ["Chili powder", "Cumin"]
     tasks = await planner.db.list_tasks(groceries["id"])
     assert {t["summary"]: t["category"] for t in tasks} == {"Chili powder": "Spices/Pantry", "Cumin": "Spices/Pantry"}
-    assert any(event == "omniplan_pantry_low" for event, _ in planner.test_events)
+    assert any(event == "taskdragon_pantry_low" for event, _ in planner.test_events)
     # Going from low to out does not push twice.
     again = await planner.set_pantry_state(item["id"], "out", actor=ALEX)
     assert again["created"] == []
@@ -134,7 +134,7 @@ async def test_time_snooze_wakes_up(planner, clock) -> None:
     assert await planner.wake_due_snoozes() == [task["uid"]]
     woke = await planner.db.get_task(task["uid"])
     assert woke["status"] == "in_process"  # previous status restored
-    assert any(event == "omniplan_task_unsnoozed" for event, _ in planner.test_events)
+    assert any(event == "taskdragon_task_unsnoozed" for event, _ in planner.test_events)
 
 
 async def test_context_snooze_rules(planner) -> None:

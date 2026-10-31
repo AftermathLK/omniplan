@@ -6,9 +6,9 @@ import pytest
 from conftest import plan_by_name
 from test_recipe_browser import ALEX, ORZO, TODAY, FakeClient, Tick
 
-from omniplan.planner import PlannerError
-from omniplan.recipe_browser import RecipeBrowser
-from omniplan.recipes import DEFAULT_SEASONINGS, ingredient_rows, parse_durations, recipe_detail, timer_label
+from taskdragon.planner import PlannerError
+from taskdragon.recipe_browser import RecipeBrowser
+from taskdragon.recipes import DEFAULT_SEASONINGS, ingredient_rows, parse_durations, recipe_detail, timer_label
 
 LASAGNA = {
     "id": "5a5a5a5a-1111-4222-8333-444455556666",
@@ -100,7 +100,7 @@ async def test_browser_detail_scaled_add_and_full_size_image(planner) -> None:
     client.recipes[LASAGNA["slug"]] = LASAGNA
     browser = RecipeBrowser(mealie=lambda: client, planner=planner, db=planner.db, today=lambda: TODAY, monotonic=Tick())
     detail = await browser.detail(LASAGNA["slug"], ALEX)
-    assert detail["image_url"] == f"/api/omniplan/mealie_image/{LASAGNA['id']}?size=original"
+    assert detail["image_url"] == f"/api/taskdragon/mealie_image/{LASAGNA['id']}?size=original"
     assert detail["url"].endswith("/r/lasagna") and detail["skip_seasonings"] is True
 
     groceries = await plan_by_name(planner, "Groceries")

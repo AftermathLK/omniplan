@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from omniplan.units import (
+from taskdragon.units import (
     COUNT,
     MASS,
     VOLUME,

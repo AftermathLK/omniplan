@@ -12,11 +12,11 @@ from zoneinfo import ZoneInfo
 import pytest
 from conftest import TZ, plan_by_name
 
-from omniplan.backup_manager import BackupError, BackupManager, parse_name
-from omniplan.const import PREF_KEYS
-from omniplan.database import MDOCS, OmniPlanDB
-from omniplan.maintenance_manager import MaintenanceManager
-from omniplan.planner import Actor, Planner
+from taskdragon.backup_manager import BackupError, BackupManager, parse_name
+from taskdragon.const import PREF_KEYS
+from taskdragon.database import MDOCS, TaskDragonDB
+from taskdragon.maintenance_manager import MaintenanceManager
+from taskdragon.planner import Actor, Planner
 
 ALEX = Actor(user_id="u-alex", user_name="Alex", person="person.alex", is_admin=True)
 SAM = Actor(user_id="u-sam", user_name="Sam", person="person.sam")
@@ -94,7 +94,7 @@ def _zip(path: str) -> tuple[dict, dict, zipfile.ZipFile]:
 
 
 async def _fresh(tmp_path, name: str, clock) -> Planner:
-    db = OmniPlanDB(str(tmp_path / name / "omniplan.db"))
+    db = TaskDragonDB(str(tmp_path / name / "taskdragon.db"))
     await db.async_open()
     planner = Planner(db, tz=TZ, clock=clock)
     await planner.seed_defaults()
@@ -110,18 +110,18 @@ async def test_snapshot_holds_everything_with_checksums_and_bridge(planner, tmp_
     now = Now()
     backups = _manager(planner.db, tmp_path, "src", now)
     info = await backups.create_snapshot()
-    assert info["name"] == "omniplan_portable_backup_20261029_031500.zip" and info["documents"] == 1 and info["missing_documents"] == 1
+    assert info["name"] == "taskdragon_portable_backup_20261029_031500.zip" and info["documents"] == 1 and info["missing_documents"] == 1
     manifest, dump, archive = _zip(os.path.join(backups.backup_dir, info["name"]))
     with archive:
         names = set(archive.namelist())
-        assert names == {"manifest_bridge.json", "database_dump.json", "omniplan.db", "documents/" + data["sha"]}
-        for member in ("database_dump.json", "omniplan.db"):
+        assert names == {"manifest_bridge.json", "database_dump.json", "taskdragon.db", "documents/" + data["sha"]}
+        for member in ("database_dump.json", "taskdragon.db"):
             raw = archive.read(member)
             assert manifest["files"][member] == {"sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}
         assert archive.read("documents/" + data["sha"]) == PDF
     assert manifest["schema_version"] == "1.0.0-portable" and manifest["source_platform"] == "home_assistant_custom_component"
     assert manifest["documents"][0]["filenames"] == ["manual.pdf"] and manifest["missing_documents"] == ["f" * 64]
-    assert dump["format"] == "omniplan-database-dump" and dump["db_schema_version"] == 4
+    assert dump["format"] == "taskdragon-database-dump" and dump["db_schema_version"] == 4
     expected = {"plans", "tasks", "task_dependencies", "completion_logs", "pantry_items", "snooze_rules", "trips", "sections", "barcode_mappings", "maint_objects", "maint_tasks", "maint_parts", "maint_documents", "maint_events", "salt_observations", "meta", "user_prefs"}
     assert expected <= set(dump["tables"]) and manifest["counts"]["barcode_mappings"] == 1
     assert "settings" in dump["tables"]["plans"]["json_columns"]
@@ -154,7 +154,7 @@ async def test_snapshot_holds_everything_with_checksums_and_bridge(planner, tmp_
     ]:
         assert key in bindings, key
     filter_trigger = bindings[("sensor", "binary_sensor.furnace_running")]
-    assert filter_trigger["mqtt_topic_fallback"] == f"omniplan/bindings/{filter_trigger['binding_id']}/state"
+    assert filter_trigger["mqtt_topic_fallback"] == f"taskdragon/bindings/{filter_trigger['binding_id']}/state"
     assert filter_trigger["used_by"][0]["table"] == "maint_tasks" and len(filter_trigger["webhook_id"]) > 30
     assert bindings[("nfc_tag", "tag-furnace")]["ha_entity_id"] is None
     stable = {b["binding_id"] for b in manifest2["hardware_bindings_bridge"]}
@@ -243,7 +243,7 @@ async def test_damaged_or_foreign_backups_change_nothing(planner, tmp_path) -> N
         await backups.restore_file(no_doc, "merge")
 
     newer = tmp_path / "newer.json"
-    newer.write_text(json.dumps({"format": "omniplan-database-dump", "db_schema_version": 99, "tables": {}}))
+    newer.write_text(json.dumps({"format": "taskdragon-database-dump", "db_schema_version": 99, "tables": {}}))
     with pytest.raises(BackupError, match="newer"):
         await backups.restore_file(str(newer), "replace")
     junk = tmp_path / "junk.bin"
@@ -253,7 +253,7 @@ async def test_damaged_or_foreign_backups_change_nothing(planner, tmp_path) -> N
     with pytest.raises(BackupError):
         await backups.restore_file(path, "wipe")
     bad_value = tmp_path / "bad.json"
-    bad_value.write_text(json.dumps({"format": "omniplan-database-dump", "db_schema_version": 4, "tables": {"plans": {"rows": [{"id": "p", "name": {"nested": 1}}]}}}))
+    bad_value.write_text(json.dumps({"format": "taskdragon-database-dump", "db_schema_version": 4, "tables": {"plans": {"rows": [{"id": "p", "name": {"nested": 1}}]}}}))
     with pytest.raises(BackupError, match="Unsupported value"):
         await backups.restore_file(str(bad_value), "merge")
     assert _rows(await planner.db.export_portable()) == before
@@ -269,7 +269,7 @@ async def test_json_dump_and_database_file_fallback(planner, tmp_path) -> None:
         (tmp_path / "database_dump.json").write_bytes(archive.read("database_dump.json"))
         db_only = str(tmp_path / "dbonly.zip")
         with zipfile.ZipFile(db_only, "w") as out:
-            for name in ("manifest_bridge.json", "omniplan.db", "documents/" + data["sha"]):
+            for name in ("manifest_bridge.json", "taskdragon.db", "documents/" + data["sha"]):
                 out.writestr(name, archive.read(name))
 
     await planner.delete_tasks([data["task"]["uid"]])
@@ -279,7 +279,7 @@ async def test_json_dump_and_database_file_fallback(planner, tmp_path) -> None:
 
     await planner.delete_tasks([data["task"]["uid"]])
     report = await backups.restore_file(db_only, "merge")
-    assert any("omniplan.db" in w for w in report["warnings"])
+    assert any("taskdragon.db" in w for w in report["warnings"])
     assert await planner.db.get_task(data["task"]["uid"]) is not None
 
     # Unknown tables and columns are reported and skipped; rows orphaned by a missing parent are dropped.
@@ -300,8 +300,8 @@ async def test_retention_names_and_daily_schedule(planner, tmp_path) -> None:
         now.value = now.value.replace(minute=minute)
         await backups.create_snapshot()
     names = [s["name"] for s in await backups.list_snapshots()]
-    assert names == ["omniplan_portable_backup_20261029_030300.zip", "omniplan_portable_backup_20261029_030200.zip"]
-    for bad in ("../omniplan.db", "omniplan_portable_backup_20261029_030300.zip/../../x", "secrets.yaml", "omniplan_portable_backup_20991301_000000.zip"):
+    assert names == ["taskdragon_portable_backup_20261029_030300.zip", "taskdragon_portable_backup_20261029_030200.zip"]
+    for bad in ("../taskdragon.db", "taskdragon_portable_backup_20261029_030300.zip/../../x", "secrets.yaml", "taskdragon_portable_backup_20991301_000000.zip"):
         with pytest.raises(BackupError):
             backups.snapshot_path(bad)
     await backups.delete_snapshot(names[1])
@@ -314,7 +314,7 @@ async def test_retention_names_and_daily_schedule(planner, tmp_path) -> None:
     assert await backups.daily_tick() is None
     now.value = now.value.replace(minute=15)
     first = await backups.daily_tick()
-    assert first["name"] == "omniplan_portable_backup_20261030_031500.zip"
+    assert first["name"] == "taskdragon_portable_backup_20261030_031500.zip"
     assert await backups.daily_tick() is None  # once a day
     await backups.save_settings({"enabled": False})
     now.value = datetime(2026, 10, 31, 3, 15, tzinfo=now.value.tzinfo)

@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from conftest import plan_by_name
 
-from omniplan.dependencies import dependency_depths, open_blockers, resolve_blocking, would_create_cycle
-from omniplan.planner import Actor, PlannerError
+from taskdragon.dependencies import dependency_depths, open_blockers, resolve_blocking, would_create_cycle
+from taskdragon.planner import Actor, PlannerError
 
 ALEX = Actor(user_id="u1", user_name="Alex", person="person.alex")
 

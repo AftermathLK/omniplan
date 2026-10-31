@@ -3,7 +3,7 @@
 Prep rules come from three places, merged per recipe:
 
 * **Recipe tags** shaped ``<action>-<hours>h`` (``thaw-36h``, ``brine-24h``).
-* **Recipe extras / notes / description** containing ``omniplan: thaw 36h, smoker 4h``
+* **Recipe extras / notes / description** containing ``taskdragon: thaw 36h, smoker 4h``
   or ``lead time: thaw 36h``.
 * **Configured rules** (one per line): ``<tag or keyword> => <hours> | <template>``.
   A configured rule overrides the hours and wording for a matching tag.
@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from .const import AISLE_MEAT
+from .migration import LEGACY_PREP_MARKERS
 from .units import categorize
 
 DEFAULT_TEMPLATES: dict[str, str] = {
@@ -46,7 +47,7 @@ _INLINE_RE = re.compile(
     r"(?P<action>[a-z][a-z\-]*(?:\s[a-z\-]+)?)\s*[:=]?\s*(?P<hours>\d+(?:\.\d+)?)\s*(?P<unit>h|hr|hrs|hour|hours|m|min|mins|d|day|days)\b",
     re.IGNORECASE,
 )
-_INLINE_MARKERS = re.compile(r"(?:omniplan|lead[\s-]?times?|prep[\s-]?ahead)\s*[:\-]\s*(?P<body>[^\n]+)", re.IGNORECASE)
+_INLINE_MARKERS = re.compile(r"(?:taskdragon|omniplan|lead[\s-]?times?|prep[\s-]?ahead)\s*[:\-]\s*(?P<body>[^\n]+)", re.IGNORECASE)
 
 MEAT_WORDS = (
     "brisket", "pork shoulder", "pork butt", "pork loin", "tenderloin", "chuck roast", "short rib",
@@ -163,7 +164,7 @@ def discover_rules(recipe: Mapping[str, Any], configured: Sequence[PrepRule]) ->
     for text in texts:
         key, _, value = text.partition(":")
         bodies = [m.group("body") for m in _INLINE_MARKERS.finditer(text)]
-        if key.strip().lower() in ("omniplan", "omniplan_prep", "prep", "lead_time", "lead time"):
+        if key.strip().lower() in ("taskdragon", "taskdragon_prep", *LEGACY_PREP_MARKERS, "prep", "lead_time", "lead time"):
             bodies.append(value)
         for body in bodies:
             for inline in _INLINE_RE.finditer(body):

@@ -1,9 +1,9 @@
-"""Async SQLite persistence for OmniPlan (aiosqlite).
+"""Async SQLite persistence for TaskDragon (aiosqlite).
 
-The database lives at ``<config>/.storage/omniplan.db``. Schema versions are
+The database lives at ``<config>/.storage/taskdragon.db``. Schema versions are
 tracked with ``PRAGMA user_version`` and applied by :data:`MIGRATIONS` in order.
 
-All write methods run inside :meth:`OmniPlanDB._tx`, which serializes writers
+All write methods run inside :meth:`TaskDragonDB._tx`, which serializes writers
 with an asyncio lock and wraps the statements in a single transaction. Private
 ``_``-prefixed helpers never take the lock so they can be composed inside one.
 
@@ -791,7 +791,7 @@ def _marks(count: int) -> str:
     return ", ".join("?" for _ in range(int(count)))
 
 
-class OmniPlanDB:
+class TaskDragonDB:
     """Async SQLite manager."""
 
     def __init__(self, path: str) -> None:
@@ -830,7 +830,7 @@ class OmniPlanDB:
         for index, (script, data_step) in enumerate(MIGRATIONS, start=1):
             if index <= version:
                 continue
-            _LOGGER.info("Applying OmniPlan database migration %s", index)
+            _LOGGER.info("Applying TaskDragon database migration %s", index)
             await self.conn.execute("BEGIN")
             try:
                 for statement in _split_sql(script):
@@ -857,7 +857,7 @@ class OmniPlanDB:
             await self.conn.execute("COMMIT")
 
     @asynccontextmanager
-    async def transaction(self) -> AsyncIterator[OmniPlanDB]:
+    async def transaction(self) -> AsyncIterator[TaskDragonDB]:
         """Group several ``tx_*`` calls into one atomic transaction."""
         async with self._tx():
             yield self

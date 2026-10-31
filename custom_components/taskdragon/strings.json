@@ -1,8 +1,15 @@
 {
   "config": {
     "step": {
+      "import_legacy": {
+        "title": "Import your existing setup",
+        "description": "This Home Assistant already has the integration configured under its previous name (OmniPlan). TaskDragon copied its lists, maintenance history and documents when it started. Import its people, schedule and Mealie connection too?",
+        "data": {
+          "import_settings": "Import the existing settings"
+        }
+      },
       "user": {
-        "title": "OmniPlan household",
+        "title": "TaskDragon household",
         "description": "Choose the people in your household. They get personal \"My Day\" views, kiosk columns and shift-aware chores.",
         "data": {
           "household": "Household people",
@@ -50,7 +57,7 @@
           "leftover_time": "Create leftover tracker at",
           "leftover_days": "Leftovers keep for (days)",
           "prep_rules": "Prep rules (one per line: tag => hours | template)",
-          "show_panel": "Show OmniPlan in the sidebar"
+          "show_panel": "Show TaskDragon in the sidebar"
         },
         "data_description": {
           "prep_rules": "Templates may use {recipe}, {meat} and {action}. Recipes tagged like thaw-36h work without a rule."
@@ -64,13 +71,13 @@
       "invalid_url": "Enter a plain http:// or https:// URL with a host name or IP address (no user name, query string or fragment)."
     },
     "abort": {
-      "single_instance_allowed": "OmniPlan is already set up."
+      "single_instance_allowed": "TaskDragon is already set up."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "OmniPlan household",
+        "title": "TaskDragon household",
         "data": {
           "household": "Household people",
           "weather_entity": "Weather entity",
@@ -114,7 +121,7 @@
           "leftover_time": "Create leftover tracker at",
           "leftover_days": "Leftovers keep for (days)",
           "prep_rules": "Prep rules (one per line: tag => hours | template)",
-          "show_panel": "Show OmniPlan in the sidebar"
+          "show_panel": "Show TaskDragon in the sidebar"
         }
       }
     },
@@ -146,7 +153,7 @@
     },
     "add_task": {
       "name": "Add task",
-      "description": "Create a task in an OmniPlan plan.",
+      "description": "Create a task in an TaskDragon plan.",
       "fields": {
         "plan": {
           "name": "Plan",
@@ -402,7 +409,7 @@
     },
     "create_backup": {
       "name": "Create portable backup",
-      "description": "Write an OmniPlan portable backup (.zip with the database, a JSON dump, documents and the standalone bridge map) to /config/backups/omniplan and prune old snapshots. Administrators only."
+      "description": "Write an TaskDragon portable backup (.zip with the database, a JSON dump, documents and the standalone bridge map) to /config/backups/taskdragon and prune old snapshots. Administrators only."
     }
   }
 }

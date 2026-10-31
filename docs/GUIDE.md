@@ -1,6 +1,6 @@
-# OmniPlan user guide
+# TaskDragon user guide
 
-Everything OmniPlan does, screen by screen. New here? Start with the [README](../README.md) for installation and a ten-minute setup.
+Everything TaskDragon does, screen by screen. New here? Start with the [README](../README.md) for installation and a ten-minute setup.
 
 - [Everyday use: the card](#everyday-use-the-card)
 - [Recurrence](#recurrence)
@@ -15,7 +15,7 @@ Everything OmniPlan does, screen by screen. New here? Start with the [README](..
 <p align="center"><img src="images/quick-list.webp" alt="Quick List on desktop and the category dropdown on a phone" width="100%"></p>
 
 
-The card's options (view mode, single plan, title…) are listed in the [README](../README.md#card-configuration). The sidebar panel (**OmniPlan**) is the same card, full page.
+The card's options (view mode, single plan, title…) are listed in the [README](../README.md#card-configuration). The sidebar panel (**TaskDragon**) is the same card, full page.
 
 <p align="center"><img src="images/family.webp" alt="Family split view and My Day" width="100%"></p>
 
@@ -63,16 +63,16 @@ A maintenance plan opens on a five-number banner (**Objects · Tasks · Overdue 
   - **Cycles**: N state changes with a debounce, for things like dishwasher runs. Restarts don't count as changes.
   - **Problem sensor**: a leak or problem sensor turning on. It can mark the task done automatically when the sensor recovers.
 - **When completed**, a task can take parts out of stock, rotate the assignee to the next person, and (if an administrator set it up) run a service such as `button.press` on a filter-reset button.
-- **Adaptive interval**: after each completion, answer *Too early*, *Just right* or *Too late*. OmniPlan blends an exponentially weighted average of your real intervals, a Weibull fit and 12-month seasonal factors into a suggestion. **Apply recommended interval** adopts it, and **Re-analyze** recomputes it.
+- **Adaptive interval**: after each completion, answer *Too early*, *Just right* or *Too late*. TaskDragon blends an exponentially weighted average of your real intervals, a Weibull fit and 12-month seasonal factors into a suggestion. **Apply recommended interval** adopts it, and **Re-analyze** recomputes it.
 - **Complete** logs the date, who did it, duration, labor cost, the parts used, notes, the feedback and a photo. **Skip** records *Skipped* before the due date, or *Missed* once the task is overdue or triggered.
 
-**NFC and QR**: in a task's ⋮ menu, **Bind NFC tag** listens for 60 seconds; scan a Home Assistant tag at the appliance and it's linked. From then on, scanning that tag completes the task ("Completed via NFC tag"). Tick **Only complete by scanning the tag** to require being there. **QR code** (on any object or task) prints or downloads a label that opens the item in the OmniPlan panel, or, for tasks, asks *Mark as done?* right away. QR links open the OmniPlan sidebar panel, so keep it enabled in the integration's options, and set your Home Assistant URL (Settings → System → Network) so phones can open them.
+**NFC and QR**: in a task's ⋮ menu, **Bind NFC tag** listens for 60 seconds; scan a Home Assistant tag at the appliance and it's linked. From then on, scanning that tag completes the task ("Completed via NFC tag"). Tick **Only complete by scanning the tag** to require being there. **QR code** (on any object or task) prints or downloads a label that opens the item in the TaskDragon panel, or, for tasks, asks *Mark as done?* right away. QR links open the TaskDragon sidebar panel, so keep it enabled in the integration's options, and set your Home Assistant URL (Settings → System → Network) so phones can open them.
 
 **Parts & consumables** have a part number or GTIN, a storage location, stock, a reorder threshold and quantity, a unit cost and a reorder link. When stock reaches the threshold, the part goes on your hardware (or chosen) shopping list, or becomes a "Buy …" chore. Checking that item off adds the restock quantity back to stock. In **Settings**, choose whether a part's cost counts when it's **used** by a task or when it's **bought**; the monthly, yearly and per-area spend and every total follow that choice, so a part is never counted twice.
 
-**Documents**: manuals, invoices, warranties and photos (PDF, PNG, JPEG, WebP, GIF, HEIC, plain text; 15 MB each) or plain links. Files are stored once by SHA-256 under `<config>/.storage/omniplan_docs/`. Link a task to its manual and a page number to open the PDF at that page. **Service record (PDF)** on an object exports its history for a From/To range (optionally one task), with a total cost.
+**Documents**: manuals, invoices, warranties and photos (PDF, PNG, JPEG, WebP, GIF, HEIC, plain text; 15 MB each) or plain links. Files are stored once by SHA-256 under `<config>/.storage/taskdragon_docs/`. Link a task to its manual and a page number to open the PDF at that page. **Service record (PDF)** on an object exports its history for a From/To range (optionally one task), with a total cost.
 
-**Water softener** objects get a salt gauge. In Edit, link a **total water volume** sensor (Droplet, a `utility_meter`, any `total_increasing` sensor), optionally a **flow rate** sensor for regeneration detection (sustained flow inside the overnight window, which is subtracted from household use) and an ESPHome **distance sensor** on the brine tank. Then tell OmniPlan what you see:
+**Water softener** objects get a salt gauge. In Edit, link a **total water volume** sensor (Droplet, a `utility_meter`, any `total_increasing` sensor), optionally a **flow rate** sensor for regeneration detection (sustained flow inside the overnight window, which is subtracted from household use) and an ESPHome **distance sensor** on the brine tank. Then tell TaskDragon what you see:
 - **Filled salt**: the tank is now at a level, or you added N bags. This completes the refill task and takes the bags out of stock.
 - **Salt is at Level N**: a pass-by observation.
 - **Tank empty / bridges checked**.
@@ -93,20 +93,20 @@ Upgrading from 1.1 moves the old maintenance list into a "General" object. Rolli
 <p align="center"><img src="images/recipes.webp" alt="Browse Mealie recipes" width="100%"></p>
 
 
-- **Shopping sync**: open a shopping plan's settings in the card and choose a Mealie list. Items sync both ways every N minutes and a few seconds after any local change. Adds, check-offs, edits and deletes all propagate, and an item already on both sides is linked rather than duplicated. Items OmniPlan creates in Mealie are plain note items, for example "2 lb ground beef".
-- **Prep timelines**: for meals in the next N days, OmniPlan reads the recipe and creates prep tasks in your chores plan. Lead times come from:
+- **Shopping sync**: open a shopping plan's settings in the card and choose a Mealie list. Items sync both ways every N minutes and a few seconds after any local change. Adds, check-offs, edits and deletes all propagate, and an item already on both sides is linked rather than duplicated. Items TaskDragon creates in Mealie are plain note items, for example "2 lb ground beef".
+- **Prep timelines**: for meals in the next N days, TaskDragon reads the recipe and creates prep tasks in your chores plan. Lead times come from:
   - recipe **tags** shaped like `thaw-36h`, `brine-24h`, `smoker-4h`, `marinate-12h`, `soak-8h`;
-  - recipe **notes or description** containing `Lead time: thaw 36h, smoker 4h`, or a recipe **extra** (custom field) named `omniplan` with the same text;
+  - recipe **notes or description** containing `Lead time: thaw 36h, smoker 4h`, or a recipe **extra** (custom field) named `taskdragon` with the same text;
   - **configured rules** in the options, one per line: `tag-or-keyword => hours | template`, where templates can use `{recipe}`, `{meat}` and `{action}`. Keyword rules (e.g. `brisket => 36 | …`) match the recipe name or notes.
-- **Cook tasks and leftovers**: a "Cook Smoked Brisket" task is due at meal time minus the recipe's total time. When it's checked off, or at the leftover time on the meal day, OmniPlan adds "Eat or freeze leftover … (Cooked Tuesday)" with a countdown that turns urgent when it expires.
+- **Cook tasks and leftovers**: a "Cook Smoked Brisket" task is due at meal time minus the recipe's total time. When it's checked off, or at the leftover time on the meal day, TaskDragon adds "Eat or freeze leftover … (Cooked Tuesday)" with a countdown that turns urgent when it expires.
 - **Recipe browser** (Groceries → **Browse Mealie Recipes**): every Mealie recipe with its photo, categories, total time and how often it was on your meal plan in the last year. Filter by category or tag, sort A–Z, by recently added, by most cooked or by category, and search. Each recipe has three actions:
   - **Add ingredients** adds what you need to that grocery list straight away, merging quantities with items already on it: *"Added 6 items from Chicken Sausage Orzo (Skipped 4 seasonings/pantry items)"*.
   - **Review** opens the ingredient list with seasonings and in-stock pantry items unchecked. Tick anything you're out of, untick what you have, and add.
   - **Plan meal** picks a day (the next week as one-tap chips, or any date) and a meal, puts the recipe on Mealie's meal plan and optionally adds its ingredients too. Prep and cook tasks for that meal appear after the next sync, which starts right away.
 - **Pantry & Excluded Spices**: the seasoning filter is on by default. It ignores the household's list of seasonings and staples (salt, black pepper, garlic powder, paprika, cumin, oregano, olive oil, water, cooking spray…), which you can add to, prune or reset, plus any Mealie food labelled as a spice or seasoning. Matching ignores amounts and words like *ground*, *dried*, *freshly* or *to taste*, so "1 tsp freshly ground black pepper, to taste" counts as black pepper, while "coconut water" and "bell pepper" are still bought. Anything your pantry has **in stock** is skipped too (a pantry "Flour" covers "all-purpose flour"); the same drawer lists your pantry staples with a checkbox each to mark what's in the house right now.
-- **Pantry batches**: link a pantry item to a Mealie recipe slug and press **Load ingredients from Mealie**. When the item goes Low or Out, OmniPlan either pushes the raw ingredients to the shopping list or creates a "Make a new batch of …" chore with the recipe link and ingredient list, depending on the item's setting (or it asks each time).
+- **Pantry batches**: link a pantry item to a Mealie recipe slug and press **Load ingredients from Mealie**. When the item goes Low or Out, TaskDragon either pushes the raw ingredients to the shopping list or creates a "Make a new batch of …" chore with the recipe link and ingredient list, depending on the item's setting (or it asks each time).
 - **Cooking view**: tap a recipe's photo or name in the browser, the **Cook view** badge on a meal-plan prep/cook task or recipe grocery item, or a pantry batch's recipe chip:
-  - **Keep screen on while viewing** holds a screen wake lock while the recipe is open. Phones drop it when you switch apps; OmniPlan takes it again when the recipe is back on screen, and releases it when you untick the box or close the recipe. Settings has a per-device switch to turn it on whenever a recipe opens. Where the browser can't keep the screen on, a small badge says so.
+  - **Keep screen on while viewing** holds a screen wake lock while the recipe is open. Phones drop it when you switch apps; TaskDragon takes it again when the recipe is back on screen, and releases it when you untick the box or close the recipe. Settings has a per-device switch to turn it on whenever a recipe opens. Where the browser can't keep the screen on, a small badge says so.
   - The photo, categories and tags, prep / cook / total time and a **½× 1× 2× 3×** batch multiplier that rescales every parsed amount (shown as kitchen fractions: 1½ cups, ⅔ tsp).
   - Ingredients in Mealie's sections, each with a large checkbox to strike it off, an **In pantry** or **Seasoning** badge, and **Add missing ingredients to Groceries** (at the current batch size).
   - Large, high-contrast steps: tap one when it's done, and the next lights up. Times in the text ("simmer for 15 minutes", "bake 25-30 mins", "1 hr 15 min") become **Start 15m timer** pills. Running timers sit in a bar at the bottom with pause, +1 min and cancel, and ring, vibrate and show a message when they finish. Closing the recipe asks before stopping running timers.
@@ -134,11 +134,11 @@ Upgrading from 1.1 moves the old maintenance list into a "General" object. Rolli
 <p align="center"><img src="images/backups.webp" alt="Settings & backups" width="100%"></p>
 
 
-Home Assistant's own backups already include OmniPlan's database and documents. The portable backup is a second, platform-independent copy. **⋮ → Settings & backups** (administrators):
+Home Assistant's own backups already include TaskDragon's database and documents. The portable backup is a second, platform-independent copy. **⋮ → Settings & backups** (administrators):
 
-- **Download portable backup (.zip)** streams a fresh `omniplan_portable_backup_YYYYMMDD_HHMMSS.zip` to your phone or PC.
-- **Trigger local server snapshot now** writes one to `/config/backups/omniplan/`. A **daily snapshot** runs at 03:15 by default (time and on/off are adjustable) and only the last **14** are kept (also adjustable). Each snapshot in the list has **Download**, **Restore** and delete. `omniplan.create_backup` does the same from an automation, e.g. before installing updates.
-- **Upload & restore** accepts a portable `.zip` (or just its `database_dump.json`) with **Merge import** (adds what's missing, never deletes or overwrites; log rows are matched on content so nothing doubles) or **Full disaster-recovery replace**. Before anything changes, every file is checked against the SHA-256 in the manifest, the schema version is checked (a backup from a newer OmniPlan is refused), and a **pre-restore safety snapshot** is written. Unknown tables or columns (from a newer version) are skipped with a warning, rows that would point at something missing are dropped, and the whole database step runs as one transaction. Open cards refresh when it's done.
+- **Download portable backup (.zip)** streams a fresh `taskdragon_portable_backup_YYYYMMDD_HHMMSS.zip` to your phone or PC.
+- **Trigger local server snapshot now** writes one to `/config/backups/taskdragon/`. A **daily snapshot** runs at 03:15 by default (time and on/off are adjustable) and only the last **14** are kept (also adjustable). Each snapshot in the list has **Download**, **Restore** and delete. `taskdragon.create_backup` does the same from an automation, e.g. before installing updates.
+- **Upload & restore** accepts a portable `.zip` (or just its `database_dump.json`) with **Merge import** (adds what's missing, never deletes or overwrites; log rows are matched on content so nothing doubles) or **Full disaster-recovery replace**. Before anything changes, every file is checked against the SHA-256 in the manifest, the schema version is checked (a backup from a newer TaskDragon is refused), and a **pre-restore safety snapshot** is written. Unknown tables or columns (from a newer version) are skipped with a warning, rows that would point at something missing are dropped, and the whole database step runs as one transaction. Open cards refresh when it's done.
 
 What's inside the zip:
 
@@ -146,7 +146,7 @@ What's inside the zip:
 | --- | --- |
 | `manifest_bridge.json` | `schema_version` (`1.0.0-portable`), `exported_at` (UTC), `source_platform` (`home_assistant_custom_component`), row counts, SHA-256 and size of every file, plus the two bridge maps below. |
 | `database_dump.json` | Every SQLite table as JSON rows, with its primary key, columns and which columns hold JSON or booleans. Tables are listed parents-first, so they can be loaded in order. |
-| `omniplan.db` | A hot, consistent copy from SQLite's online backup API, taken at the same moment as the dump. |
+| `taskdragon.db` | A hot, consistent copy from SQLite's online backup API, taken at the same moment as the dump. |
 | `documents/<sha256>` | Every manual, receipt and photo still referenced, each listed with its checksum and original file names. |
 
 - **`users_bridge_map`**: one profile per Home Assistant user and per `person.*` entity (including people only mentioned in old history): a stable `portable_user_uuid`, `display_name`, `short_initials`, `role` (admin / member), `work_calendar_ref`, and the original `ha_user_id` / `person_entity_id`. A standalone app maps these to its own accounts.

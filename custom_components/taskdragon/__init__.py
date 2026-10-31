@@ -1,8 +1,8 @@
-"""OmniPlan: local-first household planner for Home Assistant.
+"""TaskDragon: local-first household planner for Home Assistant.
 
 Runs entirely inside Home Assistant Core: data lives in
-``<config>/.storage/omniplan.db`` (SQLite via aiosqlite), plans are exposed as
-native ``todo.*`` entities, and the bundled ``omniplan-card`` Lovelace card /
+``<config>/.storage/taskdragon.db`` (SQLite via aiosqlite), plans are exposed as
+native ``todo.*`` entities, and the bundled ``taskdragon-card`` Lovelace card /
 sidebar panel talks to the custom WebSocket API.
 """
 
@@ -33,7 +33,8 @@ from .const import (
     PANEL_URL_PATH,
     VERSION,
 )
-from .coordinator import OmniPlanCoordinator
+from .coordinator import TaskDragonCoordinator
+from .migration import LEGACY_DOMAIN, LEGACY_PANEL_URL_PATH, MIGRATED_META, migrate_legacy_storage
 from .http_views import async_register_views
 from .services import async_register_services
 
@@ -43,7 +44,7 @@ PLATFORMS: list[Platform] = [Platform.TODO]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 FRONTEND_REGISTERED = f"{DOMAIN}_frontend_registered"
 
-type OmniPlanConfigEntry = ConfigEntry[OmniPlanCoordinator]
+type TaskDragonConfigEntry = ConfigEntry[TaskDragonCoordinator]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -62,37 +63,44 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if entry.minor_version < 2:
         data, options = split_legacy_mealie(dict(entry.data), dict(entry.options))
         hass.config_entries.async_update_entry(entry, data=data, options=options, minor_version=2)
-        _LOGGER.info("Moved OmniPlan's Mealie connection settings into protected entry data")
+        _LOGGER.info("Moved TaskDragon's Mealie connection settings into protected entry data")
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: OmniPlanConfigEntry) -> bool:
-    coordinator = OmniPlanCoordinator(hass, entry)
+async def async_setup_entry(hass: HomeAssistant, entry: TaskDragonConfigEntry) -> bool:
+    try:
+        await hass.async_add_executor_job(migrate_legacy_storage, hass.config.config_dir)
+    except Exception as err:  # noqa: BLE001 - a failed copy must never block setup; start fresh instead
+        _LOGGER.error("Could not copy the previous installation's data into TaskDragon: %s", err)
+    coordinator = TaskDragonCoordinator(hass, entry)
     try:
         await coordinator.async_setup()
     except Exception as err:
         await coordinator.async_shutdown()
-        raise ConfigEntryNotReady(f"OmniPlan could not open its database: {err}") from err
+        raise ConfigEntryNotReady(f"TaskDragon could not open its database: {err}") from err
     entry.runtime_data = coordinator
     hass.data[DOMAIN] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     if coordinator.options.get(CONF_SHOW_PANEL, True):
         await _async_register_panel(hass)
+    if await coordinator.db.get_meta(MIGRATED_META) and LEGACY_DOMAIN not in hass.config.components:
+        await _async_register_panel(hass, LEGACY_PANEL_URL_PATH)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: OmniPlanConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: TaskDragonConfigEntry) -> bool:
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         await entry.runtime_data.async_shutdown()
         hass.data.pop(DOMAIN, None)
-        if PANEL_URL_PATH in hass.data.get(frontend.DATA_PANELS, {}):
-            frontend.async_remove_panel(hass, PANEL_URL_PATH)
+        for url_path in (PANEL_URL_PATH, LEGACY_PANEL_URL_PATH):
+            if url_path in hass.data.get(frontend.DATA_PANELS, {}) and (url_path == PANEL_URL_PATH or LEGACY_DOMAIN not in hass.config.components):
+                frontend.async_remove_panel(hass, url_path)
     return unloaded
 
 
-async def _async_update_listener(hass: HomeAssistant, entry: OmniPlanConfigEntry) -> None:
+async def _async_update_listener(hass: HomeAssistant, entry: TaskDragonConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
 
 
@@ -106,16 +114,18 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     hass.data[FRONTEND_REGISTERED] = True
 
 
-async def _async_register_panel(hass: HomeAssistant) -> None:
-    if PANEL_URL_PATH in hass.data.get(frontend.DATA_PANELS, {}):
+async def _async_register_panel(hass: HomeAssistant, url_path: str = PANEL_URL_PATH) -> None:
+    """The sidebar panel; ``url_path`` = the pre-rename path registers a hidden copy so old QR labels still open."""
+    if url_path in hass.data.get(frontend.DATA_PANELS, {}):
         return
+    hidden = url_path != PANEL_URL_PATH
     await panel_custom.async_register_panel(
         hass,
         webcomponent_name=PANEL_ELEMENT,
-        frontend_url_path=PANEL_URL_PATH,
+        frontend_url_path=url_path,
         module_url=f"{CARD_URL}?v={VERSION}",
-        sidebar_title=PANEL_TITLE,
-        sidebar_icon=PANEL_ICON,
+        sidebar_title=None if hidden else PANEL_TITLE,
+        sidebar_icon=None if hidden else PANEL_ICON,
         require_admin=False,
         config={"view_mode": "quick"},
     )

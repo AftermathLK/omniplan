@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import patch
 
 import pytest
@@ -12,8 +13,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.setup import async_setup_component
 
-from custom_components.omniplan.const import DOMAIN
-from custom_components.omniplan.mealie_client import MealieAuthError
+import custom_components.taskdragon as integration
+from custom_components.taskdragon.const import DOMAIN
+from custom_components.taskdragon.database import TaskDragonDB
+from custom_components.taskdragon.mealie_client import MealieAuthError
+from custom_components.taskdragon.migration import LEGACY_PANEL_URL_PATH
 
 OPTIONS = {
     "people": [
@@ -33,11 +37,52 @@ async def people(hass: HomeAssistant) -> None:
 
 @pytest.fixture
 async def entry(hass: HomeAssistant, people) -> MockConfigEntry:
-    config_entry = MockConfigEntry(domain=DOMAIN, title="OmniPlan", data={}, options=OPTIONS)
+    config_entry = MockConfigEntry(domain=DOMAIN, title="TaskDragon", data={}, options=OPTIONS)
     config_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     yield config_entry
+    await hass.config_entries.async_unload(config_entry.entry_id)
+    await hass.async_block_till_done()
+
+
+# ----------------------------------------------------------------------
+# Moving over from the integration's former name
+# ----------------------------------------------------------------------
+LEGACY_DATA = {"mealie_url": "http://mealie.local:9000", "mealie_api_token": "legacy-token", "mealie_verify_ssl": True}
+
+
+async def test_config_flow_imports_previous_settings(hass: HomeAssistant, people) -> None:
+    MockConfigEntry(domain="omniplan", title="OmniPlan", version=1, minor_version=2, data=LEGACY_DATA, options=OPTIONS).add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    assert result["type"] is FlowResultType.FORM and result["step_id"] == "import_legacy"
+    with patch("custom_components.taskdragon.async_setup_entry", return_value=True):
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {"import_settings": True})
+    assert result["type"] is FlowResultType.CREATE_ENTRY and result["title"] == "TaskDragon"
+    assert result["data"] == LEGACY_DATA and result["options"]["people"] == OPTIONS["people"]
+
+
+async def test_declining_the_import_runs_the_normal_setup(hass: HomeAssistant, people) -> None:
+    MockConfigEntry(domain="omniplan", title="OmniPlan", data={}, options=OPTIONS).add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": config_entries.SOURCE_USER})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"import_settings": False})
+    assert result["type"] is FlowResultType.FORM and result["step_id"] == "user"
+
+
+async def test_previous_database_is_copied_on_first_start(hass: HomeAssistant, people) -> None:
+    os.makedirs(hass.config.path(".storage"), exist_ok=True)
+    legacy = TaskDragonDB(hass.config.path(".storage", "omniplan.db"))
+    await legacy.async_open()
+    await legacy.create_plan({"name": "Garage sale", "archetype": "quick_list"})
+    await legacy.async_close()
+    config_entry = MockConfigEntry(domain=DOMAIN, title="TaskDragon", data={}, options=OPTIONS)
+    config_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    names = [p["name"] for p in await config_entry.runtime_data.db.list_plans()]
+    assert "Garage sale" in names
+    # Old QR labels (/omniplan?maint_task=...) keep opening through a hidden copy of the panel.
+    assert any(call.args[1:] == (LEGACY_PANEL_URL_PATH,) for call in integration._async_register_panel.await_args_list)
     await hass.config_entries.async_unload(config_entry.entry_id)
     await hass.async_block_till_done()
 
@@ -63,7 +108,7 @@ async def test_config_flow_with_shift_step(hass: HomeAssistant, people) -> None:
     assert result["step_id"] == "mealie"
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["step_id"] == "schedule"
-    with patch("custom_components.omniplan.async_setup_entry", return_value=True):
+    with patch("custom_components.taskdragon.async_setup_entry", return_value=True):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {"rollover_hour": 3})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     options = result["options"]
@@ -85,8 +130,8 @@ async def test_config_flow_validates_mealie_and_keeps_token_in_data(hass: HomeAs
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {"mealie_url": url, "mealie_api_token": "t"})
         assert result["errors"] == {"mealie_url": "invalid_url"}, url
     with (
-        patch("custom_components.omniplan.config_flow.async_get_clientsession"),
-        patch("custom_components.omniplan.config_flow.MealieClient.async_get_self", side_effect=MealieAuthError("nope")),
+        patch("custom_components.taskdragon.config_flow.async_get_clientsession"),
+        patch("custom_components.taskdragon.config_flow.MealieClient.async_get_self", side_effect=MealieAuthError("nope")),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {"mealie_url": "http://mealie.local:9000", "mealie_api_token": "bad"}
@@ -100,14 +145,14 @@ async def test_config_flow_validates_mealie_and_keeps_token_in_data(hass: HomeAs
     )
     assert result["errors"] == {"mealie_api_token": "token_required"}
     with (
-        patch("custom_components.omniplan.config_flow.async_get_clientsession"),
-        patch("custom_components.omniplan.config_flow.MealieClient.async_get_self", return_value={"groupSlug": "home"}),
+        patch("custom_components.taskdragon.config_flow.async_get_clientsession"),
+        patch("custom_components.taskdragon.config_flow.MealieClient.async_get_self", return_value={"groupSlug": "home"}),
     ):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {"mealie_url": "http://mealie.local:9000/", "mealie_api_token": "s3cret"}
         )
     assert result["step_id"] == "schedule"
-    with patch("custom_components.omniplan.async_setup_entry", return_value=True):
+    with patch("custom_components.taskdragon.async_setup_entry", return_value=True):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["data"] == {
         "mealie_url": "http://mealie.local:9000",
@@ -137,59 +182,59 @@ async def test_options_flow_round_trip(hass: HomeAssistant, entry: MockConfigEnt
 async def test_setup_creates_todo_entities(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     states = {state.entity_id: state for state in hass.states.async_all("todo")}
     assert {
-        "todo.omniplan_daily_chores",
-        "todo.omniplan_groceries",
-        "todo.omniplan_hardware",
-        "todo.omniplan_projects",
-        "todo.omniplan_home_maintenance",
-        "todo.omniplan_trip_packing",
-        "todo.omniplan_pantry_spices",
-        "todo.omniplan_quick_list",
+        "todo.taskdragon_daily_chores",
+        "todo.taskdragon_groceries",
+        "todo.taskdragon_hardware",
+        "todo.taskdragon_projects",
+        "todo.taskdragon_home_maintenance",
+        "todo.taskdragon_trip_packing",
+        "todo.taskdragon_pantry_spices",
+        "todo.taskdragon_quick_list",
     } <= set(states)
-    assert states["todo.omniplan_groceries"].attributes["archetype"] == "shopping_errands"
+    assert states["todo.taskdragon_groceries"].attributes["archetype"] == "shopping_errands"
 
 
 async def test_native_todo_services_round_trip(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     await hass.services.async_call(
-        "todo", "add_item", {"item": "Garlic powder"}, target={"entity_id": "todo.omniplan_groceries"}, blocking=True
+        "todo", "add_item", {"item": "Garlic powder"}, target={"entity_id": "todo.taskdragon_groceries"}, blocking=True
     )
     await hass.services.async_call(
-        "todo", "add_item", {"item": "Garlic powder"}, target={"entity_id": "todo.omniplan_groceries"}, blocking=True
+        "todo", "add_item", {"item": "Garlic powder"}, target={"entity_id": "todo.taskdragon_groceries"}, blocking=True
     )
     await hass.async_block_till_done()
     response = await hass.services.async_call(
-        "todo", "get_items", {}, target={"entity_id": "todo.omniplan_groceries"}, blocking=True, return_response=True
+        "todo", "get_items", {}, target={"entity_id": "todo.taskdragon_groceries"}, blocking=True, return_response=True
     )
-    items = response["todo.omniplan_groceries"]["items"]
+    items = response["todo.taskdragon_groceries"]["items"]
     assert [item["summary"] for item in items] == ["Garlic powder"]  # deduplicated
-    assert hass.states.get("todo.omniplan_groceries").state == "1"
+    assert hass.states.get("todo.taskdragon_groceries").state == "1"
 
     await hass.services.async_call(
         "todo",
         "update_item",
         {"item": "Garlic powder", "status": "completed"},
-        target={"entity_id": "todo.omniplan_groceries"},
+        target={"entity_id": "todo.taskdragon_groceries"},
         blocking=True,
     )
     await hass.async_block_till_done()
-    assert hass.states.get("todo.omniplan_groceries").state == "0"
+    assert hass.states.get("todo.taskdragon_groceries").state == "0"
 
     await hass.services.async_call(
         "todo",
         "add_item",
         {"item": "Change furnace filter", "due_date": "2026-11-01", "description": "MERV 11"},
-        target={"entity_id": "todo.omniplan_home_maintenance"},
+        target={"entity_id": "todo.taskdragon_home_maintenance"},
         blocking=True,
     )
     await hass.async_block_till_done()
     response = await hass.services.async_call(
-        "todo", "get_items", {}, target={"entity_id": "todo.omniplan_home_maintenance"}, blocking=True, return_response=True
+        "todo", "get_items", {}, target={"entity_id": "todo.taskdragon_home_maintenance"}, blocking=True, return_response=True
     )
-    [item] = response["todo.omniplan_home_maintenance"]["items"]
+    [item] = response["todo.taskdragon_home_maintenance"]["items"]
     # Maintenance plans hold objects: the item became a one-off task of the "General" object.
     assert item["due"] == "2026-11-01" and item["summary"] == "General: Change furnace filter"
     coordinator = entry.runtime_data
-    from custom_components.omniplan.database import MTASKS
+    from custom_components.taskdragon.database import MTASKS
 
     [task] = await coordinator.db.rows(MTASKS)
     assert task["notes"] == "MERV 11" and task["category"] == "Replacement" and task["schedule_mode"] == "once"
@@ -197,19 +242,19 @@ async def test_native_todo_services_round_trip(hass: HomeAssistant, entry: MockC
 
 async def test_pantry_entity_maps_stock_to_status(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     await hass.services.async_call(
-        "todo", "add_item", {"item": "Taco seasoning"}, target={"entity_id": "todo.omniplan_pantry_spices"}, blocking=True
+        "todo", "add_item", {"item": "Taco seasoning"}, target={"entity_id": "todo.taskdragon_pantry_spices"}, blocking=True
     )
     await hass.async_block_till_done()
-    assert hass.states.get("todo.omniplan_pantry_spices").state == "1"  # added as "low"
+    assert hass.states.get("todo.taskdragon_pantry_spices").state == "1"  # added as "low"
     await hass.services.async_call(
         "todo",
         "update_item",
         {"item": "Taco seasoning", "status": "completed"},
-        target={"entity_id": "todo.omniplan_pantry_spices"},
+        target={"entity_id": "todo.taskdragon_pantry_spices"},
         blocking=True,
     )
     await hass.async_block_till_done()
-    assert hass.states.get("todo.omniplan_pantry_spices").state == "0"
+    assert hass.states.get("todo.taskdragon_pantry_spices").state == "0"
 
 
 # ----------------------------------------------------------------------
@@ -231,43 +276,43 @@ async def test_websocket_board_and_live_updates(hass: HomeAssistant, entry: Mock
             elif reply["id"] == msg_id:
                 return reply
 
-    board = (await call({"type": "omniplan/get_board"}))["result"]
+    board = (await call({"type": "taskdragon/get_board"}))["result"]
     chores = next(p for p in board["plans"] if p["name"] == "Daily Chores")
     projects = next(p for p in board["plans"] if p["name"] == "Projects")
     assert {p["entity_id"] for p in board["people"]} == {"person.alex", "person.sam"}
 
-    assert (await call({"type": "omniplan/subscribe"}))["success"]
-    frame = (await call({"type": "omniplan/save_task", "task": {"plan_id": projects["id"], "summary": "Frame wall"}}))["result"]
+    assert (await call({"type": "taskdragon/subscribe"}))["success"]
+    frame = (await call({"type": "taskdragon/save_task", "task": {"plan_id": projects["id"], "summary": "Frame wall"}}))["result"]
     drywall = (
         await call(
             {
-                "type": "omniplan/save_task",
+                "type": "taskdragon/save_task",
                 "task": {"plan_id": projects["id"], "summary": "Hang drywall", "blocked_by": [frame["uid"]]},
             }
         )
     )["result"]
     assert drywall["status"] == "blocked"
 
-    result = (await call({"type": "omniplan/set_completed", "uid": frame["uid"], "completed": True}))["result"]
+    result = (await call({"type": "taskdragon/set_completed", "uid": frame["uid"], "completed": True}))["result"]
     assert result["unblocked"] == [drywall["uid"]]
 
     # Every change was pushed to the subscription.
     await hass.async_block_till_done()
     assert events and all(projects["id"] in e["event"]["plan_ids"] for e in events)
 
-    dishes = (await call({"type": "omniplan/save_task", "task": {"plan_id": chores["id"], "summary": "Dishes"}}))["result"]
-    reply = await call({"type": "omniplan/claim_task", "uid": dishes["uid"]})
+    dishes = (await call({"type": "taskdragon/save_task", "task": {"plan_id": chores["id"], "summary": "Dishes"}}))["result"]
+    reply = await call({"type": "taskdragon/claim_task", "uid": dishes["uid"]})
     # The test user is not linked to a person entity, so claiming must explain why.
     assert reply["success"] is False and reply["error"]["code"] == "no_person"
 
-    reply = await call({"type": "omniplan/save_task", "task": {"plan_id": "missing", "summary": "x"}})
+    reply = await call({"type": "taskdragon/save_task", "task": {"plan_id": "missing", "summary": "x"}})
     assert reply["error"]["code"] == "not_found"  # same answer as for a plan you may not see
 
-    deleted = (await call({"type": "omniplan/delete_tasks", "uids": [dishes["uid"]]}))["result"]
+    deleted = (await call({"type": "taskdragon/delete_tasks", "uids": [dishes["uid"]]}))["result"]
     assert deleted["count"] == 1 and "snapshot" not in deleted  # undo data stays on the server
-    restored = (await call({"type": "omniplan/undo", "token": deleted["undo"]}))["result"]
+    restored = (await call({"type": "taskdragon/undo", "token": deleted["undo"]}))["result"]
     assert restored["restored"] == [dishes["uid"]]
-    again = await call({"type": "omniplan/undo", "token": deleted["undo"]})
+    again = await call({"type": "taskdragon/undo", "token": deleted["undo"]})
     assert again["error"]["code"] == "undo_expired"  # single use
 
 
@@ -284,9 +329,9 @@ async def test_brain_dump_service(hass: HomeAssistant, entry: MockConfigEntry) -
     assert all(result["ok"] for result in response["results"])
     await hass.async_block_till_done()
     items = await hass.services.async_call(
-        "todo", "get_items", {}, target={"entity_id": "todo.omniplan_projects"}, blocking=True, return_response=True
+        "todo", "get_items", {}, target={"entity_id": "todo.taskdragon_projects"}, blocking=True, return_response=True
     )
-    assert [i["summary"] for i in items["todo.omniplan_projects"]["items"]] == ["Pick up 2x4s at Menards"]
+    assert [i["summary"] for i in items["todo.taskdragon_projects"]["items"]] == ["Pick up 2x4s at Menards"]
 
 
 async def test_add_task_and_complete_services(hass: HomeAssistant, entry: MockConfigEntry) -> None:
@@ -326,7 +371,7 @@ async def test_context_snooze_wakes_when_person_arrives(hass: HomeAssistant, ent
     task = await coordinator.planner.save_task({"plan_id": chores["id"], "summary": "Bring in packages"})
     client = await hass_ws_client(hass)
     await client.send_json(
-        {"id": 1, "type": "omniplan/snooze_context", "uid": task["uid"], "rule_type": "person_home", "config": {"person": "person.sam"}}
+        {"id": 1, "type": "taskdragon/snooze_context", "uid": task["uid"], "rule_type": "person_home", "config": {"person": "person.sam"}}
     )
     assert (await client.receive_json())["result"]["status"] == "snoozed"
     await hass.async_block_till_done()

@@ -12,8 +12,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from custom_components.omniplan.const import DOMAIN
-from custom_components.omniplan.mealie_client import MealieError
+from custom_components.taskdragon.const import DOMAIN
+from custom_components.taskdragon.mealie_client import MealieError
 
 ORZO_ID = "0d2b6f1a-1111-4222-8333-444455556666"
 
@@ -92,8 +92,8 @@ class FakeMealie:
 async def mealie_entry(hass: HomeAssistant):
     hass.states.async_set("person.alex", "home", {"friendly_name": "Alex"})
     with (
-        patch("custom_components.omniplan.coordinator.MealieClient", FakeMealie),
-        patch("custom_components.omniplan.coordinator.async_get_clientsession"),
+        patch("custom_components.taskdragon.coordinator.MealieClient", FakeMealie),
+        patch("custom_components.taskdragon.coordinator.async_get_clientsession"),
     ):
         entry = MockConfigEntry(
             domain=DOMAIN,
@@ -223,45 +223,45 @@ async def test_recipe_browser_websocket_and_image_proxy(hass: HomeAssistant, mea
             if reply.get("id") == msg_id and reply.get("type") == "result":
                 return reply
 
-    listing = (await call({"type": "omniplan/mealie_get_recipes"}))["result"]
+    listing = (await call({"type": "taskdragon/mealie_get_recipes"}))["result"]
     [orzo] = listing["recipes"]
     assert orzo["slug"] == "chicken-sausage-orzo" and orzo["has_image"] and listing["categories"] == ["Chicken", "Pasta"]
     assert "token" not in json.dumps(listing)  # the API token never reaches the card
 
-    preview = (await call({"type": "omniplan/mealie_recipe_preview", "recipe_slug": "chicken-sausage-orzo"}))["result"]
+    preview = (await call({"type": "taskdragon/mealie_recipe_preview", "recipe_slug": "chicken-sausage-orzo"}))["result"]
     assert [row["skip"] for row in preview["ingredients"]] == [None, None, "seasoning", "seasoning"]
 
-    added = (await call({"type": "omniplan/mealie_add_recipe_to_groceries", "recipe_slug": "chicken-sausage-orzo"}))["result"]
+    added = (await call({"type": "taskdragon/mealie_add_recipe_to_groceries", "recipe_slug": "chicken-sausage-orzo"}))["result"]
     assert sorted(added["added"]) == ["Chicken sausage", "Orzo"] and added["skipped_seasonings"] == 2
     groceries = await coordinator.planner.grocery_plan()
     assert {t["summary"] for t in await coordinator.db.list_tasks(groceries["id"], top_level_only=True)} >= {"Chicken sausage", "Orzo"}
 
     day = (dt_util.now().date() + timedelta(days=2)).isoformat()
-    planned = (await call({"type": "omniplan/mealie_plan_meal", "recipe_slug": "chicken-sausage-orzo", "date": day}))["result"]
+    planned = (await call({"type": "taskdragon/mealie_plan_meal", "recipe_slug": "chicken-sausage-orzo", "date": day}))["result"]
     assert planned["meal_plan"]["date"] == day and fake.planned == [(day, ORZO_ID, "dinner")]
 
-    settings = (await call({"type": "omniplan/mealie_import_settings", "settings": {"skip_seasonings": False}}))["result"]
+    settings = (await call({"type": "taskdragon/mealie_import_settings", "settings": {"skip_seasonings": False}}))["result"]
     assert settings["skip_seasonings"] is False
-    preview = (await call({"type": "omniplan/mealie_recipe_preview", "recipe_slug": "chicken-sausage-orzo"}))["result"]
+    preview = (await call({"type": "taskdragon/mealie_recipe_preview", "recipe_slug": "chicken-sausage-orzo"}))["result"]
     assert all(row["skip"] is None for row in preview["ingredients"])
 
-    bad = await call({"type": "omniplan/mealie_recipe_preview", "recipe_slug": "missing"})
+    bad = await call({"type": "taskdragon/mealie_recipe_preview", "recipe_slug": "missing"})
     assert not bad["success"] and bad["error"]["code"] == "mealie_error"
     chores = await coordinator.planner.chores_plan()
-    wrong = await call({"type": "omniplan/mealie_add_recipe_to_groceries", "recipe_slug": "chicken-sausage-orzo", "plan_id": chores["id"]})
+    wrong = await call({"type": "taskdragon/mealie_add_recipe_to_groceries", "recipe_slug": "chicken-sausage-orzo", "plan_id": chores["id"]})
     assert not wrong["success"] and wrong["error"]["code"] == "invalid"
 
     client = await hass_client()
-    image = await client.get(f"/api/omniplan/mealie_image/{ORZO_ID}")
+    image = await client.get(f"/api/taskdragon/mealie_image/{ORZO_ID}")
     assert image.status == 200 and image.content_type == "image/webp" and image.headers["X-Content-Type-Options"] == "nosniff"
-    assert (await client.get("/api/omniplan/mealie_image/aaaabbbb-0000")).status == 404  # no image in Mealie
-    assert (await client.get("/api/omniplan/mealie_image/not%20an%20id")).status == 400
-    assert (await (await hass_client_no_auth()).get(f"/api/omniplan/mealie_image/{ORZO_ID}")).status == 401
+    assert (await client.get("/api/taskdragon/mealie_image/aaaabbbb-0000")).status == 404  # no image in Mealie
+    assert (await client.get("/api/taskdragon/mealie_image/not%20an%20id")).status == 400
+    assert (await (await hass_client_no_auth()).get(f"/api/taskdragon/mealie_image/{ORZO_ID}")).status == 401
 
     # The cooking view: the full recipe, its full-size image through the same proxy.
-    detail = (await call({"type": "omniplan/mealie_get_recipe_detail", "recipe_slug": "chicken-sausage-orzo"}))["result"]
-    assert detail["image_url"] == f"/api/omniplan/mealie_image/{ORZO_ID}?size=original" and "token" not in json.dumps(detail)
+    detail = (await call({"type": "taskdragon/mealie_get_recipe_detail", "recipe_slug": "chicken-sausage-orzo"}))["result"]
+    assert detail["image_url"] == f"/api/taskdragon/mealie_image/{ORZO_ID}?size=original" and "token" not in json.dumps(detail)
     assert [row["food"] for row in detail["ingredients"]][:2] == ["chicken sausage", "orzo"]
     assert (await client.get(detail["image_url"])).status == 200
-    assert (await client.get(f"/api/omniplan/mealie_image/{ORZO_ID}?size=huge")).status == 400
+    assert (await client.get(f"/api/taskdragon/mealie_image/{ORZO_ID}?size=huge")).status == 400
 

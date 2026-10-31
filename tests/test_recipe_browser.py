@@ -7,9 +7,9 @@ from datetime import date
 import pytest
 from conftest import plan_by_name
 
-from omniplan.mealie_client import MealieError
-from omniplan.planner import Actor, PlannerError
-from omniplan.recipe_browser import RecipeBrowser
+from taskdragon.mealie_client import MealieError
+from taskdragon.planner import Actor, PlannerError
+from taskdragon.recipe_browser import RecipeBrowser
 
 ALEX = Actor(user_id="u-alex", user_name="Alex", person="person.alex", is_admin=True)
 SAM = Actor(user_id="u-sam", user_name="Sam", person="person.sam")

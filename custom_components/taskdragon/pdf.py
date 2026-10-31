@@ -156,7 +156,7 @@ def _assemble(pages: Sequence[_Page], title: str) -> bytes:
             % (int(PAGE_W), int(PAGE_H), page_id + 1)
         )
         objects.append(b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream")
-    objects.append(b"<< /Title (" + _escape(title) + b") /Producer (OmniPlan) >>")
+    objects.append(b"<< /Title (" + _escape(title) + b") /Producer (TaskDragon) >>")
     info_id = len(objects)
 
     out = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")

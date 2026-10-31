@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from omniplan.recipes import (
+from taskdragon.recipes import (
     DEFAULT_SEASONINGS,
     catalog,
     classify_ingredients,

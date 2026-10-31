@@ -1,6 +1,6 @@
-"""WebSocket commands for camera barcode scanning (``omniplan/barcode_*``).
+"""WebSocket commands for camera barcode scanning (``taskdragon/barcode_*``).
 
-Like every OmniPlan command these go through :func:`.websocket_api._command`:
+Like every TaskDragon command these go through :func:`.websocket_api._command`:
 the user is authenticated, every pantry item, part, plan and object id in the
 message is authorized before the handler runs, and the manager hides mappings
 whose target the user cannot see. Changing the Open Food Facts setting needs an
@@ -47,7 +47,7 @@ def _target_guard(msg: dict[str, Any]) -> dict[str, list[str | None]]:
 
 @_command(
     {
-        vol.Required("type"): "omniplan/barcode_lookup",
+        vol.Required("type"): "taskdragon/barcode_lookup",
         vol.Required("barcode"): BARCODE,
         vol.Optional("format"): SYMBOLOGY,
         vol.Optional("context", default="auto"): vol.In(BARCODE_CONTEXTS),
@@ -63,7 +63,7 @@ async def ws_barcode_lookup(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/barcode_bind",
+        vol.Required("type"): "taskdragon/barcode_bind",
         vol.Required("barcode"): BARCODE,
         vol.Optional("format"): SYMBOLOGY,
         vol.Required("target_type"): vol.In(BARCODE_TARGETS),
@@ -93,13 +93,13 @@ async def ws_barcode_bind(hass, connection, msg, coordinator, actor):
     )
 
 
-@_command({vol.Required("type"): "omniplan/barcode_unbind", vol.Required("barcode"): BARCODE})
+@_command({vol.Required("type"): "taskdragon/barcode_unbind", vol.Required("barcode"): BARCODE})
 async def ws_barcode_unbind(hass, connection, msg, coordinator, actor):
     return await coordinator.barcodes.unbind(msg["barcode"], actor)
 
 
 @_command(
-    {vol.Required("type"): "omniplan/barcode_list", vol.Required("target_type"): vol.In(BARCODE_TARGETS), vol.Required("target_id"): ID},
+    {vol.Required("type"): "taskdragon/barcode_list", vol.Required("target_type"): vol.In(BARCODE_TARGETS), vol.Required("target_id"): ID},
     guard=_target_guard,
 )
 async def ws_barcode_list(hass, connection, msg, coordinator, actor):
@@ -108,7 +108,7 @@ async def ws_barcode_list(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/barcode_apply_action",
+        vol.Required("type"): "taskdragon/barcode_apply_action",
         vol.Required("barcode"): BARCODE,
         vol.Optional("format"): SYMBOLOGY,
         vol.Required("action"): vol.In(BARCODE_ACTIONS),
@@ -130,7 +130,7 @@ async def ws_barcode_apply_action(hass, connection, msg, coordinator, actor):
     )
 
 
-@_command({vol.Required("type"): "omniplan/barcode_settings", vol.Optional("settings"): vol.Schema({vol.Optional("openfoodfacts"): bool})})
+@_command({vol.Required("type"): "taskdragon/barcode_settings", vol.Optional("settings"): vol.Schema({vol.Optional("openfoodfacts"): bool})})
 async def ws_barcode_settings(hass, connection, msg, coordinator, actor):
     if "settings" in msg:
         if not actor.is_admin:

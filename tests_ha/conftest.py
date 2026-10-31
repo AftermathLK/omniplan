@@ -35,13 +35,13 @@ if sys.platform == "win32":
 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
-    """Let Home Assistant load custom_components/omniplan."""
+    """Let Home Assistant load custom_components/taskdragon."""
     yield
 
 
 @pytest.fixture(autouse=True)
 def isolated_config_dir(hass, tmp_path):
-    """Keep omniplan.db out of the shared test config directory."""
+    """Keep taskdragon.db out of the shared test config directory."""
     hass.config.config_dir = str(tmp_path)
     yield
 
@@ -51,8 +51,8 @@ def stub_frontend(hass):
     """The frontend/panel/conversation components need packages tests don't ship."""
     hass.config.components.update({"frontend", "panel_custom", "conversation"})
     with (
-        patch("custom_components.omniplan._async_register_frontend", AsyncMock()),
-        patch("custom_components.omniplan._async_register_panel", AsyncMock()),
+        patch("custom_components.taskdragon._async_register_frontend", AsyncMock()),
+        patch("custom_components.taskdragon._async_register_panel", AsyncMock()),
         # Never bind a real port; the WebSocket test client serves hass.http.app itself.
         patch("homeassistant.components.http.HomeAssistantHTTP.start", AsyncMock()),
     ):

@@ -10,7 +10,7 @@
 * Runs the admin-configured on-complete device action (e.g. ``button.press``
   on an appliance's filter-reset entity) as the user who completed the task.
 * Stores uploaded documents content-addressed by SHA-256 in
-  ``<config>/.storage/omniplan_docs`` (so identical files are kept once).
+  ``<config>/.storage/taskdragon_docs`` (so identical files are kept once).
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from .maintenance_manager import MaintenanceManager
 from .planner import Actor
 
 if TYPE_CHECKING:
-    from .coordinator import OmniPlanCoordinator
+    from .coordinator import TaskDragonCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -39,7 +39,7 @@ PENDING_META = "maint_pending_notifications"
 
 
 class MaintenanceRuntime:
-    def __init__(self, hass: HomeAssistant, coordinator: OmniPlanCoordinator) -> None:
+    def __init__(self, hass: HomeAssistant, coordinator: TaskDragonCoordinator) -> None:
         self.hass = hass
         self.coordinator = coordinator
         self.docs_dir = hass.config.path(".storage", DOCS_DIRNAME)
@@ -86,9 +86,9 @@ class MaintenanceRuntime:
             entity_id, old_state, new_state, dict(old.attributes) if old else {}, dict(new.attributes) if new else {}
         )
         if signals:
-            self.coordinator.spawn(self.manager.process_signals(signals), "omniplan_maintenance_signals")
+            self.coordinator.spawn(self.manager.process_signals(signals), "taskdragon_maintenance_signals")
         if any(p.get("zone_entity_id") == entity_id for p in self._pending) and self._someone_in_zone(entity_id):
-            self.coordinator.spawn(self._deliver_zone(entity_id), "omniplan_maintenance_zone")
+            self.coordinator.spawn(self._deliver_zone(entity_id), "taskdragon_maintenance_zone")
 
     async def tick(self) -> None:
         for transition in await self.manager.tick():
@@ -138,12 +138,12 @@ class MaintenanceRuntime:
             message = f"{transition['object_name']}: warranty expires in {transition['countdown'].replace('Due today', 'today')}."
         else:
             message = f"{transition['object_name']}: {transition['name']} {STATUS_WORDS.get(transition['status'], transition['status'])} ({transition['countdown']})."
-        link = f"/omniplan?maint_task={transition['task_id']}" if transition.get("task_id") else f"/omniplan?maint_object={transition.get('object_id')}"
+        link = f"/taskdragon?maint_task={transition['task_id']}" if transition.get("task_id") else f"/taskdragon?maint_object={transition.get('object_id')}"
         try:
             await self.hass.services.async_call(
                 domain,
                 name,
-                {"title": "OmniPlan maintenance", "message": message, "data": {"url": link, "clickAction": link, "tag": f"omniplan-{transition.get('task_id') or transition.get('object_id')}"}},
+                {"title": "TaskDragon maintenance", "message": message, "data": {"url": link, "clickAction": link, "tag": f"taskdragon-{transition.get('task_id') or transition.get('object_id')}"}},
                 blocking=False,
             )
         except Exception as err:  # noqa: BLE001 - a missing notify service must not break the tick
@@ -173,7 +173,7 @@ class MaintenanceRuntime:
     def _on_tag(self, event: Event) -> None:
         tag_id = event.data.get("tag_id")
         if tag_id:
-            self.coordinator.spawn(self._handle_tag(str(tag_id), event.context.user_id), "omniplan_maintenance_tag")
+            self.coordinator.spawn(self._handle_tag(str(tag_id), event.context.user_id), "taskdragon_maintenance_tag")
 
     async def _handle_tag(self, tag_id: str, user_id: str | None) -> None:
         actor = await self.coordinator.actor_for_user_id(user_id)

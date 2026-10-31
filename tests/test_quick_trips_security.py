@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 from conftest import PACKAGE_DIR, plan_by_name
 
-from omniplan.database import SCHEMA_V1, OmniPlanDB
-from omniplan.mealie_client import InvalidMealieUrl, MealieError, validate_base_url, validate_slug
-from omniplan.planner import SYSTEM, Actor, PlannerError
+from taskdragon.database import SCHEMA_V1, TaskDragonDB
+from taskdragon.mealie_client import InvalidMealieUrl, MealieError, validate_base_url, validate_slug
+from taskdragon.planner import SYSTEM, Actor, PlannerError
 
 ALEX = Actor(user_id="u-alex", user_name="Alex", person="person.alex", is_admin=True)
 SAM = Actor(user_id="u-sam", user_name="Sam", person="person.sam")
@@ -172,7 +172,7 @@ async def test_private_plans_skip_routing_balancing_and_redact_events(planner) -
     planner.test_events.clear()
     await planner.set_completed(task["uid"], True, SAM)
     event, data = planner.test_events[-1]
-    assert event == "omniplan_task_completed" and data["private"] is True and data["summary"] is None
+    assert event == "taskdragon_task_completed" and data["private"] is True and data["summary"] is None
 
 
 async def test_brain_dump_actions_cannot_target_hidden_plans(planner) -> None:
@@ -344,7 +344,7 @@ async def test_v1_database_migrates_packing_plans_to_trips(tmp_path) -> None:
     conn.commit()
     conn.close()
 
-    db = OmniPlanDB(str(path))
+    db = TaskDragonDB(str(path))
     await db.async_open()
     try:
         assert await db.schema_version() == 4
@@ -376,7 +376,7 @@ def test_sql_is_never_built_with_fstrings_or_percent_formatting() -> None:
 
 
 async def test_unknown_identifiers_are_refused(db) -> None:
-    from omniplan.database import TASKS, _ident
+    from taskdragon.database import TASKS, _ident
 
     assert _ident("summary") == "summary"
     with pytest.raises(ValueError):

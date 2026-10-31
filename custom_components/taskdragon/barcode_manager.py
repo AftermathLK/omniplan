@@ -8,7 +8,7 @@ A mapping links one normalized barcode to one pantry item or one maintenance
 part. Several barcodes may point at the same target, so two brands of 40 lb
 softener salt (or two filter makers) both count against the same part.
 
-Privacy follows the rest of OmniPlan: a mapping whose target lives in a plan the
+Privacy follows the rest of TaskDragon: a mapping whose target lives in a plan the
 user cannot see behaves like an unknown barcode, the item pickers only list
 what the user can see, and only the digits of retail barcodes are ever sent to
 Open Food Facts (and only while that lookup is switched on).

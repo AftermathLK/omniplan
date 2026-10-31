@@ -1,10 +1,10 @@
 /*
- * OmniPlan card + panel for Home Assistant.
+ * TaskDragon card + panel for Home Assistant.
  *
- * Zero-dependency Web Components (no build step): <omniplan-card> for Lovelace,
- * <omniplan-panel> for the sidebar and <omniplan-card-editor> for the visual
- * card editor. All data comes from the omniplan/* WebSocket API; an
- * omniplan/subscribe subscription keeps every open dashboard live.
+ * Zero-dependency Web Components (no build step): <taskdragon-card> for Lovelace,
+ * <taskdragon-panel> for the sidebar and <taskdragon-card-editor> for the visual
+ * card editor. All data comes from the taskdragon/* WebSocket API; a
+ * taskdragon/subscribe subscription keeps every open dashboard live.
  *
  * Rendering is escape-by-default, the same model as Lit: markup is only ever
  * produced by the `html` tagged template, which HTML-escapes every interpolated
@@ -14,7 +14,18 @@
  * inject markup or script into the dashboard.
  */
 
-const OP_VERSION = "1.3.3";
+const TD_VERSION = "1.3.4";
+
+/* The TaskDragon emblem (an ouroboros dragon) as a Home Assistant icon set, so
+ * `taskdragon:dragon` works in the sidebar, in <ha-icon> and in this card. */
+const TD_DRAGON_PATH = "M337.8 72.4 L339.3 73.1 L340.9 73.9 L342.5 74.7 L344.1 75.5 L345.6 76.3 L347.2 77.1 L348.7 77.9 L350.2 78.8 L351.8 79.6 L353.3 80.5 L354.8 81.4 L356.3 82.3 L357.8 83.2 L359.3 84.1 L360.7 85.1 L362.2 86.0 L363.7 87.0 L365.1 88.0 L366.6 88.9 L368.0 89.9 L369.4 91.0 L370.8 92.0 L372.3 93.0 L373.7 94.1 L375.0 95.1 L376.4 96.2 L379.7 94.8 L382.9 93.6 L386.0 92.6 L389.1 91.6 L392.1 90.9 L395.1 90.2 L398.0 89.7 L400.9 89.4 L403.6 89.1 L406.3 89.1 L408.9 89.1 L411.4 89.4 L413.8 89.7 L416.1 90.2 L418.3 90.8 L420.4 91.6 L422.4 92.5 L424.2 93.6 L425.9 94.8 L427.3 96.2 L422.2 103.7 L417.7 110.4 L413.9 116.3 L410.9 121.3 L409.0 125.3 L408.6 128.0 L409.7 129.3 L410.7 130.7 L414.1 130.2 L417.5 129.9 L420.7 129.6 L423.9 129.5 L427.0 129.5 L429.9 129.6 L432.8 129.9 L435.6 130.2 L438.3 130.7 L440.9 131.3 L443.3 132.0 L445.7 132.8 L447.9 133.8 L450.0 134.8 L451.9 136.0 L453.7 137.2 L455.4 138.6 L456.8 140.0 L458.2 141.6 L459.2 143.3 L452.6 149.2 L446.8 154.6 L441.8 159.3 L437.9 163.3 L435.1 166.7 L434.1 169.1 L434.8 170.7 L435.5 172.3 L438.9 172.7 L442.1 173.1 L445.3 173.7 L448.3 174.4 L451.2 175.1 L454.0 176.0 L456.7 176.9 L459.2 178.0 L461.7 179.1 L464.0 180.3 L466.1 181.6 L468.2 182.9 L470.1 184.4 L471.8 185.9 L473.4 187.5 L474.8 189.1 L476.0 190.8 L477.1 192.6 L478.0 194.4 L478.6 196.4 L471.0 200.4 L464.2 204.1 L458.4 207.4 L453.7 210.3 L450.4 212.9 L448.9 215.0 L449.2 216.7 L449.5 218.4 L452.6 219.6 L455.5 220.8 L458.3 222.1 L461.0 223.5 L463.6 225.0 L466.0 226.5 L468.4 228.0 L470.5 229.7 L472.6 231.3 L474.5 233.0 L476.2 234.8 L477.8 236.6 L479.2 238.4 L480.5 240.3 L481.6 242.2 L482.6 244.1 L483.4 246.1 L483.9 248.0 L484.3 250.0 L484.5 252.0 L476.3 254.1 L469.1 256.0 L462.9 257.8 L457.7 259.5 L454.0 261.2 L452.0 262.8 L451.9 264.6 L451.8 266.3 L454.4 268.1 L456.9 270.0 L459.3 272.0 L461.5 274.0 L463.6 276.0 L465.5 278.0 L467.3 280.1 L469.0 282.1 L470.5 284.2 L471.8 286.3 L473.1 288.4 L474.1 290.6 L475.1 292.7 L475.8 294.8 L476.4 296.9 L476.9 298.9 L477.1 301.0 L477.2 303.0 L477.1 305.0 L476.8 307.0 L468.6 307.0 L461.3 307.2 L455.0 307.5 L449.8 307.9 L445.8 308.6 L443.6 309.8 L443.1 311.4 L442.5 313.0 L444.5 315.4 L446.4 317.9 L448.2 320.3 L449.8 322.7 L451.2 325.1 L452.6 327.5 L453.8 329.9 L454.8 332.3 L455.7 334.7 L456.5 337.0 L457.2 339.3 L457.7 341.6 L458.0 343.8 L458.2 346.0 L458.3 348.2 L458.2 350.3 L457.9 352.3 L457.5 354.3 L456.9 356.2 L456.1 358.0 L448.4 356.2 L441.5 354.6 L435.5 353.4 L430.4 352.7 L426.5 352.4 L424.1 353.1 L423.2 354.5 L422.3 355.9 L423.4 358.6 L424.4 361.3 L425.3 363.9 L426.1 366.5 L426.7 369.0 L427.3 371.5 L427.7 374.0 L428.0 376.4 L428.2 378.8 L428.2 381.1 L428.2 383.4 L428.0 385.6 L427.7 387.8 L427.3 389.8 L426.8 391.8 L426.1 393.8 L425.4 395.6 L424.5 397.4 L423.4 399.0 L422.2 400.5 L415.8 397.4 L410.1 394.7 L405.0 392.5 L400.7 390.9 L397.2 390.0 L394.9 390.1 L393.7 391.3 L392.5 392.5 L392.9 395.3 L393.1 398.0 L393.3 400.7 L393.4 403.3 L393.4 405.9 L393.3 408.4 L393.0 410.9 L392.7 413.3 L392.3 415.6 L391.8 417.8 L391.1 419.9 L390.4 422.0 L389.6 424.0 L388.7 425.9 L387.7 427.6 L386.6 429.3 L385.4 430.9 L384.1 432.4 L382.7 433.7 L381.2 434.8 L375.9 430.5 L371.1 426.6 L366.8 423.4 L363.1 420.9 L360.0 419.2 L357.8 418.8 L356.3 419.7 L354.9 420.5 L354.5 423.3 L354.1 425.9 L353.6 428.5 L353.0 431.0 L352.4 433.5 L351.6 435.8 L350.8 438.1 L349.9 440.2 L348.9 442.3 L347.8 444.3 L346.7 446.2 L345.5 448.0 L344.3 449.7 L342.9 451.2 L341.5 452.7 L340.1 454.0 L338.5 455.2 L336.9 456.3 L335.3 457.2 L333.5 458.0 L329.5 452.7 L325.9 447.9 L322.6 443.9 L319.6 440.7 L317.1 438.5 L315.0 437.6 L313.4 438.1 L311.8 438.5 L310.8 441.0 L309.7 443.4 L308.6 445.8 L307.4 448.0 L306.2 450.1 L304.9 452.1 L303.6 454.1 L302.2 455.9 L300.7 457.6 L299.2 459.3 L297.7 460.8 L296.1 462.2 L294.4 463.4 L292.8 464.6 L291.1 465.7 L289.4 466.6 L287.6 467.3 L285.8 468.0 L284.0 468.5 L282.1 468.8 L279.6 462.9 L277.2 457.6 L275.0 453.1 L272.9 449.4 L271.0 446.7 L269.2 445.4 L267.6 445.5 L265.9 445.5 L264.4 447.6 L262.8 449.6 L261.1 451.5 L259.4 453.3 L257.7 455.0 L256.0 456.6 L254.2 458.1 L252.4 459.5 L250.6 460.8 L248.8 461.9 L247.0 463.0 L245.1 463.9 L243.2 464.7 L241.4 465.4 L239.5 466.0 L237.6 466.4 L235.7 466.7 L233.8 466.9 L232.0 466.9 L230.1 466.8 L229.1 460.7 L228.0 455.2 L226.9 450.4 L225.8 446.5 L224.6 443.5 L223.2 441.9 L221.6 441.6 L220.0 441.2 L218.0 442.8 L216.0 444.3 L214.0 445.7 L211.9 446.9 L209.9 448.1 L207.8 449.2 L205.8 450.1 L203.8 451.0 L201.7 451.7 L199.7 452.4 L197.7 452.9 L195.7 453.3 L193.7 453.6 L191.7 453.8 L189.8 453.9 L187.9 453.8 L186.0 453.7 L184.2 453.4 L182.4 452.9 L180.6 452.4 L181.0 446.4 L181.2 441.0 L181.3 436.3 L181.1 432.4 L180.6 429.3 L179.7 427.4 L178.2 426.7 L176.7 426.0 L174.4 427.0 L172.2 427.9 L169.9 428.6 L167.7 429.3 L165.5 429.9 L163.3 430.4 L161.1 430.8 L159.0 431.1 L156.8 431.3 L154.8 431.4 L152.7 431.4 L150.7 431.2 L148.7 431.0 L146.8 430.7 L144.9 430.3 L143.1 429.8 L141.4 429.2 L139.7 428.4 L138.1 427.6 L136.6 426.6 L138.2 421.1 L139.7 416.1 L140.8 411.7 L141.5 408.0 L141.7 405.0 L141.2 403.0 L139.9 402.0 L138.7 400.9 L136.3 401.2 L133.9 401.5 L131.6 401.6 L129.3 401.7 L127.1 401.7 L124.9 401.6 L122.8 401.4 L120.7 401.1 L118.6 400.8 L116.6 400.3 L114.7 399.8 L112.8 399.2 L111.0 398.5 L109.2 397.7 L107.5 396.9 L105.9 395.9 L104.4 394.9 L103.0 393.8 L101.6 392.6 L100.4 391.2 L103.2 386.5 L105.6 382.2 L107.6 378.3 L109.1 374.9 L110.0 372.2 L109.9 370.1 L109.0 368.8 L108.0 367.5 L105.7 367.2 L103.4 366.9 L101.2 366.4 L99.1 365.9 L97.0 365.3 L94.9 364.7 L92.9 363.9 L91.0 363.1 L89.2 362.3 L87.4 361.3 L85.7 360.4 L84.1 359.3 L82.5 358.2 L81.1 357.0 L79.7 355.8 L78.4 354.5 L77.2 353.1 L76.1 351.7 L75.1 350.2 L74.2 348.6 L77.9 344.8 L81.1 341.3 L83.8 338.1 L85.9 335.3 L87.3 332.9 L87.7 330.9 L87.1 329.4 L86.5 327.9 L84.4 327.1 L82.4 326.1 L80.4 325.2 L78.5 324.1 L76.7 323.0 L75.0 321.9 L73.3 320.7 L71.7 319.5 L70.2 318.2 L68.7 316.8 L67.4 315.5 L66.1 314.1 L64.9 312.6 L63.8 311.1 L62.8 309.6 L61.9 308.0 L61.1 306.4 L60.4 304.8 L59.8 303.1 L59.4 301.4 L63.6 298.6 L67.4 296.1 L70.6 293.7 L73.1 291.5 L75.0 289.5 L75.8 287.8 L75.6 286.2 L75.3 284.6 L73.6 283.3 L72.0 281.9 L70.4 280.4 L68.9 279.0 L67.5 277.5 L66.1 276.0 L64.9 274.4 L63.7 272.8 L62.6 271.2 L61.5 269.6 L60.6 268.0 L59.8 266.3 L59.0 264.6 L58.4 262.9 L57.8 261.2 L57.3 259.5 L57.0 257.7 L56.7 256.0 L56.5 254.3 L56.5 252.5 L61.0 250.9 L65.0 249.3 L68.5 247.8 L71.4 246.3 L73.5 244.8 L74.7 243.3 L74.9 241.7 L75.0 240.2 L73.8 238.5 L72.6 236.7 L71.5 235.0 L70.5 233.2 L69.5 231.5 L68.7 229.7 L67.9 227.9 L67.2 226.1 L66.6 224.3 L66.0 222.5 L65.6 220.7 L65.2 218.9 L64.9 217.1 L64.7 215.3 L64.6 213.6 L64.6 211.8 L64.7 210.1 L64.9 208.3 L65.2 206.6 L65.6 205.0 L70.1 204.4 L74.1 203.8 L77.7 203.2 L80.6 202.4 L83.0 201.4 L84.4 200.2 L84.9 198.8 L85.5 197.3 L84.8 195.4 L84.1 193.4 L83.6 191.5 L83.1 189.6 L82.7 187.7 L82.3 185.8 L82.1 184.0 L81.9 182.1 L81.8 180.2 L81.7 178.4 L81.8 176.6 L81.9 174.8 L82.1 173.0 L82.3 171.3 L82.7 169.6 L83.1 167.9 L83.6 166.3 L84.3 164.7 L84.9 163.1 L85.7 161.6 L90.0 162.1 L93.8 162.4 L97.2 162.5 L100.1 162.4 L102.5 161.9 L104.1 161.1 L105.0 159.8 L105.9 158.5 L105.8 156.6 L105.7 154.6 L105.7 152.7 L105.7 150.8 L105.9 148.9 L106.1 147.1 L106.3 145.2 L106.6 143.4 L107.0 141.7 L107.5 140.0 L108.0 138.3 L108.6 136.6 L109.2 135.0 L109.9 133.4 L110.7 131.9 L111.5 130.4 L112.4 129.0 L113.4 127.6 L114.5 126.3 L115.6 125.1 L119.4 126.3 L122.8 127.4 L125.9 128.1 L128.6 128.6 L130.9 128.7 L132.6 128.2 L133.8 127.2 L135.0 126.2 L136.1 125.2 L137.3 124.2 L138.5 123.2 L139.7 122.2 L140.9 121.3 L142.1 120.3 L143.4 119.4 L144.6 118.4 L145.8 117.5 L147.1 116.6 L148.4 115.7 L149.6 114.8 L150.9 114.0 L152.2 113.1 L153.5 112.3 L154.8 111.4 L156.1 110.6 L157.4 109.8 L158.7 109.0 L160.0 108.2 L161.4 107.5 L162.7 106.7 L164.1 106.1 L165.6 105.5 L167.0 104.9 L168.4 104.3 L169.8 103.7 L171.3 103.2 L172.7 102.6 L174.2 102.1 L175.6 101.5 L177.0 101.0 L178.5 100.5 L179.9 100.1 L181.4 99.6 L182.9 99.1 L184.3 98.7 L185.8 98.3 L187.2 97.8 L188.7 97.4 L190.2 97.1 L191.6 96.7 L193.1 96.3 L194.6 96.0 L196.0 95.6 L197.5 95.3 L199.0 95.0 L200.5 94.7 L201.9 94.4 L203.4 94.2 L204.9 93.9 L206.4 93.7 L207.8 93.4 L209.3 93.2 L210.8 93.0 L212.3 92.8 L213.8 92.7 L215.2 92.5 L216.7 92.4 L218.2 92.2 L219.7 92.1 L221.1 92.0 L222.6 91.9 L224.1 91.8 L225.6 91.8 L227.0 91.7 L228.5 91.7 L230.0 91.6 L231.4 91.6 L232.9 91.6 L232.9 91.6 L231.5 92.0 L230.1 92.5 L228.7 92.9 L227.3 93.3 L225.9 93.8 L224.6 94.3 L223.2 94.8 L221.8 95.3 L220.5 95.8 L219.1 96.3 L217.8 96.8 L216.4 97.4 L215.1 97.9 L213.8 98.5 L212.5 99.0 L211.2 99.6 L209.9 100.2 L208.6 100.8 L207.3 101.5 L206.0 102.1 L204.7 102.7 L203.4 103.4 L202.2 104.0 L200.9 104.7 L199.7 105.4 L198.5 106.1 L197.2 106.8 L196.0 107.5 L194.8 108.2 L193.6 108.9 L192.4 109.7 L191.2 110.4 L190.0 111.2 L188.8 112.0 L187.7 112.8 L186.5 113.5 L185.4 114.3 L184.2 115.1 L183.1 116.0 L182.0 116.8 L180.9 117.6 L179.8 118.5 L178.7 119.3 L177.6 120.2 L176.5 121.0 L175.4 121.9 L174.4 122.8 L173.3 123.7 L172.2 124.5 L171.1 125.3 L170.0 126.1 L169.0 127.0 L167.9 127.8 L166.8 128.6 L165.7 129.5 L164.7 130.3 L163.6 131.2 L162.6 132.0 L161.5 132.9 L161.2 134.7 L160.0 135.3 L158.8 135.9 L157.5 136.5 L156.1 137.0 L154.8 137.5 L153.4 138.0 L152.8 139.4 L152.2 140.7 L151.6 142.0 L150.9 143.3 L150.3 144.6 L149.6 145.8 L148.8 146.9 L148.0 148.0 L147.1 149.0 L146.2 150.0 L145.2 150.9 L144.2 151.7 L143.1 152.5 L141.9 153.3 L140.7 154.0 L139.5 154.7 L138.3 155.4 L137.0 156.2 L136.6 157.6 L136.2 159.0 L135.8 160.4 L135.4 161.8 L134.9 163.1 L134.4 164.4 L133.8 165.6 L133.2 166.8 L132.5 167.9 L131.8 169.0 L130.9 170.0 L130.0 171.0 L129.1 172.0 L128.1 172.9 L127.0 173.8 L125.9 174.7 L124.8 175.6 L123.6 176.5 L123.5 177.9 L123.3 179.4 L123.1 180.8 L122.9 182.2 L122.7 183.6 L122.4 185.0 L122.0 186.3 L121.6 187.5 L121.1 188.7 L120.5 189.9 L119.8 191.1 L119.1 192.2 L118.3 193.3 L117.5 194.3 L116.5 195.4 L115.6 196.4 L114.6 197.4 L113.7 198.5 L113.7 200.0 L113.8 201.4 L113.8 202.8 L113.8 204.3 L113.8 205.7 L113.7 207.0 L113.6 208.3 L113.4 209.7 L113.0 210.9 L112.7 212.2 L112.2 213.4 L111.6 214.6 L111.0 215.8 L110.3 217.0 L109.6 218.1 L108.8 219.3 L108.0 220.5 L107.2 221.7 L107.5 223.1 L107.8 224.5 L108.1 225.9 L108.3 227.3 L108.5 228.7 L108.7 230.0 L108.7 231.4 L108.7 232.7 L108.6 234.0 L108.4 235.3 L108.1 236.5 L107.8 237.8 L107.3 239.1 L106.9 240.3 L106.3 241.6 L105.7 242.9 L105.1 244.1 L104.5 245.4 L105.0 246.8 L105.5 248.1 L106.0 249.5 L106.5 250.8 L106.9 252.1 L107.2 253.4 L107.5 254.7 L107.7 256.0 L107.8 257.3 L107.8 258.6 L107.7 259.9 L107.6 261.2 L107.3 262.5 L107.0 263.8 L106.7 265.1 L106.3 266.5 L105.9 267.8 L105.5 269.2 L106.3 270.4 L107.0 271.7 L107.7 272.9 L108.3 274.1 L108.9 275.4 L109.4 276.6 L109.9 277.8 L110.3 279.1 L110.6 280.3 L110.8 281.6 L110.9 282.9 L111.0 284.2 L111.0 285.5 L110.9 286.8 L110.7 288.2 L110.6 289.6 L110.4 291.0 L110.2 292.3 L111.1 293.5 L112.0 294.6 L112.9 295.7 L113.7 296.8 L114.5 297.9 L115.2 299.0 L115.9 300.2 L116.4 301.3 L116.9 302.5 L117.3 303.8 L117.6 305.0 L117.9 306.3 L118.1 307.6 L118.2 308.9 L118.3 310.2 L118.3 311.6 L118.4 313.0 L118.4 314.4 L119.5 315.4 L120.5 316.3 L121.6 317.3 L122.5 318.2 L123.5 319.2 L124.4 320.2 L125.2 321.2 L125.9 322.3 L126.6 323.4 L127.2 324.5 L127.7 325.7 L128.1 326.9 L128.5 328.1 L128.8 329.4 L129.1 330.7 L129.4 332.1 L129.6 333.4 L129.9 334.8 L131.1 335.6 L132.3 336.4 L133.4 337.1 L134.6 337.9 L135.6 338.7 L136.7 339.6 L137.6 340.4 L138.5 341.4 L139.3 342.3 L140.1 343.4 L140.8 344.4 L141.4 345.5 L142.0 346.7 L142.5 347.9 L143.0 349.2 L143.4 350.5 L143.9 351.8 L144.3 353.1 L145.6 353.6 L146.9 354.2 L148.2 354.8 L149.4 355.4 L150.6 356.0 L151.7 356.7 L152.8 357.4 L153.8 358.2 L154.8 359.0 L155.7 359.9 L156.5 360.8 L157.3 361.8 L158.1 362.9 L158.8 364.0 L159.4 365.2 L160.1 366.3 L160.7 367.6 L161.4 368.8 L162.7 369.1 L164.1 369.5 L165.4 369.9 L166.7 370.3 L168.0 370.7 L169.2 371.2 L170.4 371.7 L171.5 372.3 L172.6 373.0 L173.6 373.7 L174.6 374.5 L175.5 375.4 L176.4 376.3 L177.2 377.3 L178.1 378.3 L178.9 379.4 L179.7 380.5 L180.5 381.6 L181.9 381.7 L183.3 381.9 L184.7 382.0 L186.1 382.2 L187.4 382.4 L188.6 382.7 L189.9 383.0 L191.1 383.4 L192.2 383.9 L193.3 384.5 L194.4 385.1 L195.5 385.8 L196.5 386.6 L197.5 387.4 L198.5 388.3 L199.4 389.3 L200.4 390.2 L201.4 391.2 L202.8 391.1 L204.2 391.0 L205.6 390.9 L206.9 390.9 L208.2 390.9 L209.5 391.0 L210.8 391.1 L212.0 391.3 L213.2 391.6 L214.4 392.0 L215.6 392.5 L216.7 393.0 L217.8 393.6 L218.9 394.3 L220.1 395.0 L221.2 395.8 L222.3 396.6 L223.4 397.3 L224.7 397.0 L226.1 396.7 L227.4 396.5 L228.7 396.2 L230.0 396.0 L231.3 395.9 L232.6 395.8 L233.8 395.9 L235.1 396.0 L236.3 396.1 L237.5 396.4 L238.7 396.8 L239.9 397.2 L241.1 397.7 L242.3 398.2 L243.5 398.8 L244.7 399.4 L245.9 400.0 L247.2 399.5 L248.5 399.0 L249.8 398.5 L251.0 398.1 L252.3 397.7 L253.5 397.3 L254.8 397.1 L256.0 396.9 L257.2 396.8 L258.5 396.8 L259.7 396.9 L260.9 397.0 L262.2 397.3 L263.4 397.6 L264.7 397.9 L265.9 398.3 L267.2 398.7 L268.5 399.1 L269.7 398.4 L270.9 397.7 L272.1 397.0 L273.2 396.4 L274.4 395.8 L275.6 395.3 L276.7 394.8 L277.9 394.5 L279.1 394.2 L280.3 394.0 L281.6 393.9 L282.8 393.8 L284.1 393.9 L285.3 394.0 L286.6 394.1 L287.9 394.3 L289.3 394.5 L290.6 394.7 L291.6 393.8 L292.7 393.0 L293.7 392.1 L294.8 391.3 L295.9 390.5 L296.9 389.8 L298.0 389.2 L299.1 388.7 L300.2 388.2 L301.4 387.8 L302.6 387.5 L303.8 387.3 L305.0 387.1 L306.3 387.0 L307.6 387.0 L308.9 387.0 L310.2 387.0 L311.6 387.0 L312.5 385.9 L313.4 384.9 L314.3 383.9 L315.2 382.9 L316.1 382.0 L317.1 381.2 L318.0 380.4 L319.0 379.7 L320.1 379.1 L321.1 378.5 L322.3 378.0 L323.4 377.6 L324.6 377.3 L325.8 377.0 L327.1 376.7 L328.4 376.5 L329.7 376.3 L331.0 376.1 L331.8 374.9 L332.5 373.8 L333.2 372.6 L333.9 371.6 L334.7 370.5 L335.5 369.5 L336.3 368.6 L337.2 367.8 L338.1 367.0 L339.1 366.3 L340.1 365.6 L341.2 365.0 L342.3 364.5 L343.5 364.0 L344.7 363.6 L345.9 363.2 L347.2 362.8 L348.4 362.3 L349.0 361.1 L349.5 359.8 L350.0 358.6 L350.6 357.4 L351.2 356.3 L351.8 355.2 L352.5 354.2 L353.2 353.2 L354.0 352.3 L354.8 351.4 L355.7 350.6 L356.7 349.9 L357.7 349.2 L358.8 348.6 L359.9 347.9 L361.1 347.3 L362.2 346.7 L363.4 346.1 L363.8 344.8 L364.1 343.5 L364.4 342.2 L364.8 341.0 L365.2 339.8 L365.6 338.6 L366.1 337.5 L366.7 336.4 L367.3 335.4 L368.0 334.4 L368.8 333.5 L369.6 332.6 L370.5 331.8 L371.4 331.0 L372.5 330.2 L373.5 329.4 L374.6 328.7 L375.6 327.9 L375.7 326.5 L375.9 325.2 L376.0 323.9 L376.1 322.6 L376.3 321.3 L376.6 320.1 L376.9 318.9 L377.3 317.8 L377.7 316.7 L378.3 315.6 L378.9 314.6 L379.6 313.6 L380.3 312.7 L381.1 311.7 L382.0 310.8 L382.9 309.9 L383.8 309.0 L384.8 308.0 L384.7 306.7 L384.6 305.4 L384.5 304.0 L384.5 302.8 L384.5 301.5 L384.5 300.2 L384.6 299.0 L384.8 297.9 L385.1 296.7 L385.5 295.6 L385.9 294.5 L386.4 293.4 L387.0 292.3 L387.7 291.3 L388.4 290.2 L389.1 289.2 L389.9 288.2 L390.7 287.1 L390.4 285.8 L390.1 284.5 L389.8 283.2 L389.5 282.0 L389.3 280.7 L389.2 279.5 L389.1 278.3 L389.1 277.1 L389.2 275.9 L389.4 274.8 L389.7 273.6 L390.0 272.5 L390.4 271.3 L390.9 270.2 L391.5 269.0 L392.0 267.9 L392.6 266.8 L393.3 265.6 L392.7 264.4 L392.2 263.1 L391.7 261.9 L391.3 260.7 L390.9 259.5 L390.6 258.3 L390.3 257.2 L390.1 256.0 L390.1 254.8 L390.1 253.7 L390.1 252.5 L390.3 251.3 L390.5 250.1 L390.8 248.9 L391.2 247.7 L391.6 246.5 L392.0 245.3 L392.4 244.1 L391.7 242.9 L391.0 241.8 L390.4 240.7 L389.7 239.6 L389.2 238.5 L388.6 237.4 L388.2 236.2 L387.8 235.1 L387.6 234.0 L387.4 232.8 L387.3 231.7 L387.3 230.5 L387.3 229.3 L387.4 228.1 L387.6 226.8 L387.8 225.6 L388.0 224.3 L388.2 223.0 L387.4 222.0 L386.5 221.0 L385.7 220.0 L384.9 219.0 L384.2 218.0 L383.5 217.0 L382.9 216.0 L382.3 214.9 L381.9 213.9 L381.5 212.8 L381.3 211.6 L381.1 210.5 L380.9 209.3 L380.8 208.1 L380.8 206.8 L380.8 205.6 L380.8 204.3 L380.9 203.0 L379.8 202.1 L378.8 201.3 L377.9 200.5 L376.9 199.6 L376.1 198.7 L375.2 197.8 L374.5 196.9 L373.8 196.0 L373.2 195.0 L372.7 194.0 L372.2 192.9 L371.8 191.8 L371.5 190.6 L371.3 189.5 L371.0 188.2 L370.8 187.0 L370.7 185.7 L370.5 184.5 L369.4 183.8 L368.2 183.1 L367.1 182.4 L366.1 181.7 L365.1 181.0 L364.1 180.3 L363.3 179.5 L362.4 178.7 L361.7 177.8 L361.0 176.9 L360.4 175.9 L359.9 174.9 L359.4 173.8 L358.9 172.7 L358.5 171.5 L358.1 170.3 L357.8 169.1 L357.4 167.9 L356.2 167.4 L355.0 166.9 L353.8 166.4 L352.7 165.9 L351.6 165.3 L350.5 164.7 L349.5 164.1 L348.6 163.4 L347.7 162.7 L346.9 161.9 L346.1 161.0 L345.5 160.1 L344.8 159.1 L344.2 158.0 L343.6 157.0 L343.1 155.9 L342.5 154.7 L342.0 153.6 L340.0 154.1 L339.1 153.4 L338.2 152.7 L337.3 152.0 L336.3 151.3 L335.4 150.7 L334.4 150.0 L333.5 149.3 L332.5 148.7 L331.6 148.1 L330.6 147.4 L329.6 146.8 L328.7 146.2 L327.7 145.6 L326.7 145.0 L325.7 144.4 L324.7 143.9 L323.7 143.3 L322.7 142.7 L321.7 142.2 L320.7 141.6 L319.7 141.1 L318.7 140.6 L317.6 140.1 L316.6 139.6 L315.6 139.1 L314.5 138.6 L313.5 138.1 L312.4 137.7 L311.4 137.2 L310.3 136.8 L309.3 136.3ZM313.5 138.1 L276.0 129.0 L248.0 133.0 L220.0 141.0 L194.0 150.0 L170.0 155.0 L163.0 148.0 L170.0 141.0 L178.0 131.0 L180.0 120.0 L186.0 124.0 L197.0 113.0 L201.0 103.0 L206.0 108.0 L222.0 92.0 L206.0 90.0 L202.0 98.0 L198.0 89.0 L184.0 88.0 L179.0 99.0 L174.0 87.0 L160.0 86.0 L155.0 97.0 L150.0 85.0 L136.0 85.0 L127.0 82.0 L128.0 74.0 L140.0 66.0 L160.0 60.0 L184.0 56.0 L206.0 50.0 L222.0 40.0 L238.0 34.0 L256.0 37.0 L282.0 38.0 L312.0 46.0 L338.0 62.0 L362.2 86.0ZM288.0 42.0 L295.0 39.0 L302.2 36.6 L309.4 34.8 L316.7 33.6 L324.0 33.0 L331.5 33.0 L339.0 33.6 L346.7 34.9 L354.4 36.8 L362.2 39.2 L370.0 42.3 L378.0 46.0 L371.4 44.8 L365.0 43.9 L358.8 43.2 L352.7 42.9 L346.8 42.8 L341.0 43.0 L335.4 43.5 L330.0 44.2 L324.8 45.2 L319.7 46.6 L314.8 48.1 L310.0 50.0ZM262.0 40.0 L268.4 35.6 L274.9 31.8 L281.6 28.5 L288.4 25.8 L295.4 23.6 L302.5 22.0 L309.7 20.9 L317.1 20.4 L324.6 20.5 L332.3 21.1 L340.1 22.3 L348.0 24.0 L341.1 24.4 L334.5 25.1 L328.1 26.0 L322.0 27.1 L316.1 28.4 L310.5 30.0 L305.1 31.8 L300.0 33.8 L295.1 36.0 L290.5 38.4 L286.1 41.1 L282.0 44.0ZM394.0 225.2 L377.6 229.9 L360.7 229.6 L345.9 224.6 L335.7 217.9 L333.6 212.2 L318.7 203.4 L329.2 207.3 L317.7 193.4 L331.8 203.8 L324.0 185.9 L338.3 200.1 L346.1 203.8 L357.6 203.5 L370.5 196.2 L381.6 190.9ZM107.6 299.8 L121.0 295.5 L134.9 295.2 L147.2 298.9 L155.7 304.1 L157.6 308.7 L170.1 315.5 L161.3 312.6 L171.2 323.7 L159.3 315.6 L166.2 330.0 L154.1 318.7 L147.6 316.0 L138.1 316.6 L127.8 322.9 L118.9 327.6ZM248.1 48.5 L246.8 47.8 L244.9 47.4 L242.5 47.4 L239.9 47.7 L236.7 47.0 L234.0 47.8 L231.6 49.0 L229.6 50.3 L228.1 51.8 L227.4 53.3 L227.3 54.7 L228.0 55.9 L229.4 56.8 L231.3 57.4 L233.8 57.7 L236.5 57.6 L238.9 55.8 L241.7 55.0 L244.2 53.9 L246.2 52.8 L247.7 51.6 L248.6 50.4 L248.7 49.3ZM144.0 74.0 L152.0 72.0 L150.0 68.0 L142.0 70.0Z";
+window.customIcons = window.customIcons || {};
+if (!window.customIcons.taskdragon) {
+  window.customIcons.taskdragon = {
+    getIcon: async (name) => (name === "dragon" ? { path: TD_DRAGON_PATH, viewBox: "0 0 512 512" } : undefined),
+    getIconList: async () => [{ name: "dragon", keywords: ["taskdragon", "ouroboros"] }],
+  };
+}
 
 const AISLES = ["Produce", "Meat", "Dairy", "Spices/Pantry", "Hardware", "Other"];
 const BUCKETS = [
@@ -148,9 +159,9 @@ function sanitizeTree(root) {
   return root;
 }
 
-/** The only way OmniPlan puts markup into the page. */
+/** The only way TaskDragon puts markup into the page. */
 function setHTML(element, content) {
-  if (!(content instanceof SafeHTML)) throw new TypeError("OmniPlan refuses to render unescaped HTML");
+  if (!(content instanceof SafeHTML)) throw new TypeError("TaskDragon refuses to render unescaped HTML");
   const template = document.createElement("template");
   template.innerHTML = content.value; // parsed inert: scripts don't run, images don't load
   element.replaceChildren(sanitizeTree(template.content));
@@ -257,12 +268,12 @@ function simpleMarkdown(text) {
 /* Shared data store (one per HA connection)                           */
 /* ------------------------------------------------------------------ */
 
-class OmniPlanStore {
+class TaskDragonStore {
   static for(hass) {
     const conn = hass.connection;
-    if (!conn.__omniplanStore) conn.__omniplanStore = new OmniPlanStore(conn);
-    conn.__omniplanStore.hass = hass;
-    return conn.__omniplanStore;
+    if (!conn.__taskdragonStore) conn.__taskdragonStore = new TaskDragonStore(conn);
+    conn.__taskdragonStore.hass = hass;
+    return conn.__taskdragonStore;
   }
 
   constructor(conn) {
@@ -289,7 +300,7 @@ class OmniPlanStore {
   async _start() {
     this.conn.addEventListener("ready", this._onReady);
     try {
-      this._unsub = await this.conn.subscribeMessage(() => this.refreshSoon(), { type: "omniplan/subscribe" });
+      this._unsub = await this.conn.subscribeMessage(() => this.refreshSoon(), { type: "taskdragon/subscribe" });
     } catch (err) {
       this.error = err.message || String(err);
     }
@@ -309,7 +320,7 @@ class OmniPlanStore {
 
   async refresh() {
     try {
-      this.board = await this.conn.sendMessagePromise({ type: "omniplan/get_board" });
+      this.board = await this.conn.sendMessagePromise({ type: "taskdragon/get_board" });
       this.error = null;
     } catch (err) {
       this.error = err.message || String(err);
@@ -411,28 +422,28 @@ function money(amount, currency) {
 const MAINT_STYLES = `
 .maint { display: flex; flex-direction: column; gap: 10px; }
 .msummary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.mtile { background: var(--op-surface); border: 1px solid var(--op-divider); border-radius: var(--op-radius); padding: 10px 12px; text-align: left; display: flex; flex-direction: column; gap: 2px; min-height: 64px; }
+.mtile { background: var(--td-surface); border: 1px solid var(--td-divider); border-radius: var(--td-radius); padding: 10px 12px; text-align: left; display: flex; flex-direction: column; gap: 2px; min-height: 64px; }
 .mtile .n { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
-.mtile .l { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--op-muted); font-weight: 600; }
-.mtile.over .n { color: var(--op-danger); }
-.mtile.soon .n { color: var(--op-warn); }
+.mtile .l { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--td-muted); font-weight: 600; }
+.mtile.over .n { color: var(--td-danger); }
+.mtile.soon .n { color: var(--td-warn); }
 .mtile.trig .n { color: #f4511e; }
-.mtile.on { border-color: var(--op-accent); box-shadow: inset 0 0 0 1px var(--op-accent); }
+.mtile.on { border-color: var(--td-accent); box-shadow: inset 0 0 0 1px var(--td-accent); }
 @media (max-width: 560px) { .msummary { grid-template-columns: repeat(3, minmax(0, 1fr)); } .mtile .n { font-size: 1.25rem; } }
-.msubnav { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--op-divider); flex-wrap: wrap; }
+.msubnav { display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--td-divider); flex-wrap: wrap; }
 .msubnav .tab { padding: 8px 12px; }
 .msubnav .grow { flex: 1; }
 .msearch { flex: 1 1 200px; border-radius: 18px; min-height: 36px; }
 .mfilters { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
-.mfilters label { display: flex; flex-direction: column; gap: 2px; font-size: .68rem; color: var(--op-muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.mfilters label { display: flex; flex-direction: column; gap: 2px; font-size: .68rem; color: var(--td-muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
 .mfilters select { min-height: 34px; padding: 4px 8px; font-size: .85rem; }
 .mfilters .grow { flex: 1; }
 .maddmenu { position: relative; }
 .mgroup { margin: 4px 0 8px; }
-.mgroup-head { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--op-muted); font-weight: 600; padding: 6px 2px; display: flex; gap: 8px; align-items: center; }
-.mrow { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(120px, 220px) auto; gap: 10px; align-items: center; padding: 10px 8px; border-top: 1px solid var(--op-divider); }
+.mgroup-head { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--td-muted); font-weight: 600; padding: 6px 2px; display: flex; gap: 8px; align-items: center; }
+.mrow { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(120px, 220px) auto; gap: 10px; align-items: center; padding: 10px 8px; border-top: 1px solid var(--td-divider); }
 .mrow:first-child { border-top: none; }
-.mrow:hover { background: var(--op-surface); }
+.mrow:hover { background: var(--td-surface); }
 .mrow.sel { grid-template-columns: auto auto minmax(0, 1fr) minmax(120px, 220px) auto; }
 @media (max-width: 720px) {
   .mrow, .mrow.sel { grid-template-columns: auto minmax(0, 1fr); }
@@ -442,133 +453,133 @@ const MAINT_STYLES = `
 .mrow-status { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 92px; }
 .mpill { display: inline-flex; align-items: center; gap: 4px; border-radius: 12px; padding: 2px 9px; font-size: .74rem; font-weight: 700; white-space: nowrap; }
 .mpill ha-icon { --mdc-icon-size: 14px; }
-.mpill.ok { background: color-mix(in srgb, var(--op-ok) 18%, transparent); color: var(--op-ok); }
-.mpill.soon { background: color-mix(in srgb, var(--op-warn) 22%, transparent); color: color-mix(in srgb, var(--op-warn) 75%, var(--op-text)); }
-.mpill.over { background: color-mix(in srgb, var(--op-danger) 18%, transparent); color: var(--op-danger); }
+.mpill.ok { background: color-mix(in srgb, var(--td-ok) 18%, transparent); color: var(--td-ok); }
+.mpill.soon { background: color-mix(in srgb, var(--td-warn) 22%, transparent); color: color-mix(in srgb, var(--td-warn) 75%, var(--td-text)); }
+.mpill.over { background: color-mix(in srgb, var(--td-danger) 18%, transparent); color: var(--td-danger); }
 .mpill.trig { background: color-mix(in srgb, #f4511e 20%, transparent); color: #f4511e; }
-.mpill.nfc { background: color-mix(in srgb, var(--op-accent) 15%, transparent); color: var(--op-accent); font-size: .66rem; letter-spacing: .05em; }
+.mpill.nfc { background: color-mix(in srgb, var(--td-accent) 15%, transparent); color: var(--td-accent); font-size: .66rem; letter-spacing: .05em; }
 .mrow-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .mrow-titles { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
-.mlink { background: none; border: none; padding: 0; color: var(--op-accent); font-size: .9rem; cursor: pointer; text-align: left; }
+.mlink { background: none; border: none; padding: 0; color: var(--td-accent); font-size: .9rem; cursor: pointer; text-align: left; }
 .mlink:hover { text-decoration: underline; }
-.mtitle { background: none; border: none; padding: 0; font-weight: 700; font-size: 1rem; color: var(--op-text); cursor: pointer; text-align: left; }
+.mtitle { background: none; border: none; padding: 0; font-weight: 700; font-size: 1rem; color: var(--td-text); cursor: pointer; text-align: left; }
 .mtitle:hover { text-decoration: underline; }
-.mcode { font-size: .72rem; color: var(--op-muted); font-family: var(--code-font-family, monospace); }
+.mcode { font-size: .72rem; color: var(--td-muted); font-family: var(--code-font-family, monospace); }
 .mrow-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.mchip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--op-divider); border-radius: 12px; padding: 1px 8px 1px 4px; font-size: .75rem; color: var(--op-text); background: var(--op-bg); }
-.mchip ha-icon { --mdc-icon-size: 14px; color: var(--op-muted); }
+.mchip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--td-divider); border-radius: 12px; padding: 1px 8px 1px 4px; font-size: .75rem; color: var(--td-text); background: var(--td-bg); }
+.mchip ha-icon { --mdc-icon-size: 14px; color: var(--td-muted); }
 .mchip .avatar.sm { width: 18px; height: 18px; font-size: .55rem; }
-.mcat { font-size: .75rem; color: var(--op-muted); }
+.mcat { font-size: .75rem; color: var(--td-muted); }
 .mrow-progress { display: flex; flex-direction: column; gap: 3px; }
-.mbar { height: 7px; background: var(--op-surface); border-radius: 4px; overflow: hidden; border: 1px solid var(--op-divider); }
-.mbar > span { display: block; height: 100%; border-radius: 4px; background: var(--op-ok); transition: width .25s; }
-.mbar.soon > span { background: var(--op-warn); }
-.mbar.over > span { background: var(--op-danger); }
+.mbar { height: 7px; background: var(--td-surface); border-radius: 4px; overflow: hidden; border: 1px solid var(--td-divider); }
+.mbar > span { display: block; height: 100%; border-radius: 4px; background: var(--td-ok); transition: width .25s; }
+.mbar.soon > span { background: var(--td-warn); }
+.mbar.over > span { background: var(--td-danger); }
 .mbar.trig > span { background: #f4511e; }
-.mcount { font-size: .8rem; color: var(--op-muted); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mcount { font-size: .8rem; color: var(--td-muted); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mrow-actions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
 .mbtn { border-radius: 16px; padding: 4px 12px; font-size: .82rem; font-weight: 600; min-height: 32px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .mbtn ha-icon { --mdc-icon-size: 16px; }
-.mbtn.ok { background: var(--op-ok); color: #fff; border: 1px solid var(--op-ok); }
+.mbtn.ok { background: var(--td-ok); color: #fff; border: 1px solid var(--td-ok); }
 .mbtn.skip { background: none; color: #ef6c00; border: 1px solid #ef6c00; }
-.mbtn.plain { background: var(--op-surface); color: var(--op-text); border: 1px solid var(--op-divider); }
+.mbtn.plain { background: var(--td-surface); color: var(--td-text); border: 1px solid var(--td-divider); }
 .mbtn:disabled { opacity: .45; cursor: not-allowed; }
-.mcrumb { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--op-muted); flex-wrap: wrap; }
-.mcrumb button { background: none; border: none; padding: 2px 0; color: var(--op-accent); font: inherit; cursor: pointer; }
+.mcrumb { display: flex; align-items: center; gap: 6px; font-size: .85rem; color: var(--td-muted); flex-wrap: wrap; }
+.mcrumb button { background: none; border: none; padding: 2px 0; color: var(--td-accent); font: inherit; cursor: pointer; }
 .mhead { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
 .mhead .grow { flex: 1 1 240px; min-width: 0; }
 .mhead h2 { margin: 0; font-size: 1.35rem; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mid { font-size: .78rem; font-weight: 600; border: 1px solid var(--op-divider); border-radius: 8px; padding: 1px 7px; color: var(--op-muted); }
-.msub { font-size: .88rem; color: var(--op-muted); display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; align-items: center; }
+.mid { font-size: .78rem; font-weight: 600; border: 1px solid var(--td-divider); border-radius: 8px; padding: 1px 7px; color: var(--td-muted); }
+.msub { font-size: .88rem; color: var(--td-muted); display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; align-items: center; }
 .mhead-actions { display: flex; gap: 6px; align-items: center; position: relative; }
-.mtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--op-divider); }
+.mtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--td-divider); }
 .mkpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
-.mkpi { background: var(--op-surface); border-radius: 10px; padding: 10px 12px; border: 1px solid var(--op-divider); }
-.mkpi .k { font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; color: var(--op-muted); font-weight: 700; }
+.mkpi { background: var(--td-surface); border-radius: 10px; padding: 10px 12px; border: 1px solid var(--td-divider); }
+.mkpi .k { font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; color: var(--td-muted); font-weight: 700; }
 .mkpi .v { font-size: 1.05rem; font-weight: 600; margin-top: 4px; }
 .mkpi .v.big { font-size: 1.7rem; font-weight: 700; }
-.mcallout { border-left: 4px solid var(--op-accent); background: color-mix(in srgb, var(--op-accent) 7%, var(--op-bg)); border-radius: 8px; padding: 10px 12px; font-size: .92rem; display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
-.mcallout ha-icon { color: var(--op-accent); }
+.mcallout { border-left: 4px solid var(--td-accent); background: color-mix(in srgb, var(--td-accent) 7%, var(--td-bg)); border-radius: 8px; padding: 10px 12px; font-size: .92rem; display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.mcallout ha-icon { color: var(--td-accent); }
 .mcallout .grow { flex: 1 1 200px; }
-.mtimeline { background: var(--op-surface); border-radius: 10px; padding: 12px; border: 1px solid var(--op-divider); }
-.mtimeline .ends { display: flex; justify-content: space-between; font-size: .8rem; color: var(--op-muted); margin-bottom: 6px; gap: 10px; }
+.mtimeline { background: var(--td-surface); border-radius: 10px; padding: 12px; border: 1px solid var(--td-divider); }
+.mtimeline .ends { display: flex; justify-content: space-between; font-size: .8rem; color: var(--td-muted); margin-bottom: 6px; gap: 10px; }
 .mtimeline .mid-label { text-align: center; font-size: .85rem; margin-top: 6px; font-weight: 600; }
-.mcard { border: 1px solid var(--op-divider); border-radius: var(--op-radius); padding: 10px 12px; background: var(--op-bg); }
+.mcard { border: 1px solid var(--td-divider); border-radius: var(--td-radius); padding: 10px 12px; background: var(--td-bg); }
 .mcard h3 { margin: 0 0 8px; font-size: .9rem; display: flex; align-items: center; gap: 8px; }
 .mcard h3 .grow { flex: 1; }
-.mevent { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--op-divider); align-items: flex-start; }
+.mevent { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--td-divider); align-items: flex-start; }
 .mevent:first-of-type { border-top: none; }
-.mevent .dot { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; background: color-mix(in srgb, var(--op-ok) 18%, transparent); color: var(--op-ok); }
+.mevent .dot { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; background: color-mix(in srgb, var(--td-ok) 18%, transparent); color: var(--td-ok); }
 .mevent .dot.skipped, .mevent .dot.missed { background: color-mix(in srgb, #ef6c00 18%, transparent); color: #ef6c00; }
-.mevent .dot.purchase, .mevent .dot.salt, .mevent .dot.regeneration { background: color-mix(in srgb, var(--op-accent) 15%, transparent); color: var(--op-accent); }
+.mevent .dot.purchase, .mevent .dot.salt, .mevent .dot.regeneration { background: color-mix(in srgb, var(--td-accent) 15%, transparent); color: var(--td-accent); }
 .mevent .dot ha-icon { --mdc-icon-size: 16px; }
 .mevent .body { flex: 1; min-width: 0; font-size: .88rem; }
-.mevent .when { color: var(--op-muted); font-size: .8rem; }
+.mevent .when { color: var(--td-muted); font-size: .8rem; }
 .mevent .note { margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
-.macc { border: 1px solid var(--op-divider); border-radius: var(--op-radius); overflow: hidden; background: var(--op-bg); }
-.macc-head { display: flex; align-items: center; gap: 8px; padding: 2px 8px 2px 2px; background: var(--op-surface); flex-wrap: wrap; }
+.macc { border: 1px solid var(--td-divider); border-radius: var(--td-radius); overflow: hidden; background: var(--td-bg); }
+.macc-head { display: flex; align-items: center; gap: 8px; padding: 2px 8px 2px 2px; background: var(--td-surface); flex-wrap: wrap; }
 .macc-body { padding: 8px 12px 12px; }
 .mtank-wrap { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
-.mtank { position: relative; width: 74px; height: 170px; border: 2px solid var(--op-divider); border-radius: 10px 10px 16px 16px; overflow: hidden; background: var(--op-surface); flex: 0 0 auto; }
+.mtank { position: relative; width: 74px; height: 170px; border: 2px solid var(--td-divider); border-radius: 10px 10px 16px 16px; overflow: hidden; background: var(--td-surface); flex: 0 0 auto; }
 .mtank .salt { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(180deg, #eceff1, #b0bec5); transition: height .3s; }
 .mtank .salt.low { background: linear-gradient(180deg, #ffccbc, #ff8a65); }
-.mtank .mark { position: absolute; left: 0; right: 0; border-top: 1px dashed color-mix(in srgb, var(--op-text) 25%, transparent); font-size: .6rem; color: var(--op-muted); padding-left: 3px; line-height: 1; }
-.mtank .warn { border-top: 2px solid var(--op-danger); }
+.mtank .mark { position: absolute; left: 0; right: 0; border-top: 1px dashed color-mix(in srgb, var(--td-text) 25%, transparent); font-size: .6rem; color: var(--td-muted); padding-left: 3px; line-height: 1; }
+.mtank .warn { border-top: 2px solid var(--td-danger); }
 .mtank-stats { flex: 1 1 220px; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px; align-content: start; }
 .mtank-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
 .mlevel { min-width: 40px; }
-.mpart { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--op-divider); }
+.mpart { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--td-divider); }
 .mpart:first-child { border-top: none; }
-.mstock { font-weight: 700; padding: 2px 9px; border-radius: 12px; background: color-mix(in srgb, var(--op-ok) 16%, transparent); color: var(--op-ok); font-size: .8rem; white-space: nowrap; }
-.mstock.low { background: color-mix(in srgb, var(--op-danger) 16%, transparent); color: var(--op-danger); }
-.mdoc { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--op-divider); }
+.mstock { font-weight: 700; padding: 2px 9px; border-radius: 12px; background: color-mix(in srgb, var(--td-ok) 16%, transparent); color: var(--td-ok); font-size: .8rem; white-space: nowrap; }
+.mstock.low { background: color-mix(in srgb, var(--td-danger) 16%, transparent); color: var(--td-danger); }
+.mdoc { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--td-divider); }
 .mdoc:first-child { border-top: none; }
 .mdoc .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mupload { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .mcal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
-.mcal .dow { font-size: .7rem; text-align: center; color: var(--op-muted); font-weight: 700; text-transform: uppercase; }
-.mcal .day { min-height: 84px; border: 1px solid var(--op-divider); border-radius: 8px; padding: 4px; font-size: .75rem; display: flex; flex-direction: column; gap: 2px; background: var(--op-bg); overflow: hidden; }
+.mcal .dow { font-size: .7rem; text-align: center; color: var(--td-muted); font-weight: 700; text-transform: uppercase; }
+.mcal .day { min-height: 84px; border: 1px solid var(--td-divider); border-radius: 8px; padding: 4px; font-size: .75rem; display: flex; flex-direction: column; gap: 2px; background: var(--td-bg); overflow: hidden; }
 .mcal .day.out { opacity: .45; }
-.mcal .day.today { border-color: var(--op-accent); box-shadow: inset 0 0 0 1px var(--op-accent); }
+.mcal .day.today { border-color: var(--td-accent); box-shadow: inset 0 0 0 1px var(--td-accent); }
 .mcal .num { font-weight: 700; font-size: .78rem; }
-.mcal .item { border-radius: 6px; padding: 1px 4px; background: var(--op-surface); border: none; text-align: left; font-size: .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; color: var(--op-text); }
-.mcal .item.over, .mcal .item.trig { background: color-mix(in srgb, var(--op-danger) 16%, transparent); }
-.mcal .item.soon { background: color-mix(in srgb, var(--op-warn) 20%, transparent); }
+.mcal .item { border-radius: 6px; padding: 1px 4px; background: var(--td-surface); border: none; text-align: left; font-size: .7rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; color: var(--td-text); }
+.mcal .item.over, .mcal .item.trig { background: color-mix(in srgb, var(--td-danger) 16%, transparent); }
+.mcal .item.soon { background: color-mix(in srgb, var(--td-warn) 20%, transparent); }
 .mcal .item.done { opacity: .6; text-decoration: line-through; }
-.mcal .item.proj { border: 1px dashed var(--op-divider); background: none; }
+.mcal .item.proj { border: 1px dashed var(--td-divider); background: none; }
 .mspend { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; align-items: end; height: 120px; margin: 8px 0; }
-.mspend .bar { background: color-mix(in srgb, var(--op-accent) 70%, transparent); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; }
-.mspend-labels { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; font-size: .65rem; color: var(--op-muted); text-align: center; }
+.mspend .bar { background: color-mix(in srgb, var(--td-accent) 70%, transparent); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; }
+.mspend-labels { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; font-size: .65rem; color: var(--td-muted); text-align: center; }
 .mtable { width: 100%; border-collapse: collapse; font-size: .88rem; }
-.mtable td { padding: 6px 4px; border-top: 1px solid var(--op-divider); }
+.mtable td { padding: 6px 4px; border-top: 1px solid var(--td-divider); }
 .mtable td.r { text-align: right; white-space: nowrap; }
 .mtree { display: flex; flex-direction: column; }
-.mtree .node { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-top: 1px solid var(--op-divider); cursor: pointer; background: none; border-left: none; border-right: none; border-bottom: none; text-align: left; color: var(--op-text); width: 100%; }
-.mtree .node:hover { background: var(--op-surface); }
+.mtree .node { display: flex; align-items: center; gap: 10px; padding: 9px 8px; border-top: 1px solid var(--td-divider); cursor: pointer; background: none; border-left: none; border-right: none; border-bottom: none; text-align: left; color: var(--td-text); width: 100%; }
+.mtree .node:hover { background: var(--td-surface); }
 .mtree .node .grow { flex: 1; min-width: 0; }
-.mtrig { padding: 6px 0; border-top: 1px solid var(--op-divider); font-size: .88rem; }
+.mtrig { padding: 6px 0; border-top: 1px solid var(--td-divider); font-size: .88rem; }
 .mtrig:first-of-type { border-top: none; }
 .mtrig .row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .mrec { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .mrec .grow { flex: 1 1 220px; font-size: .9rem; }
-.mtrigger-edit { border: 1px solid var(--op-divider); border-radius: 10px; padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mtrigger-edit { border: 1px solid var(--td-divider); border-radius: 10px; padding: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .mtrigger-edit .full { grid-column: 1 / -1; }
 .mmonths { display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .mqr { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .mqr .qr-slot canvas { width: 240px; height: 240px; image-rendering: pixelated; background: #fff; border-radius: 8px; }
-.mqr .url { font-size: .72rem; color: var(--op-muted); word-break: break-all; text-align: center; }
-.mresult { display: flex; gap: 10px; align-items: center; padding: 8px 4px; border-top: 1px solid var(--op-divider); width: 100%; background: none; border-left: none; border-right: none; border-bottom: none; text-align: left; color: var(--op-text); cursor: pointer; }
-.mresult:hover { background: var(--op-surface); }
+.mqr .url { font-size: .72rem; color: var(--td-muted); word-break: break-all; text-align: center; }
+.mresult { display: flex; gap: 10px; align-items: center; padding: 8px 4px; border-top: 1px solid var(--td-divider); width: 100%; background: none; border-left: none; border-right: none; border-bottom: none; text-align: left; color: var(--td-text); cursor: pointer; }
+.mresult:hover { background: var(--td-surface); }
 .mresult .grow { flex: 1; min-width: 0; }
-.maint .banner { font-size: .9rem; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--op-accent) 10%, transparent); display: flex; gap: 8px; align-items: center; }
+.maint .banner { font-size: .9rem; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--td-accent) 10%, transparent); display: flex; gap: 8px; align-items: center; }
 .mtabs .tab { padding: 8px 12px; }
 .mrow input.sel { width: 18px; height: 18px; min-height: auto; }
-.mattn { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-top: 1px solid var(--op-divider); }
+.mattn { display: flex; align-items: center; gap: 10px; padding: 8px 4px; border-top: 1px solid var(--td-divider); }
 .mattn .grow { flex: 1; min-width: 0; }
 .mtriggers { display: flex; flex-direction: column; gap: 8px; }
 .mtemplates small { display: block; }
 .mcomplete-form .mupload input[type=file] { min-height: auto; border: none; padding: 0; }
-.dialog .mgroup-head { margin: 6px 0 0; border-top: 1px solid var(--op-divider); padding-top: 10px; }
+.dialog .mgroup-head { margin: 6px 0 0; border-top: 1px solid var(--td-divider); padding-top: 10px; }
 .dialog .mgroup-head .grow { flex: 1; }
 .mfilters .toggle-group, .mtrigger-edit .toggle-group { display: inline-flex; gap: 4px; align-items: center; }
 .mtrigger-edit .toggle-group select { flex: 1; }
@@ -601,17 +612,17 @@ const RECIPE_STYLES = `
 .rfilters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 8px; }
 .rfilters input[type=search] { flex: 1 1 200px; border-radius: 18px; min-height: 36px; padding: 6px 14px; min-width: 0; }
 .rfilters select { min-height: 36px; padding: 4px 8px; max-width: 100%; flex: 1 1 140px; }
-.rnote { font-size: .8rem; color: var(--op-muted); margin-bottom: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.rnote { font-size: .8rem; color: var(--td-muted); margin-bottom: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
-.rcard { border: 1px solid var(--op-divider); border-radius: var(--op-radius); overflow: hidden; display: flex; flex-direction: column; background: var(--op-bg); min-width: 0; }
-.rimg { aspect-ratio: 16 / 10; background: var(--op-surface); display: flex; align-items: center; justify-content: center; color: var(--op-muted); overflow: hidden; }
+.rcard { border: 1px solid var(--td-divider); border-radius: var(--td-radius); overflow: hidden; display: flex; flex-direction: column; background: var(--td-bg); min-width: 0; }
+.rimg { aspect-ratio: 16 / 10; background: var(--td-surface); display: flex; align-items: center; justify-content: center; color: var(--td-muted); overflow: hidden; }
 .rimg ha-icon { --mdc-icon-size: 36px; opacity: .45; }
 .rimg img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .rbody { padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
 .rtitle { font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; background: none; border: none; padding: 0; text-align: left; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
-.rtitle:hover { color: var(--op-accent); text-decoration: underline; }
+.rtitle:hover { color: var(--td-accent); text-decoration: underline; }
 .rimg[data-action] { cursor: pointer; }
-.rmeta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: .78rem; color: var(--op-muted); }
+.rmeta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: .78rem; color: var(--td-muted); }
 .ractions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; align-items: center; }
 .ractions .btn { flex: 1 1 auto; justify-content: center; }
 @media (max-width: 520px) {
@@ -620,20 +631,20 @@ const RECIPE_STYLES = `
   .rimg { flex: 0 0 92px; width: 92px; aspect-ratio: auto; min-height: 92px; }
   .ractions .btn { flex: 1 1 40%; padding: 4px 8px; }
 }
-.rgroup { grid-column: 1 / -1; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--op-muted); font-weight: 600; padding: 6px 2px 0; }
+.rgroup { grid-column: 1 / -1; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--td-muted); font-weight: 600; padding: 6px 2px 0; }
 .rmore { display: flex; justify-content: center; margin: 12px 0; }
-.rrow { display: flex; gap: 10px; align-items: center; padding: 8px 4px; border-top: 1px solid var(--op-divider); cursor: pointer; }
+.rrow { display: flex; gap: 10px; align-items: center; padding: 8px 4px; border-top: 1px solid var(--td-divider); cursor: pointer; }
 .rrow:first-child { border-top: none; }
 .rrow input { width: 20px; height: 20px; min-height: auto; flex: 0 0 auto; }
 .rrow .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.rrow.skip .grow { color: var(--op-muted); }
+.rrow.skip .grow { color: var(--td-muted); }
 .rchips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .rchips .chip { padding-right: 2px; }
-.rchips .x { background: none; border: none; width: 26px; height: 26px; border-radius: 50%; color: var(--op-muted); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
-.rchips .x:hover { background: var(--op-surface); color: var(--op-danger); }
+.rchips .x { background: none; border: none; width: 26px; height: 26px; border-radius: 50%; color: var(--td-muted); display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.rchips .x:hover { background: var(--td-surface); color: var(--td-danger); }
 .rdays { display: flex; flex-wrap: wrap; gap: 6px; }
 .rpantry { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0 12px; }
-.rpantry label { display: flex; align-items: center; gap: 8px; padding: 6px 2px; font-size: .9rem; color: var(--op-text); cursor: pointer; }
+.rpantry label { display: flex; align-items: center; gap: 8px; padding: 6px 2px; font-size: .9rem; color: var(--td-text); cursor: pointer; }
 .rpantry input { width: 18px; height: 18px; min-height: auto; }
 .rsettings .shop-add { margin-top: 6px; }
 `;
@@ -644,11 +655,11 @@ const RECIPE_STYLES = `
 
 const SCAN_FORMATS = ["upc_a", "upc_e", "ean_13", "ean_8", "code_128", "code_39", "qr_code"];
 // Bundled with the integration (Apache-2.0) and only loaded where the browser has no BarcodeDetector.
-const ZXING_SRC = "/omniplan_static/vendor/zxing-library-0.23.0.min.js";
+const ZXING_SRC = "/taskdragon_static/vendor/zxing-library-0.23.0.min.js";
 const ZXING_FORMATS = { upc_a: "UPC_A", upc_e: "UPC_E", ean_13: "EAN_13", ean_8: "EAN_8", code_128: "CODE_128", code_39: "CODE_39", qr_code: "QR_CODE" };
 const RESTOCK_PILLS = [1, 2, 4, 6];
 const COOK_SCALES = [0.5, 1, 2, 3];
-const KEEP_AWAKE_KEY = "omniplan.keepAwake";
+const KEEP_AWAKE_KEY = "taskdragon.keepAwake";
 const AMOUNT_FRACTIONS = [[1 / 8, "⅛"], [1 / 4, "¼"], [1 / 3, "⅓"], [3 / 8, "⅜"], [1 / 2, "½"], [5 / 8, "⅝"], [2 / 3, "⅔"], [3 / 4, "¾"], [7 / 8, "⅞"]];
 
 let zxingPromise = null;
@@ -733,125 +744,125 @@ function taskRecipeSlug(task) {
 }
 
 const SCAN_STYLES = `
-.op-scan { position: fixed; inset: 0; z-index: 10000; background: #000; color: #fff; overflow: hidden; touch-action: none; }
-.op-scan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.op-scan .reticle { position: absolute; left: 50%; top: 44%; width: min(80vw, 440px); height: min(44vw, 230px); transform: translate(-50%, -50%); border-radius: 16px; border: 2px solid rgba(255,255,255,.92); box-shadow: 0 0 0 200vmax rgba(0,0,0,.5); pointer-events: none; transition: border-color .15s; }
-.op-scan .reticle::after { content: ""; position: absolute; left: 7%; right: 7%; top: 50%; height: 2px; background: #ff5252; box-shadow: 0 0 10px #ff5252; animation: op-laser 1.8s ease-in-out infinite; }
-.op-scan.hit .reticle { border-color: #69f0ae; }
-@keyframes op-laser { 0%, 100% { transform: translateY(-42px); } 50% { transform: translateY(42px); } }
-.op-scan .sbar { position: absolute; left: 0; right: 0; top: 0; z-index: 2; display: flex; gap: 8px; align-items: center; padding: max(12px, env(safe-area-inset-top)) 12px 18px; background: linear-gradient(rgba(0,0,0,.75), transparent); }
-.op-scan .sbar .grow { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.op-scan .sbtn { background: rgba(255,255,255,.18); color: #fff; border: none; border-radius: 50%; width: 46px; height: 46px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
-.op-scan .sbtn[hidden] { display: none; }
-.op-scan .sbtn.on { background: #ffd54f; color: #222; }
-.op-scan .sbottom { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 22px 14px max(16px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(0,0,0,.85) 35%); display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
-.op-scan .sstatus { text-align: center; font-size: .95rem; line-height: 1.35; }
-.op-scan .sstatus.warn { color: #ffd54f; }
-.op-scan .smanual { display: flex; gap: 8px; max-width: 460px; width: 100%; margin: 0 auto; }
-.op-scan .smanual input { flex: 1; min-width: 0; border-radius: 22px; border: none; padding: 10px 16px; font-size: 1rem; background: rgba(255,255,255,.95); color: #111; }
-.op-scan .smanual button { border-radius: 22px; border: none; padding: 0 16px; background: var(--op-accent, #03a9f4); color: #fff; font-weight: 600; }
-.op-scan .sengine { text-align: center; font-size: .75rem; opacity: .65; }
+.td-scan { position: fixed; inset: 0; z-index: 10000; background: #000; color: #fff; overflow: hidden; touch-action: none; }
+.td-scan video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.td-scan .reticle { position: absolute; left: 50%; top: 44%; width: min(80vw, 440px); height: min(44vw, 230px); transform: translate(-50%, -50%); border-radius: 16px; border: 2px solid rgba(255,255,255,.92); box-shadow: 0 0 0 200vmax rgba(0,0,0,.5); pointer-events: none; transition: border-color .15s; }
+.td-scan .reticle::after { content: ""; position: absolute; left: 7%; right: 7%; top: 50%; height: 2px; background: #ff5252; box-shadow: 0 0 10px #ff5252; animation: td-laser 1.8s ease-in-out infinite; }
+.td-scan.hit .reticle { border-color: #69f0ae; }
+@keyframes td-laser { 0%, 100% { transform: translateY(-42px); } 50% { transform: translateY(42px); } }
+.td-scan .sbar { position: absolute; left: 0; right: 0; top: 0; z-index: 2; display: flex; gap: 8px; align-items: center; padding: max(12px, env(safe-area-inset-top)) 12px 18px; background: linear-gradient(rgba(0,0,0,.75), transparent); }
+.td-scan .sbar .grow { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-scan .sbtn { background: rgba(255,255,255,.18); color: #fff; border: none; border-radius: 50%; width: 46px; height: 46px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.td-scan .sbtn[hidden] { display: none; }
+.td-scan .sbtn.on { background: #ffd54f; color: #222; }
+.td-scan .sbottom { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 22px 14px max(16px, env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(0,0,0,.85) 35%); display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.td-scan .sstatus { text-align: center; font-size: .95rem; line-height: 1.35; }
+.td-scan .sstatus.warn { color: #ffd54f; }
+.td-scan .smanual { display: flex; gap: 8px; max-width: 460px; width: 100%; margin: 0 auto; }
+.td-scan .smanual input { flex: 1; min-width: 0; border-radius: 22px; border: none; padding: 10px 16px; font-size: 1rem; background: rgba(255,255,255,.95); color: #111; }
+.td-scan .smanual button { border-radius: 22px; border: none; padding: 0 16px; background: var(--td-accent, #03a9f4); color: #fff; font-weight: 600; }
+.td-scan .sengine { text-align: center; font-size: .75rem; opacity: .65; }
 .backdrop.sheet-wrap { align-items: flex-end; }
 .dialog.sheet { width: min(560px, 100%); border-radius: 18px 18px 0 0; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
-@media (min-width: 700px) { .backdrop.sheet-wrap { align-items: center; } .dialog.sheet { border-radius: var(--op-radius); } }
+@media (min-width: 700px) { .backdrop.sheet-wrap { align-items: center; } .dialog.sheet { border-radius: var(--td-radius); } }
 .ssheet-head { display: flex; gap: 12px; align-items: flex-start; }
-.ssheet-head .sicon { width: 44px; height: 44px; border-radius: 12px; background: var(--op-surface); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.ssheet-head .sicon { width: 44px; height: 44px; border-radius: 12px; background: var(--td-surface); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
 .ssheet-head h2 { margin: 0; font-size: 1.15rem; }
-.sstock { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 14px; font-size: .92rem; color: var(--op-muted); }
-.sstock strong { color: var(--op-text); font-size: 1.05rem; }
-.sstock .low { color: var(--op-danger); font-weight: 600; }
+.sstock { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 14px; font-size: .92rem; color: var(--td-muted); }
+.sstock strong { color: var(--td-text); font-size: 1.05rem; }
+.sstock .low { color: var(--td-danger); font-weight: 600; }
 .sactions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .sactions .btn { min-height: 56px; font-size: 1.02rem; justify-content: center; }
-.sbig { background: var(--op-accent); color: #fff; }
+.sbig { background: var(--td-accent); color: #fff; }
 .spills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
 .spills .chip { min-width: 54px; min-height: 42px; justify-content: center; font-size: 1rem; font-weight: 600; }
 .spills input { width: 90px; min-height: 42px; text-align: center; }
-.scode { margin-top: 14px; display: flex; gap: 8px; align-items: center; font-size: .8rem; color: var(--op-muted); flex-wrap: wrap; }
-.scode code { background: var(--op-surface); padding: 2px 6px; border-radius: 6px; }
-.slink-suggest { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: var(--op-radius); background: var(--op-surface); margin: 6px 0 12px; }
+.scode { margin-top: 14px; display: flex; gap: 8px; align-items: center; font-size: .8rem; color: var(--td-muted); flex-wrap: wrap; }
+.scode code { background: var(--td-surface); padding: 2px 6px; border-radius: 6px; }
+.slink-suggest { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: var(--td-radius); background: var(--td-surface); margin: 6px 0 12px; }
 .slink-suggest .grow { min-width: 0; }
-.slink-list { max-height: min(46vh, 360px); overflow: auto; border: 1px solid var(--op-divider); border-radius: var(--op-radius); }
-.slink-row { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--op-divider); cursor: pointer; }
+.slink-list { max-height: min(46vh, 360px); overflow: auto; border: 1px solid var(--td-divider); border-radius: var(--td-radius); }
+.slink-row { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-top: 1px solid var(--td-divider); cursor: pointer; }
 .slink-row:first-child { border-top: none; }
 .slink-row input { width: 20px; height: 20px; min-height: auto; flex: 0 0 auto; }
 .slink-row .grow { min-width: 0; overflow-wrap: anywhere; }
-.slink-row.on { background: color-mix(in srgb, var(--op-accent) 10%, transparent); }
+.slink-row.on { background: color-mix(in srgb, var(--td-accent) 10%, transparent); }
 .slink-search { width: 100%; margin-bottom: 8px; }
-.op-toast { flex-wrap: wrap; row-gap: 2px; z-index: 10002; width: max-content; box-sizing: border-box; }
+.td-toast { flex-wrap: wrap; row-gap: 2px; z-index: 10002; width: max-content; box-sizing: border-box; }
 `;
 
 const COOK_STYLES = `
 .backdrop.cook-wrap { padding: 0; }
 .dialog.cook { width: min(1120px, 96vw); height: min(92vh, 1000px); max-height: none; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 @media (max-width: 700px) { .dialog.cook { width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; } }
-.cook-head { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--op-divider); background: var(--op-bg); flex-wrap: wrap; }
+.cook-head { display: flex; gap: 8px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--td-divider); background: var(--td-bg); flex-wrap: wrap; }
 .cook-head .ctitle { flex: 1 1 160px; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cawake { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 22px; border: 2px solid var(--op-divider); font-weight: 600; cursor: pointer; user-select: none; min-height: 40px; }
+.cawake { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 22px; border: 2px solid var(--td-divider); font-weight: 600; cursor: pointer; user-select: none; min-height: 40px; }
 .cawake input { width: 20px; height: 20px; min-height: auto; margin: 0; }
 .cawake.on { border-color: #f9a825; background: color-mix(in srgb, #ffd54f 28%, transparent); }
 .cawake .sun { color: #f9a825; --mdc-icon-size: 22px; }
-.cawake-status { font-size: .75rem; color: var(--op-muted); }
+.cawake-status { font-size: .75rem; color: var(--td-muted); }
 .cawake-status.on { color: #2e7d32; }
 .cook-scroll { flex: 1; overflow: auto; padding: 0 0 16px; overscroll-behavior: contain; }
 .cook-hero { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 18px; padding: 16px; }
 @media (max-width: 700px) { .cook-hero { grid-template-columns: minmax(0, 1fr); padding: 0 0 8px; gap: 10px; } .cook-hero .cmeta { padding: 0 14px; } }
-.cook-img { aspect-ratio: 4 / 3; background: var(--op-surface); border-radius: var(--op-radius); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--op-muted); }
+.cook-img { aspect-ratio: 4 / 3; background: var(--td-surface); border-radius: var(--td-radius); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--td-muted); }
 .cook-img ha-icon { --mdc-icon-size: 48px; opacity: .45; }
 .cook-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 @media (max-width: 700px) { .cook-img { border-radius: 0; aspect-ratio: 16 / 9; } }
 .cmeta h2 { margin: 0 0 6px; font-size: 1.5rem; line-height: 1.2; overflow-wrap: anywhere; }
-.cmeta .cdesc { color: var(--op-muted); margin: 0 0 10px; line-height: 1.45; }
+.cmeta .cdesc { color: var(--td-muted); margin: 0 0 10px; line-height: 1.45; }
 .ctimes { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 10px 0; }
-.ctimes div { display: flex; flex-direction: column; font-size: .75rem; color: var(--op-muted); text-transform: uppercase; letter-spacing: .04em; }
-.ctimes strong { font-size: 1rem; color: var(--op-text); text-transform: none; letter-spacing: 0; }
+.ctimes div { display: flex; flex-direction: column; font-size: .75rem; color: var(--td-muted); text-transform: uppercase; letter-spacing: .04em; }
+.ctimes strong { font-size: 1rem; color: var(--td-text); text-transform: none; letter-spacing: 0; }
 .cscale { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
 .cscale .chip { min-width: 52px; min-height: 40px; justify-content: center; font-weight: 700; }
 .cook-cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 22px; padding: 0 16px; }
 @media (max-width: 860px) { .cook-cols { grid-template-columns: minmax(0, 1fr); padding: 0 14px; } }
 .cook-cols h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 14px 0 8px; font-size: 1.15rem; }
 .caddmissing { width: 100%; justify-content: center; min-height: 46px; margin-bottom: 8px; }
-.csection { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--op-muted); font-weight: 700; margin: 14px 0 4px; }
-.cing { display: flex; gap: 12px; align-items: flex-start; padding: 9px 2px; border-bottom: 1px solid var(--op-divider); cursor: pointer; font-size: 1.05rem; line-height: 1.4; }
+.csection { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--td-muted); font-weight: 700; margin: 14px 0 4px; }
+.cing { display: flex; gap: 12px; align-items: flex-start; padding: 9px 2px; border-bottom: 1px solid var(--td-divider); cursor: pointer; font-size: 1.05rem; line-height: 1.4; }
 .cing input { width: 26px; height: 26px; min-height: auto; flex: 0 0 auto; margin: 0; }
 .cing .grow { min-width: 0; overflow-wrap: anywhere; }
 .cing .amt { font-weight: 700; }
 .cing.got .grow { text-decoration: line-through; opacity: .5; }
 .cing .badge { margin-left: 4px; }
-.cstep { display: flex; gap: 14px; padding: 14px 10px; border-radius: var(--op-radius); border: 2px solid transparent; cursor: pointer; margin-bottom: 6px; }
-.cstep .cnum { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; background: var(--op-surface); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.05rem; }
-.cstep .ctext { flex: 1; min-width: 0; font-size: 1.18rem; line-height: 1.6; color: var(--primary-text-color, var(--op-text)); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cstep { display: flex; gap: 14px; padding: 14px 10px; border-radius: var(--td-radius); border: 2px solid transparent; cursor: pointer; margin-bottom: 6px; }
+.cstep .cnum { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%; background: var(--td-surface); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.05rem; }
+.cstep .ctext { flex: 1; min-width: 0; font-size: 1.18rem; line-height: 1.6; color: var(--primary-text-color, var(--td-text)); white-space: pre-wrap; overflow-wrap: anywhere; }
 .cstep .ctext strong { display: block; font-size: 1rem; margin-bottom: 2px; }
-.cstep.current { border-color: var(--op-accent); background: color-mix(in srgb, var(--op-accent) 8%, transparent); }
-.cstep.current .cnum { background: var(--op-accent); color: #fff; }
+.cstep.current { border-color: var(--td-accent); background: color-mix(in srgb, var(--td-accent) 8%, transparent); }
+.cstep.current .cnum { background: var(--td-accent); color: #fff; }
 .cstep.done { opacity: .5; }
 .cstep.done .cnum { background: #2e7d32; color: #fff; }
 .ctimer-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; white-space: normal; }
-.ctimer-pill { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--op-accent); color: var(--op-accent); background: none; border-radius: 22px; padding: 6px 14px; font-weight: 700; font-size: .95rem; min-height: 40px; cursor: pointer; }
-.cnotes { margin: 18px 16px 0; padding: 12px 14px; border-radius: var(--op-radius); background: color-mix(in srgb, #ffd54f 22%, transparent); border-left: 4px solid #f9a825; }
+.ctimer-pill { display: inline-flex; align-items: center; gap: 6px; border: 2px solid var(--td-accent); color: var(--td-accent); background: none; border-radius: 22px; padding: 6px 14px; font-weight: 700; font-size: .95rem; min-height: 40px; cursor: pointer; }
+.cnotes { margin: 18px 16px 0; padding: 12px 14px; border-radius: var(--td-radius); background: color-mix(in srgb, #ffd54f 22%, transparent); border-left: 4px solid #f9a825; }
 .cnotes h3 { margin: 0 0 6px; font-size: 1rem; display: flex; gap: 6px; align-items: center; }
 .cnotes p { margin: 4px 0 10px; white-space: pre-wrap; line-height: 1.5; }
 .cnutrition { margin: 14px 16px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px 14px; font-size: .9rem; }
-.cnutrition div { display: flex; justify-content: space-between; border-bottom: 1px dotted var(--op-divider); padding: 3px 0; }
-.cook-timers { border-top: 1px solid var(--op-divider); background: var(--op-bg); padding: 8px 12px max(8px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px; }
+.cnutrition div { display: flex; justify-content: space-between; border-bottom: 1px dotted var(--td-divider); padding: 3px 0; }
+.cook-timers { border-top: 1px solid var(--td-divider); background: var(--td-bg); padding: 8px 12px max(8px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px; }
 .cook-timers:empty { display: none; }
-.ctbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px; background: var(--op-surface); }
+.ctbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px; background: var(--td-surface); }
 .ctbar .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .ctbar .ctime { font-variant-numeric: tabular-nums; font-size: 1.4rem; font-weight: 800; min-width: 74px; text-align: right; }
 .ctbar.paused .ctime { opacity: .55; }
-.ctbar.done { background: var(--op-danger); color: #fff; animation: op-pulse 1s ease-in-out infinite; }
+.ctbar.done { background: var(--td-danger); color: #fff; animation: td-pulse 1s ease-in-out infinite; }
 .ctbar.done .icon-btn { color: #fff; }
-@keyframes op-pulse { 50% { filter: brightness(1.25); } }
+@keyframes td-pulse { 50% { filter: brightness(1.25); } }
 `;
 
 const SETTINGS_STYLES = `
 .dialog.settings { width: min(760px, 96vw); }
 .bk-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 .bk-actions .btn { flex: 1 1 220px; justify-content: center; min-height: 44px; }
-.bk-list { border: 1px solid var(--op-divider); border-radius: var(--op-radius); margin-top: 8px; max-height: 300px; overflow: auto; }
-.bk-row { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--op-divider); flex-wrap: wrap; }
+.bk-list { border: 1px solid var(--td-divider); border-radius: var(--td-radius); margin-top: 8px; max-height: 300px; overflow: auto; }
+.bk-row { display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--td-divider); flex-wrap: wrap; }
 .bk-row:first-child { border-top: none; }
 .bk-row .grow { flex: 1 1 200px; min-width: 0; }
-.bk-row .grow small { display: block; color: var(--op-muted); overflow-wrap: anywhere; }
+.bk-row .grow small { display: block; color: var(--td-muted); overflow-wrap: anywhere; }
 .bk-modes { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
 .bk-modes label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
 .bk-modes input { margin-top: 3px; }
@@ -861,9 +872,9 @@ const SETTINGS_STYLES = `
 .bk-schedule label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 .bk-schedule input[type=time] { width: 120px; }
 .bk-schedule input[type=number] { width: 80px; }
-.bk-report { margin-top: 10px; padding: 10px 12px; border-radius: var(--op-radius); background: var(--op-surface); font-size: .9rem; }
+.bk-report { margin-top: 10px; padding: 10px 12px; border-radius: var(--td-radius); background: var(--td-surface); font-size: .9rem; }
 .bk-report ul { margin: 6px 0 0; padding-left: 18px; }
-.bk-warn { color: var(--op-danger); }
+.bk-warn { color: var(--td-danger); }
 `;
 
 /* ------------------------------------------------------------------ */
@@ -874,135 +885,136 @@ const STYLES = `
 [hidden] { display: none !important; }
 :host {
   display: block;
-  --op-accent: var(--primary-color, #03a9f4);
-  --op-bg: var(--card-background-color, var(--ha-card-background, #fff));
-  --op-surface: var(--secondary-background-color, #f4f5f7);
-  --op-text: var(--primary-text-color, #212121);
-  --op-muted: var(--secondary-text-color, #727272);
-  --op-divider: var(--divider-color, rgba(0,0,0,.12));
-  --op-danger: var(--error-color, #db4437);
-  --op-warn: var(--warning-color, #ffa600);
-  --op-ok: var(--success-color, #43a047);
-  --op-radius: var(--ha-card-border-radius, 12px);
-  --op-tap: 44px;
-  color: var(--op-text);
+  --td-accent: var(--primary-color, #03a9f4);
+  --td-bg: var(--card-background-color, var(--ha-card-background, #fff));
+  --td-surface: var(--secondary-background-color, #f4f5f7);
+  --td-text: var(--primary-text-color, #212121);
+  --td-muted: var(--secondary-text-color, #727272);
+  --td-divider: var(--divider-color, rgba(0,0,0,.12));
+  --td-danger: var(--error-color, #db4437);
+  --td-warn: var(--warning-color, #ffa600);
+  --td-ok: var(--success-color, #43a047);
+  --td-radius: var(--ha-card-border-radius, 12px);
+  --td-tap: 44px;
+  color: var(--td-text);
   font-family: var(--paper-font-body1_-_font-family, inherit);
 }
 * { box-sizing: border-box; }
 ha-card { overflow: hidden; display: flex; flex-direction: column; }
-:host([panel]) ha-card { border-radius: 0; box-shadow: none; min-height: 100%; background: var(--primary-background-color, var(--op-bg)); }
+:host([panel]) ha-card { border-radius: 0; box-shadow: none; min-height: 100%; background: var(--primary-background-color, var(--td-bg)); }
 button { font: inherit; color: inherit; cursor: pointer; }
-input, select, textarea { font: inherit; color: var(--op-text); background: var(--op-bg); border: 1px solid var(--op-divider); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
+input, select, textarea { font: inherit; color: var(--td-text); background: var(--td-bg); border: 1px solid var(--td-divider); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
 textarea { min-height: 90px; resize: vertical; width: 100%; }
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--op-accent); outline-offset: -1px; }
-.op-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px 4px; flex-wrap: wrap; position: relative; }
-.op-title { font-size: 1.25rem; font-weight: 600; flex: 0 1 auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
-.op-people { display: flex; gap: 6px; flex-wrap: wrap; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--td-accent); outline-offset: -1px; }
+.td-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px 4px; flex-wrap: wrap; position: relative; }
+.td-title { font-size: 1.25rem; font-weight: 600; flex: 0 1 auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.td-emblem { --mdc-icon-size: 28px; opacity: .88; flex: 0 0 auto; }
+.td-people { display: flex; gap: 6px; flex-wrap: wrap; }
 /* One row that never wraps: the category label shrinks (ellipsis) before the buttons move. */
-.op-hrow { display: flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 0; }
-.op-hrow .op-people { flex-wrap: nowrap; flex: 0 0 auto; }
-@media (max-width: 420px) { .op-hrow { gap: 4px; } .op-hrow > .icon-btn { width: 36px; height: 36px; } .op-hrow .op-people { gap: 4px; } }
+.td-hrow { display: flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 0; }
+.td-hrow .td-people { flex-wrap: nowrap; flex: 0 0 auto; }
+@media (max-width: 420px) { .td-hrow { gap: 4px; } .td-hrow > .icon-btn { width: 36px; height: 36px; } .td-hrow .td-people { gap: 4px; } }
 .avatar { width: 32px; height: 32px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-size: .8rem; font-weight: 600; background-size: cover; background-position: center; flex: 0 0 auto; border: 2px solid transparent; }
 .avatar.sm { width: 24px; height: 24px; font-size: .65rem; border-width: 1px; }
 .avatar.lg { width: 40px; height: 40px; }
 .chip-person { background: none; border: none; padding: 0; position: relative; opacity: .55; }
 .chip-person.on { opacity: 1; }
-.chip-person.on .avatar { border-color: var(--op-accent); }
-.chip-person .home-dot { position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%; background: var(--op-ok); border: 2px solid var(--op-bg); }
-.icon-btn { background: none; border: none; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--op-muted); flex: 0 0 auto; }
-.icon-btn:hover { background: var(--op-surface); color: var(--op-text); }
+.chip-person.on .avatar { border-color: var(--td-accent); }
+.chip-person .home-dot { position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%; background: var(--td-ok); border: 2px solid var(--td-bg); }
+.icon-btn { background: none; border: none; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--td-muted); flex: 0 0 auto; }
+.icon-btn:hover { background: var(--td-surface); color: var(--td-text); }
 .icon-btn.sm { width: 32px; height: 32px; }
 .icon-btn.sm ha-icon { --mdc-icon-size: 18px; }
-.op-brain { display: flex; gap: 6px; padding: 8px 16px; align-items: center; }
-.op-brain input { flex: 1; border-radius: 22px; padding-left: 16px; min-height: 44px; background: var(--op-surface); border-color: transparent; }
-.op-brain .icon-btn.mic.on { color: var(--op-danger); animation: pulse 1s infinite; }
-.op-brain .send { background: var(--op-accent); color: var(--text-primary-color, #fff); }
+.td-brain { display: flex; gap: 6px; padding: 8px 16px; align-items: center; }
+.td-brain input { flex: 1; border-radius: 22px; padding-left: 16px; min-height: 44px; background: var(--td-surface); border-color: transparent; }
+.td-brain .icon-btn.mic.on { color: var(--td-danger); animation: pulse 1s infinite; }
+.td-brain .send { background: var(--td-accent); color: var(--text-primary-color, #fff); }
 @keyframes pulse { 50% { opacity: .4; } }
-.op-pick { flex: 0 1 auto; min-width: 0; margin-right: auto; }
-.op-picker { max-width: 100%; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--op-divider); background: var(--op-surface); border-radius: 22px; padding: 6px 8px 6px 12px; min-height: 40px; font-weight: 600; color: var(--op-text); }
-.op-picker:hover { border-color: var(--op-accent); }
-.op-picker .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.op-picker .count, .menu .count { background: var(--op-accent); color: var(--text-primary-color, #fff); border-radius: 10px; padding: 0 7px; font-size: .75rem; font-weight: 700; flex: 0 0 auto; }
-.op-picker .chev { --mdc-icon-size: 20px; color: var(--op-muted); flex: 0 0 auto; }
-.menu .count { margin-left: auto; background: var(--op-surface); color: var(--op-muted); }
-.menu button.on { background: color-mix(in srgb, var(--op-accent) 12%, transparent); color: var(--op-accent); font-weight: 600; }
-.menu button.on .count { background: var(--op-accent); color: var(--text-primary-color, #fff); }
+.td-pick { flex: 0 1 auto; min-width: 0; margin-right: auto; }
+.td-picker { max-width: 100%; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--td-divider); background: var(--td-surface); border-radius: 22px; padding: 6px 8px 6px 12px; min-height: 40px; font-weight: 600; color: var(--td-text); }
+.td-picker:hover { border-color: var(--td-accent); }
+.td-picker .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.td-picker .count, .menu .count { background: var(--td-accent); color: var(--text-primary-color, #fff); border-radius: 10px; padding: 0 7px; font-size: .75rem; font-weight: 700; flex: 0 0 auto; }
+.td-picker .chev { --mdc-icon-size: 20px; color: var(--td-muted); flex: 0 0 auto; }
+.menu .count { margin-left: auto; background: var(--td-surface); color: var(--td-muted); }
+.menu button.on { background: color-mix(in srgb, var(--td-accent) 12%, transparent); color: var(--td-accent); font-weight: 600; }
+.menu button.on .count { background: var(--td-accent); color: var(--text-primary-color, #fff); }
 .menu .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu button { min-width: 0; flex: 0 0 auto; }
 .menu button > ha-icon { flex: 0 0 auto; }
 .menu .lock { --mdc-icon-size: 14px; opacity: .7; }
-.menu .sep { height: 1px; background: var(--op-divider); margin: 4px 6px; flex: 0 0 auto; }
-.tab { background: none; border: none; padding: 10px 12px; border-radius: 8px 8px 0 0; white-space: nowrap; color: var(--op-muted); display: inline-flex; gap: 6px; align-items: center; border-bottom: 3px solid transparent; }
-.tab.on { color: var(--op-accent); border-bottom-color: var(--op-accent); font-weight: 600; }
-.tab .count { background: var(--op-surface); border-radius: 10px; padding: 0 7px; font-size: .75rem; color: var(--op-muted); }
-.op-filters { display: flex; padding: 0 16px 6px; justify-content: flex-end; }
-.chip { border: 1px solid var(--op-divider); background: var(--op-bg); border-radius: 16px; padding: 4px 12px; font-size: .85rem; min-height: 32px; display: inline-flex; align-items: center; gap: 4px; }
-.chip.on { background: var(--op-accent); border-color: var(--op-accent); color: var(--text-primary-color, #fff); }
-.chip.ghost { border-style: dashed; color: var(--op-muted); }
-.op-search { flex: 1 1 auto; max-width: 320px; min-width: 0; border-radius: 18px; min-height: 36px; padding: 6px 14px; }
-.op-body { padding: 4px 12px 16px; flex: 1 1 auto; }
-.empty { color: var(--op-muted); text-align: center; padding: 28px 12px; font-size: .95rem; }
+.menu .sep { height: 1px; background: var(--td-divider); margin: 4px 6px; flex: 0 0 auto; }
+.tab { background: none; border: none; padding: 10px 12px; border-radius: 8px 8px 0 0; white-space: nowrap; color: var(--td-muted); display: inline-flex; gap: 6px; align-items: center; border-bottom: 3px solid transparent; }
+.tab.on { color: var(--td-accent); border-bottom-color: var(--td-accent); font-weight: 600; }
+.tab .count { background: var(--td-surface); border-radius: 10px; padding: 0 7px; font-size: .75rem; color: var(--td-muted); }
+.td-filters { display: flex; padding: 0 16px 6px; justify-content: flex-end; }
+.chip { border: 1px solid var(--td-divider); background: var(--td-bg); border-radius: 16px; padding: 4px 12px; font-size: .85rem; min-height: 32px; display: inline-flex; align-items: center; gap: 4px; }
+.chip.on { background: var(--td-accent); border-color: var(--td-accent); color: var(--text-primary-color, #fff); }
+.chip.ghost { border-style: dashed; color: var(--td-muted); }
+.td-search { flex: 1 1 auto; max-width: 320px; min-width: 0; border-radius: 18px; min-height: 36px; padding: 6px 14px; }
+.td-body { padding: 4px 12px 16px; flex: 1 1 auto; }
+.empty { color: var(--td-muted); text-align: center; padding: 28px 12px; font-size: .95rem; }
 .empty.sm { padding: 10px 8px; font-size: .85rem; }
 .section { margin: 10px 0 4px; }
-.section-head { display: flex; align-items: center; gap: 8px; padding: 6px 4px; color: var(--op-muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; flex-wrap: wrap; }
+.section-head { display: flex; align-items: center; gap: 8px; padding: 6px 4px; color: var(--td-muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; flex-wrap: wrap; }
 .section-head .grow { flex: 1; }
-.section-head button.link, button.link { background: none; border: none; color: var(--op-accent); font-size: .8rem; text-transform: none; letter-spacing: 0; padding: 4px 6px; }
+.section-head button.link, button.link { background: none; border: none; color: var(--td-accent); font-size: .8rem; text-transform: none; letter-spacing: 0; padding: 4px 6px; }
 .drop { min-height: 8px; border-radius: 10px; transition: background .15s; }
-.drop.over { background: color-mix(in srgb, var(--op-accent) 12%, transparent); outline: 2px dashed var(--op-accent); }
-.task-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 6px; border-radius: 10px; background: var(--op-bg); position: relative; }
-.task-row + .task-row { border-top: 1px solid var(--op-divider); }
-.task-row:hover { background: var(--op-surface); }
+.drop.over { background: color-mix(in srgb, var(--td-accent) 12%, transparent); outline: 2px dashed var(--td-accent); }
+.task-row { display: flex; align-items: flex-start; gap: 8px; padding: 8px 6px; border-radius: 10px; background: var(--td-bg); position: relative; }
+.task-row + .task-row { border-top: 1px solid var(--td-divider); }
+.task-row:hover { background: var(--td-surface); }
 .task-row.dragging { opacity: .35; }
-.task-row.drop-before { box-shadow: inset 0 3px 0 var(--op-accent); }
-.task-row.drop-after { box-shadow: inset 0 -3px 0 var(--op-accent); }
-.task-row.done .summary { text-decoration: line-through; color: var(--op-muted); }
+.task-row.drop-before { box-shadow: inset 0 3px 0 var(--td-accent); }
+.task-row.drop-after { box-shadow: inset 0 -3px 0 var(--td-accent); }
+.task-row.done .summary { text-decoration: line-through; color: var(--td-muted); }
 .task-row.blocked { opacity: .7; }
-.handle { cursor: grab; color: var(--op-muted); touch-action: none; width: 22px; height: 36px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; opacity: .5; flex: 0 0 auto; }
+.handle { cursor: grab; color: var(--td-muted); touch-action: none; width: 22px; height: 36px; display: inline-flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; opacity: .5; flex: 0 0 auto; }
 .task-row:hover .handle { opacity: 1; }
-.check { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--op-muted); background: none; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; margin-top: 4px; padding: 0; }
-.check.on { background: var(--op-ok); border-color: var(--op-ok); color: #fff; }
-.check.prio-high { border-color: var(--op-warn); }
-.check.prio-urgent { border-color: var(--op-danger); }
+.check { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--td-muted); background: none; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; margin-top: 4px; padding: 0; }
+.check.on { background: var(--td-ok); border-color: var(--td-ok); color: #fff; }
+.check.prio-high { border-color: var(--td-warn); }
+.check.prio-urgent { border-color: var(--td-danger); }
 .check:disabled { opacity: .4; cursor: not-allowed; }
 .task-main { flex: 1 1 auto; min-width: 0; cursor: pointer; padding-top: 2px; }
 .summary { font-size: 1rem; line-height: 1.35; word-break: break-word; }
 .meta { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 3px; align-items: center; }
-.badge { font-size: .72rem; border-radius: 10px; padding: 1px 8px; background: var(--op-surface); color: var(--op-muted); display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
+.badge { font-size: .72rem; border-radius: 10px; padding: 1px 8px; background: var(--td-surface); color: var(--td-muted); display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-decoration: none; }
 .badge ha-icon { --mdc-icon-size: 14px; }
-.badge.overdue, .badge.urgent, .badge.expired { background: color-mix(in srgb, var(--op-danger) 16%, transparent); color: var(--op-danger); }
-.badge.today, .badge.high { background: color-mix(in srgb, var(--op-warn) 18%, transparent); color: color-mix(in srgb, var(--op-warn) 70%, var(--op-text)); }
+.badge.overdue, .badge.urgent, .badge.expired { background: color-mix(in srgb, var(--td-danger) 16%, transparent); color: var(--td-danger); }
+.badge.today, .badge.high { background: color-mix(in srgb, var(--td-warn) 18%, transparent); color: color-mix(in srgb, var(--td-warn) 70%, var(--td-text)); }
 .badge.streak { background: color-mix(in srgb, #ff7043 16%, transparent); color: #e64a19; }
-.badge.ok { background: color-mix(in srgb, var(--op-ok) 16%, transparent); color: var(--op-ok); }
-.badge.plan { background: none; border: 1px solid var(--op-divider); }
-.lastdone { font-size: .74rem; color: var(--op-muted); font-style: italic; }
-.progress { height: 4px; background: var(--op-surface); border-radius: 2px; overflow: hidden; width: 70px; display: inline-block; vertical-align: middle; }
-.progress > span { display: block; height: 100%; background: var(--op-ok); transition: width .2s; }
+.badge.ok { background: color-mix(in srgb, var(--td-ok) 16%, transparent); color: var(--td-ok); }
+.badge.plan { background: none; border: 1px solid var(--td-divider); }
+.lastdone { font-size: .74rem; color: var(--td-muted); font-style: italic; }
+.progress { height: 4px; background: var(--td-surface); border-radius: 2px; overflow: hidden; width: 70px; display: inline-block; vertical-align: middle; }
+.progress > span { display: block; height: 100%; background: var(--td-ok); transition: width .2s; }
 .progress.wide { width: 100%; height: 6px; margin-top: 6px; }
 .assignees { display: flex; gap: 2px; flex: 0 0 auto; padding-top: 4px; }
 .row-actions { display: flex; gap: 0; flex: 0 0 auto; }
 .row-actions .icon-btn { width: 34px; height: 34px; }
-.claim { border: 1px solid var(--op-accent); color: var(--op-accent); background: none; border-radius: 14px; padding: 2px 10px; font-size: .8rem; margin-top: 4px; }
-.details { margin: 6px 0 2px; font-size: .9rem; color: var(--op-text); }
+.claim { border: 1px solid var(--td-accent); color: var(--td-accent); background: none; border-radius: 14px; padding: 2px 10px; font-size: .8rem; margin-top: 4px; }
+.details { margin: 6px 0 2px; font-size: .9rem; color: var(--td-text); }
 .details p { margin: 4px 0; }
 .details ul { margin: 4px 0; padding-left: 20px; }
 .subtasks { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
 .subtask { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
 .subtask .check { width: 20px; height: 20px; margin: 0; }
-.subtask.done span { text-decoration: line-through; color: var(--op-muted); }
+.subtask.done span { text-decoration: line-through; color: var(--td-muted); }
 .subtask input { flex: 1; min-height: 32px; padding: 4px 8px; font-size: .9rem; }
-.quick { border: 1px solid var(--op-accent); border-radius: var(--op-radius); padding: 6px 8px; margin: 6px 0 12px; background: color-mix(in srgb, var(--op-accent) 5%, var(--op-bg)); }
-.quick .section-head { color: var(--op-accent); }
+.quick { border: 1px solid var(--td-accent); border-radius: var(--td-radius); padding: 6px 8px; margin: 6px 0 12px; background: color-mix(in srgb, var(--td-accent) 5%, var(--td-bg)); }
+.quick .section-head { color: var(--td-accent); }
 .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.col { background: var(--op-surface); border-radius: var(--op-radius); padding: 8px; display: flex; flex-direction: column; min-height: 200px; }
+.col { background: var(--td-surface); border-radius: var(--td-radius); padding: 8px; display: flex; flex-direction: column; min-height: 200px; }
 .col-head { display: flex; align-items: center; gap: 10px; padding: 6px 6px 10px; font-weight: 600; }
-.col-head .sub { font-weight: 400; font-size: .8rem; color: var(--op-muted); }
+.col-head .sub { font-weight: 400; font-size: .8rem; color: var(--td-muted); }
 .col .drop { flex: 1; background: transparent; }
-.col .task-row { background: var(--op-bg); margin-bottom: 6px; border-top: none !important; box-shadow: 0 1px 2px rgba(0,0,0,.06); flex-wrap: wrap; row-gap: 0; }
+.col .task-row { background: var(--td-bg); margin-bottom: 6px; border-top: none !important; box-shadow: 0 1px 2px rgba(0,0,0,.06); flex-wrap: wrap; row-gap: 0; }
 .col .task-main { flex: 1 1 calc(100% - 70px); }
 .col .assignees { margin-left: auto; padding-top: 0; align-items: center; }
 .col .row-actions .icon-btn { width: 30px; height: 30px; }
-.col .task-row.drop-before { box-shadow: inset 0 3px 0 var(--op-accent); }
-.col .task-row.drop-after { box-shadow: inset 0 -3px 0 var(--op-accent); }
+.col .task-row.drop-before { box-shadow: inset 0 3px 0 var(--td-accent); }
+.col .task-row.drop-after { box-shadow: inset 0 -3px 0 var(--td-accent); }
 :host([kiosk]) .summary { font-size: 1.1rem; }
 :host([kiosk]) .check { width: 32px; height: 32px; }
 .kanban { display: grid; grid-template-columns: repeat(4, minmax(200px, 1fr)); gap: 10px; overflow-x: auto; }
@@ -1010,137 +1022,137 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--op-accent);
 .shop-add input, .inline-add input { flex: 1 1 180px; min-height: 46px; }
 .inline-add.compact input { min-height: 38px; }
 .inline-add select { flex: 0 1 170px; min-width: 0; }
-.btn { background: var(--op-accent); color: var(--text-primary-color, #fff); border: none; border-radius: 8px; padding: 8px 14px; min-height: 40px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
-.btn.flat { background: var(--op-surface); color: var(--op-text); }
-.btn.danger { background: var(--op-danger); }
+.btn { background: var(--td-accent); color: var(--text-primary-color, #fff); border: none; border-radius: 8px; padding: 8px 14px; min-height: 40px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.btn.flat { background: var(--td-surface); color: var(--td-text); }
+.btn.danger { background: var(--td-danger); }
 .btn.small { min-height: 32px; padding: 4px 10px; font-size: .85rem; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .aisle-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-.tile { border: 1px solid var(--op-divider); background: var(--op-bg); border-radius: 12px; min-height: 64px; padding: 10px 12px; text-align: left; display: flex; flex-direction: column; justify-content: center; gap: 2px; position: relative; touch-action: manipulation; }
+.tile { border: 1px solid var(--td-divider); background: var(--td-bg); border-radius: 12px; min-height: 64px; padding: 10px 12px; text-align: left; display: flex; flex-direction: column; justify-content: center; gap: 2px; position: relative; touch-action: manipulation; }
 .tile .name { font-weight: 500; font-size: 1rem; line-height: 1.2; padding-right: 22px; overflow-wrap: anywhere; }
-.tile .qty { font-size: .8rem; color: var(--op-muted); }
+.tile .qty { font-size: .8rem; color: var(--td-muted); }
 .tile.done { opacity: .5; }
 .tile.done .name { text-decoration: line-through; }
 .tile .edit { position: absolute; top: 2px; right: 2px; width: 28px; height: 28px; }
 .history { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 2px 10px; }
-.history .chip small { color: var(--op-muted); }
-.bom { border: 1px solid var(--op-divider); border-radius: var(--op-radius); padding: 6px 10px; margin: 8px 0 12px; }
+.history .chip small { color: var(--td-muted); }
+.bom { border: 1px solid var(--td-divider); border-radius: var(--td-radius); padding: 6px 10px; margin: 8px 0 12px; }
 .bom table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-.bom td { padding: 4px; border-top: 1px solid var(--op-divider); }
+.bom td { padding: 4px; border-top: 1px solid var(--td-divider); }
 .bom td.n { width: 1%; white-space: nowrap; }
-.bom tr.acquired td { color: var(--op-muted); text-decoration: line-through; }
-.seg { display: inline-flex; border: 1px solid var(--op-divider); border-radius: 18px; overflow: hidden; flex: 0 0 auto; }
+.bom tr.acquired td { color: var(--td-muted); text-decoration: line-through; }
+.seg { display: inline-flex; border: 1px solid var(--td-divider); border-radius: 18px; overflow: hidden; flex: 0 0 auto; }
 .seg button { border: none; background: none; padding: 6px 12px; font-size: .85rem; min-height: 36px; display: inline-flex; align-items: center; gap: 6px; }
-.seg button.on { background: var(--op-accent); color: var(--text-primary-color, #fff); }
-.seg button.on.in_stock { background: var(--op-ok); }
-.seg button.on.low { background: var(--op-warn); }
-.seg button.on.out { background: var(--op-danger); }
+.seg button.on { background: var(--td-accent); color: var(--text-primary-color, #fff); }
+.seg button.on.in_stock { background: var(--td-ok); }
+.seg button.on.low { background: var(--td-warn); }
+.seg button.on.out { background: var(--td-danger); }
 .seg ha-icon { --mdc-icon-size: 18px; }
-.pantry-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-top: 1px solid var(--op-divider); flex-wrap: wrap; }
+.pantry-row { display: flex; align-items: center; gap: 10px; padding: 8px 6px; border-top: 1px solid var(--td-divider); flex-wrap: wrap; }
 .pantry-row .grow { flex: 1 1 140px; min-width: 0; }
 .scope-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 4px; }
-.scope-bar .note { font-size: .8rem; color: var(--op-muted); display: inline-flex; align-items: center; gap: 4px; }
+.scope-bar .note { font-size: .8rem; color: var(--td-muted); display: inline-flex; align-items: center; gap: 4px; }
 .scope-bar .note ha-icon { --mdc-icon-size: 16px; }
 .quick-add { display: flex; gap: 6px; margin: 8px 0 12px; flex-wrap: wrap; }
 .quick-add input { flex: 1 1 220px; min-height: 48px; font-size: 1rem; border-radius: 24px; padding-left: 16px; }
 .quick-add select { flex: 0 1 180px; min-width: 0; max-width: 45%; border-radius: 24px; }
 .quick-add .btn { border-radius: 24px; min-height: 48px; }
-.qsection, .trip-card { border: 1px solid var(--op-divider); border-radius: var(--op-radius); margin: 10px 0; background: var(--op-bg); overflow: hidden; }
+.qsection, .trip-card { border: 1px solid var(--td-divider); border-radius: var(--td-radius); margin: 10px 0; background: var(--td-bg); overflow: hidden; }
 .qs-head, .trip-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 2px; min-height: 48px; }
-.qs-head.inbox { background: color-mix(in srgb, var(--op-accent) 5%, var(--op-bg)); }
+.qs-head.inbox { background: color-mix(in srgb, var(--td-accent) 5%, var(--td-bg)); }
 .collapse-btn { background: none; border: none; display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; text-align: left; padding: 6px 4px; min-height: 40px; }
-.collapse-btn .chev { transition: transform .15s; color: var(--op-muted); flex: 0 0 auto; }
+.collapse-btn .chev { transition: transform .15s; color: var(--td-muted); flex: 0 0 auto; }
 .collapse-btn.closed .chev { transform: rotate(-90deg); }
 .collapse-btn .title { font-weight: 600; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .collapse-btn .badge { flex: 0 0 auto; }
 .qs-body { padding: 0 8px 6px; }
-.qs-body .task-row:first-child { border-top: 1px solid var(--op-divider); border-radius: 0; }
+.qs-body .task-row:first-child { border-top: 1px solid var(--td-divider); border-radius: 0; }
 .qs-actions { display: flex; gap: 0; flex: 0 0 auto; }
 .rename-input { flex: 1; min-height: 36px; font-weight: 600; }
 .trip-head { flex-wrap: wrap; padding: 6px 8px 8px 2px; align-items: flex-start; }
 .trip-head .collapse-btn { align-items: flex-start; }
 .trip-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
-.trip-info .sub { font-size: .82rem; color: var(--op-muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.status-chip { font-size: .7rem; border-radius: 10px; padding: 1px 8px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; background: var(--op-surface); color: var(--op-muted); }
-.status-chip.active { background: color-mix(in srgb, var(--op-ok) 18%, transparent); color: var(--op-ok); }
-.status-chip.upcoming { background: color-mix(in srgb, var(--op-accent) 15%, transparent); color: var(--op-accent); }
+.trip-info .sub { font-size: .82rem; color: var(--td-muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.status-chip { font-size: .7rem; border-radius: 10px; padding: 1px 8px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; background: var(--td-surface); color: var(--td-muted); }
+.status-chip.active { background: color-mix(in srgb, var(--td-ok) 18%, transparent); color: var(--td-ok); }
+.status-chip.upcoming { background: color-mix(in srgb, var(--td-accent) 15%, transparent); color: var(--td-accent); }
 .trip-progress { font-size: .85rem; font-weight: 600; white-space: nowrap; }
 .trip-card.master { border-style: dashed; }
 .trip-body { padding: 0 10px 8px; }
 .pack-group { margin: 4px 0 8px; }
-.pack-group-head { display: flex; align-items: center; gap: 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--op-muted); font-weight: 600; }
+.pack-group-head { display: flex; align-items: center; gap: 6px; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--td-muted); font-weight: 600; }
 .pack-group-head .collapse-btn .title { font-size: .78rem; }
 .pack-row { display: flex; align-items: center; gap: 10px; padding: 4px 4px; border-radius: 10px; min-height: 52px; }
-.pack-row + .pack-row { border-top: 1px solid var(--op-divider); }
+.pack-row + .pack-row { border-top: 1px solid var(--td-divider); }
 .pack-row.task-row { padding: 4px; }
-.pack-check { width: 40px; height: 40px; border-radius: 10px; border: 2px solid var(--op-muted); background: none; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; padding: 0; transition: background .12s; }
-.pack-check.on { background: var(--op-ok); border-color: var(--op-ok); color: #fff; }
+.pack-check { width: 40px; height: 40px; border-radius: 10px; border: 2px solid var(--td-muted); background: none; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; padding: 0; transition: background .12s; }
+.pack-check.on { background: var(--td-ok); border-color: var(--td-ok); color: #fff; }
 .pack-check ha-icon { --mdc-icon-size: 24px; }
 .pack-name { flex: 1 1 auto; min-width: 0; font-size: 1rem; word-break: break-word; transition: opacity .12s; cursor: pointer; }
 .pack-row.done .pack-name { text-decoration: line-through; opacity: .5; }
-.icon-btn.repeat.on { color: var(--op-accent); background: color-mix(in srgb, var(--op-accent) 12%, transparent); }
-.op-bulkbar { position: sticky; bottom: 0; display: flex; gap: 6px; padding: 8px 12px; background: var(--op-bg); border-top: 1px solid var(--op-divider); flex-wrap: wrap; align-items: center; }
-.op-bulkbar select { min-height: 36px; padding: 4px 8px; }
-.sel { width: 22px; height: 22px; margin-top: 6px; accent-color: var(--op-accent); }
+.icon-btn.repeat.on { color: var(--td-accent); background: color-mix(in srgb, var(--td-accent) 12%, transparent); }
+.td-bulkbar { position: sticky; bottom: 0; display: flex; gap: 6px; padding: 8px 12px; background: var(--td-bg); border-top: 1px solid var(--td-divider); flex-wrap: wrap; align-items: center; }
+.td-bulkbar select { min-height: 36px; padding: 4px 8px; }
+.sel { width: 22px; height: 22px; margin-top: 6px; accent-color: var(--td-accent); }
 .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 9; display: flex; align-items: flex-end; justify-content: center; }
 @media (min-width: 640px) { .backdrop { align-items: center; } }
-.dialog { background: var(--op-bg); color: var(--op-text); width: min(640px, 100vw); max-height: 92vh; overflow: auto; border-radius: 16px 16px 0 0; padding: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+.dialog { background: var(--td-bg); color: var(--td-text); width: min(640px, 100vw); max-height: 92vh; overflow: auto; border-radius: 16px 16px 0 0; padding: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.3); }
 @media (min-width: 640px) { .dialog { border-radius: 16px; } }
 .dialog h2 { margin: 0 0 12px; font-size: 1.15rem; display: flex; align-items: center; gap: 8px; }
 .dialog h2 .grow { flex: 1; }
-.dialog .hint { font-size: .85rem; color: var(--op-muted); margin: -4px 0 12px; }
-.dialog .banner { font-size: .9rem; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--op-accent) 10%, transparent); margin: 0 0 12px; display: flex; gap: 8px; align-items: center; }
+.dialog .hint { font-size: .85rem; color: var(--td-muted); margin: -4px 0 12px; }
+.dialog .banner { font-size: .9rem; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--td-accent) 10%, transparent); margin: 0 0 12px; display: flex; gap: 8px; align-items: center; }
 .form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 .form .full { grid-column: 1 / -1; }
-.form label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--op-muted); }
-.form label.inline { flex-direction: row; align-items: center; gap: 8px; font-size: .9rem; color: var(--op-text); }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--td-muted); }
+.form label.inline { flex-direction: row; align-items: center; gap: 8px; font-size: .9rem; color: var(--td-text); }
 .form input[type=checkbox], .form input[type=radio] { min-height: auto; width: 18px; height: 18px; }
-.form .field { display: flex; flex-direction: column; gap: 6px; font-size: .8rem; color: var(--op-muted); }
-.form .field > span:not(.lastdone) { color: var(--op-text); font-size: .9rem; }
-.choice-grid label { text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--op-divider); background: var(--op-bg); min-height: 56px; display: flex; flex-direction: row; gap: 10px; align-items: center; color: var(--op-text); font-size: .9rem; cursor: pointer; }
-.choice-grid label small { display: block; color: var(--op-muted); font-size: .75rem; }
+.form .field { display: flex; flex-direction: column; gap: 6px; font-size: .8rem; color: var(--td-muted); }
+.form .field > span:not(.lastdone) { color: var(--td-text); font-size: .9rem; }
+.choice-grid label { text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--td-divider); background: var(--td-bg); min-height: 56px; display: flex; flex-direction: row; gap: 10px; align-items: center; color: var(--td-text); font-size: .9rem; cursor: pointer; }
+.choice-grid label small { display: block; color: var(--td-muted); font-size: .75rem; }
 .choice-grid label input { margin: 0; flex: 0 0 auto; }
-.choice-grid label:has(input:checked) { border-color: var(--op-accent); box-shadow: inset 0 0 0 1px var(--op-accent); background: color-mix(in srgb, var(--op-accent) 6%, var(--op-bg)); }
+.choice-grid label:has(input:checked) { border-color: var(--td-accent); box-shadow: inset 0 0 0 1px var(--td-accent); background: color-mix(in srgb, var(--td-accent) 6%, var(--td-bg)); }
 @media (max-width: 480px) { .form { grid-template-columns: 1fr; } }
 .toggle-group { display: flex; gap: 6px; flex-wrap: wrap; }
-.picklist { max-height: 160px; overflow: auto; border: 1px solid var(--op-divider); border-radius: 8px; padding: 4px 8px; }
-.picklist label { flex-direction: row; align-items: center; gap: 8px; color: var(--op-text); font-size: .9rem; padding: 3px 0; }
+.picklist { max-height: 160px; overflow: auto; border: 1px solid var(--td-divider); border-radius: 8px; padding: 4px 8px; }
+.picklist label { flex-direction: row; align-items: center; gap: 8px; color: var(--td-text); font-size: .9rem; padding: 3px 0; }
 .dialog-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; flex-wrap: wrap; }
 .dialog-actions .grow { flex: 1; }
 .snooze-grid, .choice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-bottom: 14px; }
-.snooze-grid button, .choice-grid button { text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--op-divider); background: var(--op-bg); min-height: 56px; display: flex; gap: 10px; align-items: center; }
-.snooze-grid button small, .choice-grid button small { display: block; color: var(--op-muted); font-size: .75rem; }
-.snooze-grid button:hover, .choice-grid button:hover { border-color: var(--op-accent); }
-.choice-grid button.on { border-color: var(--op-accent); box-shadow: inset 0 0 0 1px var(--op-accent); background: color-mix(in srgb, var(--op-accent) 6%, var(--op-bg)); }
+.snooze-grid button, .choice-grid button { text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--td-divider); background: var(--td-bg); min-height: 56px; display: flex; gap: 10px; align-items: center; }
+.snooze-grid button small, .choice-grid button small { display: block; color: var(--td-muted); font-size: .75rem; }
+.snooze-grid button:hover, .choice-grid button:hover { border-color: var(--td-accent); }
+.choice-grid button.on { border-color: var(--td-accent); box-shadow: inset 0 0 0 1px var(--td-accent); background: color-mix(in srgb, var(--td-accent) 6%, var(--td-bg)); }
 .choice-grid.wide { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-.icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; max-height: 136px; overflow: auto; border: 1px solid var(--op-divider); border-radius: 8px; padding: 4px; }
-.icon-grid button { border: 1px solid transparent; background: none; border-radius: 8px; height: 40px; display: inline-flex; align-items: center; justify-content: center; color: var(--op-muted); }
-.icon-grid button.on { border-color: var(--op-accent); color: var(--op-accent); background: color-mix(in srgb, var(--op-accent) 10%, transparent); }
+.icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 4px; max-height: 136px; overflow: auto; border: 1px solid var(--td-divider); border-radius: 8px; padding: 4px; }
+.icon-grid button { border: 1px solid transparent; background: none; border-radius: 8px; height: 40px; display: inline-flex; align-items: center; justify-content: center; color: var(--td-muted); }
+.icon-grid button.on { border-color: var(--td-accent); color: var(--td-accent); background: color-mix(in srgb, var(--td-accent) 10%, transparent); }
 .icon-field { display: flex; gap: 8px; align-items: center; }
 .icon-field input { flex: 1; }
-.icon-preview { width: 40px; height: 40px; border-radius: 10px; background: var(--op-surface); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
-.cat-row { display: flex; align-items: center; gap: 6px; padding: 4px 2px; border-top: 1px solid var(--op-divider); min-height: 48px; }
+.icon-preview { width: 40px; height: 40px; border-radius: 10px; background: var(--td-surface); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.cat-row { display: flex; align-items: center; gap: 6px; padding: 4px 2px; border-top: 1px solid var(--td-divider); min-height: 48px; }
 .cat-row .name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-row.hidden-tab .name { opacity: .45; }
-.cat-row .lock { --mdc-icon-size: 16px; color: var(--op-muted); }
-.history-list { font-size: .85rem; color: var(--op-muted); margin: 6px 0 0; padding-left: 18px; }
-.op-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #323232; color: #fff; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 14px; z-index: 10; max-width: calc(100vw - 32px); box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: .92rem; }
-.op-toast button { background: none; border: none; color: var(--op-accent); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 6px; }
-.ghost-drag { position: fixed; pointer-events: none; z-index: 11; opacity: .9; transform: rotate(1.5deg); box-shadow: 0 8px 24px rgba(0,0,0,.25); border-radius: 10px; background: var(--op-bg); max-width: 360px; }
-.menu { position: fixed; right: 12px; top: 56px; white-space: nowrap; overflow-y: auto; background: var(--op-bg); border: 1px solid var(--op-divider); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18); z-index: 9999; display: flex; flex-direction: column; min-width: 220px; padding: 4px; }
+.cat-row .lock { --mdc-icon-size: 16px; color: var(--td-muted); }
+.history-list { font-size: .85rem; color: var(--td-muted); margin: 6px 0 0; padding-left: 18px; }
+.td-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #323232; color: #fff; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 14px; z-index: 10; max-width: calc(100vw - 32px); box-shadow: 0 6px 24px rgba(0,0,0,.35); font-size: .92rem; }
+.td-toast button { background: none; border: none; color: var(--td-accent); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 6px; }
+.ghost-drag { position: fixed; pointer-events: none; z-index: 11; opacity: .9; transform: rotate(1.5deg); box-shadow: 0 8px 24px rgba(0,0,0,.25); border-radius: 10px; background: var(--td-bg); max-width: 360px; }
+.menu { position: fixed; right: 12px; top: 56px; white-space: nowrap; overflow-y: auto; background: var(--td-bg); border: 1px solid var(--td-divider); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18); z-index: 9999; display: flex; flex-direction: column; min-width: 220px; padding: 4px; }
 .menu button { background: none; border: none; text-align: left; padding: 10px 12px; border-radius: 8px; display: flex; gap: 10px; align-items: center; }
-.menu button:hover { background: var(--op-surface); }
-.mealie-status { font-size: .75rem; color: var(--op-muted); background: none; border: 1px solid var(--op-divider); border-radius: 12px; padding: 2px 8px; font-weight: 500; white-space: nowrap; }
-.mealie-status:hover { color: var(--op-accent); border-color: var(--op-accent); }
-.mealie-status.bad { color: var(--op-danger); }
-.error { color: var(--op-danger); padding: 16px; }
+.menu button:hover { background: var(--td-surface); }
+.mealie-status { font-size: .75rem; color: var(--td-muted); background: none; border: 1px solid var(--td-divider); border-radius: 12px; padding: 2px 8px; font-weight: 500; white-space: nowrap; }
+.mealie-status:hover { color: var(--td-accent); border-color: var(--td-accent); }
+.mealie-status.bad { color: var(--td-danger); }
+.error { color: var(--td-danger); padding: 16px; }
 `;
 
 /* ------------------------------------------------------------------ */
 /* The card                                                            */
 /* ------------------------------------------------------------------ */
 
-class OmniPlanCard extends HTMLElement {
+class TaskDragonCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -1163,7 +1175,7 @@ class OmniPlanCard extends HTMLElement {
       planMenu: false,
       shop: {},
       recipes: { category: "", sort: "az", query: "" },
-      quickScope: storage.get("omniplan.quickScope", "shared") === "private" ? "private" : "shared",
+      quickScope: storage.get("taskdragon.quickScope", "shared") === "private" ? "private" : "shared",
       renaming: null,
       maint: {
         view: "dashboard",
@@ -1212,7 +1224,7 @@ class OmniPlanCard extends HTMLElement {
   }
 
   static getConfigElement() {
-    return document.createElement("omniplan-card-editor");
+    return document.createElement("taskdragon-card-editor");
   }
 
   setConfig(config) {
@@ -1282,7 +1294,7 @@ class OmniPlanCard extends HTMLElement {
   _connect() {
     if (!this._hass || this._unsub) return;
     if (!this._shellReady) this._buildShell();
-    this._store = OmniPlanStore.for(this._hass);
+    this._store = TaskDragonStore.for(this._hass);
     this._unsub = this._store.subscribe((board, error) => {
       this._board = board;
       this._loadError = error;
@@ -1503,21 +1515,21 @@ class OmniPlanCard extends HTMLElement {
     setHTML(
       container,
       html`<ha-card>
-        <div class="op-header"></div>
-        <div class="op-brain" ${this._config.show_brain_dump ? "" : html`hidden`}>
+        <div class="td-header"></div>
+        <div class="td-brain" ${this._config.show_brain_dump ? "" : html`hidden`}>
           <input class="brain-input" type="text" maxlength="4000" placeholder="Brain dump… “pick up 2x4s Saturday morning and add garlic powder to groceries”" enterkeyhint="send" aria-label="Brain dump">
           <button class="icon-btn mic" data-action="brain-mic" title="Speak"><ha-icon icon="mdi:microphone"></ha-icon></button>
           <button class="icon-btn send" data-action="brain-send" title="Add"><ha-icon icon="mdi:send"></ha-icon></button>
         </div>
-        <div class="op-filters">
-          <input class="op-search" type="search" placeholder="Search" aria-label="Search tasks">
+        <div class="td-filters">
+          <input class="td-search" type="search" placeholder="Search" aria-label="Search tasks">
         </div>
-        <div class="op-body"></div>
-        <div class="op-bulkbar" hidden></div>
+        <div class="td-body"></div>
+        <div class="td-bulkbar" hidden></div>
       </ha-card>
-      <div class="op-dialog-host"></div>
-      <div class="op-toast-host"></div>
-      <div class="op-scan-host"></div>`,
+      <div class="td-dialog-host"></div>
+      <div class="td-toast-host"></div>
+      <div class="td-scan-host"></div>`,
     );
     root.replaceChildren(style, ...container.childNodes);
     if (!this._listening) {
@@ -1528,7 +1540,7 @@ class OmniPlanCard extends HTMLElement {
       root.addEventListener("pointerdown", this._onPointerDown);
       this._listening = true;
     }
-    root.querySelector(".op-search").value = this._ui.search;
+    root.querySelector(".td-search").value = this._ui.search;
     this._shellReady = true;
   }
 
@@ -1536,8 +1548,8 @@ class OmniPlanCard extends HTMLElement {
     if (!this._shellReady) this._buildShell();
     if (!this._board) {
       setHTML(
-        this.shadowRoot.querySelector(".op-body"),
-        this._loadError ? html`<div class="error">OmniPlan is unavailable: ${this._loadError}</div>` : html`<div class="empty">Loading OmniPlan…</div>`,
+        this.shadowRoot.querySelector(".td-body"),
+        this._loadError ? html`<div class="error">TaskDragon is unavailable: ${this._loadError}</div>` : html`<div class="empty">Loading TaskDragon…</div>`,
       );
       return;
     }
@@ -1549,7 +1561,7 @@ class OmniPlanCard extends HTMLElement {
   _renderChrome() {
     const root = this.shadowRoot;
     const tab = this._currentTab();
-    const title = this._config.title ?? (this._config.plan ? this._visiblePlans()[0]?.name || "OmniPlan" : "OmniPlan");
+    const title = this._config.title ?? (this._config.plan ? this._visiblePlans()[0]?.name || "TaskDragon" : "TaskDragon");
     const people = this._board.people || [];
     const peopleHtml = people.map((p) => {
       const on = this._ui.people.size ? this._ui.people.has(p.entity_id) : tab === "myday" ? p.entity_id === this._me() : true;
@@ -1561,17 +1573,17 @@ class OmniPlanCard extends HTMLElement {
       ? html`<button class="mealie-status ${this._board.mealie.ok === false ? "bad" : ""}" data-action="r-open-browser" title="${this._board.mealie.ok === false ? this._board.mealie.error || "Mealie is unreachable" : "Browse Mealie recipes"}">${this._board.mealie.ok === false ? "⚠ Mealie" : "Mealie ✓"}</button>`
       : "";
     setHTML(
-      root.querySelector(".op-header"),
-      html`<div class="op-title">${title} ${mealie}</div>
-        <div class="op-hrow">
-          ${this._config.plan ? html`<span class="op-pick"></span>` : this._planPickerHtml(tab)}
-          <div class="op-people">${peopleHtml}</div>
+      root.querySelector(".td-header"),
+      html`<div class="td-title"><ha-icon class="td-emblem" icon="taskdragon:dragon"></ha-icon>${title} ${mealie}</div>
+        <div class="td-hrow">
+          ${this._config.plan ? html`<span class="td-pick"></span>` : this._planPickerHtml(tab)}
+          <div class="td-people">${peopleHtml}</div>
           <button class="icon-btn" data-action="s-open" data-context="auto" title="Scan a barcode" aria-label="Scan a barcode"><ha-icon icon="mdi:barcode-scan"></ha-icon></button>
           <button class="icon-btn" data-action="menu" title="More" aria-label="More"><ha-icon icon="mdi:dots-vertical"></ha-icon></button>
           ${this._ui.menu ? this._menuHtml() : ""}
         </div>`,
     );
-    this._placeMenus(root.querySelector(".op-header"));
+    this._placeMenus(root.querySelector(".td-header"));
   }
 
   /** Open (not done, not snoozed) items for a category, or null where a count means nothing. */
@@ -1598,7 +1610,7 @@ class OmniPlanCard extends HTMLElement {
     const current = this._allTabs().find((t) => t.key === tab) || tabs[0];
     const count = current ? this._tabCount(current) : null;
     const menu = this._ui.planMenu
-      ? html`<div class="menu op-planmenu" role="menu" aria-label="Categories">
+      ? html`<div class="menu td-planmenu" role="menu" aria-label="Categories">
           ${tabs.map((t) => {
             const c = this._tabCount(t);
             return html`<button class="${t.key === tab ? "on" : ""}" data-action="tab" data-id="${t.key}" role="menuitem"><ha-icon icon="${t.icon}"></ha-icon><span class="grow">${t.label}</span>${t.plan?.is_private ? html`<ha-icon class="lock" icon="mdi:lock-outline" title="Private"></ha-icon>` : ""}${c !== null ? html`<span class="count">${c}</span>` : ""}</button>`;
@@ -1608,8 +1620,8 @@ class OmniPlanCard extends HTMLElement {
           <button data-action="categories" role="menuitem"><ha-icon icon="mdi:eye-settings-outline"></ha-icon>Show / hide categories</button>
         </div>`
       : "";
-    return html`<span class="op-pick"><button class="op-picker" data-action="plan-menu" aria-haspopup="menu" aria-expanded="${this._ui.planMenu ? "true" : "false"}" title="Switch category">
-        <ha-icon icon="${current?.icon || "mdi:format-list-checks"}"></ha-icon><span class="label">${current?.label || "OmniPlan"}</span>${count !== null && count !== undefined ? html`<span class="count">${count}</span>` : ""}<ha-icon class="chev" icon="mdi:menu-down"></ha-icon></button>${menu}</span>`;
+    return html`<span class="td-pick"><button class="td-picker" data-action="plan-menu" aria-haspopup="menu" aria-expanded="${this._ui.planMenu ? "true" : "false"}" title="Switch category">
+        <ha-icon icon="${current?.icon || "mdi:format-list-checks"}"></ha-icon><span class="label">${current?.label || "TaskDragon"}</span>${count !== null && count !== undefined ? html`<span class="count">${count}</span>` : ""}<ha-icon class="chev" icon="mdi:menu-down"></ha-icon></button>${menu}</span>`;
   }
 
   /**
@@ -1673,7 +1685,7 @@ class OmniPlanCard extends HTMLElement {
   /* ---------------- Body ---------------- */
 
   _renderBody() {
-    const body = this.shadowRoot.querySelector(".op-body");
+    const body = this.shadowRoot.querySelector(".td-body");
     const focus = this._captureFocus();
     const tab = this._currentTab();
     let content;
@@ -1781,7 +1793,7 @@ class OmniPlanCard extends HTMLElement {
     });
     const shared = tasks.filter((t) => t.assigned_to.length !== 1 || !(this._board.people || []).some((p) => p.entity_id === t.assigned_to[0]));
     columns.push(
-      column("Household pool", "Up for grabs & shared", html`<span class="avatar lg" style="background:var(--op-accent)"><ha-icon icon="mdi:home-heart"></ha-icon></span>`, shared, "pool"),
+      column("Household pool", "Up for grabs & shared", html`<span class="avatar lg" style="background:var(--td-accent)"><ha-icon icon="mdi:home-heart"></ha-icon></span>`, shared, "pool"),
     );
     return html`<div class="section-head">Today · ${new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" })}
       <span class="grow"></span><button class="link" data-action="add-task">+ Task</button></div><div class="split">${columns}</div>`;
@@ -1907,7 +1919,7 @@ class OmniPlanCard extends HTMLElement {
     const pct = Math.min(100, Math.round((used / threshold) * 100));
     const unit = state?.attributes?.unit_of_measurement || "";
     return html`<span class="badge ${pct >= 100 ? "overdue" : pct >= 80 ? "today" : ""}"><ha-icon icon="mdi:gauge"></ha-icon>${Math.round(used * 10) / 10}/${threshold} ${unit}</span>
-      <span class="progress"><span style="width:${pct}%;${pct >= 100 ? "background:var(--op-danger)" : ""}"></span></span>`;
+      <span class="progress"><span style="width:${pct}%;${pct >= 100 ? "background:var(--td-danger)" : ""}"></span></span>`;
   }
 
   _lastDoneHtml(task) {
@@ -2103,8 +2115,8 @@ class OmniPlanCard extends HTMLElement {
     const parts = [
       this._shopTabsHtml(plan, mode),
       html`<div class="shop-add">
-        <input data-focus="shop-${plan.id}" data-shop-input="${plan.id}" maxlength="500" placeholder="Add item… e.g. 2 lbs ground beef" enterkeyhint="done" list="op-hist-${plan.id}">
-        <datalist id="op-hist-${plan.id}">${(history || []).map((h) => html`<option value="${h.display_name}">`)}</datalist>
+        <input data-focus="shop-${plan.id}" data-shop-input="${plan.id}" maxlength="500" placeholder="Add item… e.g. 2 lbs ground beef" enterkeyhint="done" list="td-hist-${plan.id}">
+        <datalist id="td-hist-${plan.id}">${(history || []).map((h) => html`<option value="${h.display_name}">`)}</datalist>
         <button class="btn" data-action="shop-add" data-plan="${plan.id}" aria-label="Add item"><ha-icon icon="mdi:plus"></ha-icon></button>
       </div>
       <div class="section-head"><ha-icon icon="mdi:history"></ha-icon>Frequently bought<span class="grow"></span>
@@ -2400,12 +2412,12 @@ class OmniPlanCard extends HTMLElement {
           </div>`,
         )}</div>`);
     }
-    if (!items.length) parts.push(html`<div class="empty">Track staples and homemade seasoning batches. Mark one Low and OmniPlan restocks it for you.</div>`);
+    if (!items.length) parts.push(html`<div class="empty">Track staples and homemade seasoning batches. Mark one Low and TaskDragon restocks it for you.</div>`);
     return html`${parts}`;
   }
 
   _renderBulkBar() {
-    const bar = this.shadowRoot.querySelector(".op-bulkbar");
+    const bar = this.shadowRoot.querySelector(".td-bulkbar");
     if (!this._ui.bulk) {
       bar.hidden = true;
       return;
@@ -2443,7 +2455,7 @@ class OmniPlanCard extends HTMLElement {
   async _loadMaint(planId) {
     if (!planId || !this._store) return null;
     try {
-      const board = await this._store.call({ type: "omniplan/maint_board", plan_id: planId });
+      const board = await this._store.call({ type: "taskdragon/maint_board", plan_id: planId });
       this._maintBoards = { ...(this._maintBoards || {}), [planId]: board };
       this._maintError = null;
     } catch (err) {
@@ -3127,7 +3139,7 @@ class OmniPlanCard extends HTMLElement {
     this._recipeLoading = true;
     this._recipes = { ...(this._recipes || {}), error: null };
     try {
-      const data = await this._store.call({ type: "omniplan/mealie_get_recipes", refresh });
+      const data = await this._store.call({ type: "taskdragon/mealie_get_recipes", refresh });
       this._recipes = { data, error: null };
       this._importSettings = data.settings;
     } catch (err) {
@@ -3143,7 +3155,7 @@ class OmniPlanCard extends HTMLElement {
     this._settingsLoading = true;
     this._settingsError = null;
     try {
-      this._importSettings = await this._store.call({ type: "omniplan/mealie_import_settings" });
+      this._importSettings = await this._store.call({ type: "taskdragon/mealie_import_settings" });
     } catch (err) {
       this._settingsError = err.message || String(err);
     } finally {
@@ -3194,7 +3206,7 @@ class OmniPlanCard extends HTMLElement {
 
   _recipesHtml(plan) {
     if (!this._board.mealie?.enabled) {
-      return html`<div class="empty">Connect Mealie to browse recipes here: Settings → Devices &amp; services → OmniPlan → Configure → Mealie.</div>`;
+      return html`<div class="empty">Connect Mealie to browse recipes here: Settings → Devices &amp; services → TaskDragon → Configure → Mealie.</div>`;
     }
     const state = this._recipes;
     if (!state?.data) {
@@ -3354,7 +3366,7 @@ class OmniPlanCard extends HTMLElement {
     if (!this._rimg.has(id) && !this._rimgPending.has(id)) {
       const job = (async () => {
         try {
-          const response = await this._hass.fetchWithAuth(`/api/omniplan/mealie_image/${encodeURIComponent(id)}`);
+          const response = await this._hass.fetchWithAuth(`/api/taskdragon/mealie_image/${encodeURIComponent(id)}`);
           if (!response.ok) throw new Error(String(response.status));
           const blob = await response.blob();
           if (!/^image\/(webp|jpeg|png|gif)$/.test(blob.type)) throw new Error("not an image");
@@ -3382,7 +3394,7 @@ class OmniPlanCard extends HTMLElement {
 
   async _saveImportSettings(changes) {
     try {
-      this._importSettings = await this._store.call({ type: "omniplan/mealie_import_settings", settings: changes });
+      this._importSettings = await this._store.call({ type: "taskdragon/mealie_import_settings", settings: changes });
       if (this._recipes?.data) this._recipes.data.settings = this._importSettings;
     } catch (err) {
       this._fail(err);
@@ -3463,7 +3475,7 @@ class OmniPlanCard extends HTMLElement {
       case "r-add": {
         el.disabled = true;
         try {
-          const res = await this._call({ type: "omniplan/mealie_add_recipe_to_groceries", recipe_slug: el.dataset.slug, plan_id: el.dataset.plan });
+          const res = await this._call({ type: "taskdragon/mealie_add_recipe_to_groceries", recipe_slug: el.dataset.slug, plan_id: el.dataset.plan });
           this._recipeResultToast(res);
         } finally {
           el.disabled = false;
@@ -3474,7 +3486,7 @@ class OmniPlanCard extends HTMLElement {
         const dialog = { kind: "recipe-review", slug: el.dataset.slug, name: el.dataset.name, planId: el.dataset.plan, planName: planName(el.dataset.plan), preview: null, error: null };
         this._openDialog(dialog);
         try {
-          dialog.preview = await this._store.call({ type: "omniplan/mealie_recipe_preview", recipe_slug: dialog.slug });
+          dialog.preview = await this._store.call({ type: "taskdragon/mealie_recipe_preview", recipe_slug: dialog.slug });
         } catch (err) {
           dialog.error = err.message || String(err);
         }
@@ -3488,7 +3500,7 @@ class OmniPlanCard extends HTMLElement {
         const d = this._dialog;
         const indices = [...this.shadowRoot.querySelectorAll(".rreview [data-ring]:checked")].map((box) => Number(box.dataset.ring));
         if (!indices.length) return this._showToast("Check at least one ingredient");
-        const res = await this._call({ type: "omniplan/mealie_add_recipe_to_groceries", recipe_slug: d.slug, plan_id: d.planId, ingredients: indices });
+        const res = await this._call({ type: "taskdragon/mealie_add_recipe_to_groceries", recipe_slug: d.slug, plan_id: d.planId, ingredients: indices });
         this._closeDialog();
         return this._recipeResultToast(res);
       }
@@ -3503,7 +3515,7 @@ class OmniPlanCard extends HTMLElement {
         const d = this._dialog;
         if (!d.day) return this._showToast("Pick a day");
         const res = await this._call({
-          type: "omniplan/mealie_plan_meal",
+          type: "taskdragon/mealie_plan_meal",
           recipe_slug: d.slug,
           date: d.day,
           entry_type: d.entry,
@@ -3551,7 +3563,7 @@ class OmniPlanCard extends HTMLElement {
   }
 
   _renderScanner() {
-    const host = this.shadowRoot.querySelector(".op-scan-host");
+    const host = this.shadowRoot.querySelector(".td-scan-host");
     const scan = this._scan;
     if (!host) return;
     if (!scan) {
@@ -3561,7 +3573,7 @@ class OmniPlanCard extends HTMLElement {
     const where = scan.context === "pantry" ? "Scan a pantry item" : scan.context === "maintenance" ? "Scan a part or consumable" : "Scan a barcode";
     setHTML(
       host,
-      html`<div class="op-scan" role="dialog" aria-modal="true" aria-label="${where}">
+      html`<div class="td-scan" role="dialog" aria-modal="true" aria-label="${where}">
         <div class="sviewport"></div>
         <div class="reticle" aria-hidden="true"></div>
         <div class="sbar">
@@ -3591,7 +3603,7 @@ class OmniPlanCard extends HTMLElement {
 
   _scanControls() {
     const scan = this._scan;
-    const root = this.shadowRoot.querySelector(".op-scan");
+    const root = this.shadowRoot.querySelector(".td-scan");
     if (!scan || !root) return;
     const status = root.querySelector(".sstatus");
     status.textContent = scan.status;
@@ -3744,7 +3756,7 @@ class OmniPlanCard extends HTMLElement {
   async _scanFound(scan, hit) {
     if (scan.done) return;
     scan.done = true;
-    this.shadowRoot.querySelector(".op-scan")?.classList.add("hit");
+    this.shadowRoot.querySelector(".td-scan")?.classList.add("hit");
     try {
       if (navigator.userActivation?.hasBeenActive !== false) navigator.vibrate?.(50);
     } catch (_err) {
@@ -3771,7 +3783,7 @@ class OmniPlanCard extends HTMLElement {
       document.removeEventListener("visibilitychange", this._onScanHidden);
       this._onScanHidden = null;
     }
-    const host = this.shadowRoot?.querySelector(".op-scan-host");
+    const host = this.shadowRoot?.querySelector(".td-scan-host");
     if (host) setHTML(host, html``);
   }
 
@@ -3814,7 +3826,7 @@ class OmniPlanCard extends HTMLElement {
   async _scanLookup(code, format, ctx) {
     let res;
     try {
-      const message = { type: "omniplan/barcode_lookup", barcode: code, context: ctx.context, apply_default: true };
+      const message = { type: "taskdragon/barcode_lookup", barcode: code, context: ctx.context, apply_default: true };
       if (format && SCAN_FORMATS.includes(format)) message.format = format;
       res = await this._store.call(message);
     } catch (err) {
@@ -3854,7 +3866,7 @@ class OmniPlanCard extends HTMLElement {
     const set = (status, lowAction, label) => ({
       label,
       run: async () => {
-        const out = await this._call({ type: "omniplan/barcode_apply_action", barcode: code, action: "set_pantry_status", status, low_action: lowAction });
+        const out = await this._call({ type: "taskdragon/barcode_apply_action", barcode: code, action: "set_pantry_status", status, low_action: lowAction });
         if (out.action_needed) return this._openDialog({ kind: "pantry-low", item: { ...out.match.item, ingredients: [] }, state: status });
         const added = (out.created || []).find((c) => c.type === "shopping");
         this._showToast(
@@ -3894,7 +3906,7 @@ class OmniPlanCard extends HTMLElement {
   async _scanApplyPart(action, quantity) {
     const d = this._dialog;
     if (d?.kind !== "scan-part") return;
-    const message = { type: "omniplan/barcode_apply_action", barcode: d.res.barcode, action };
+    const message = { type: "taskdragon/barcode_apply_action", barcode: d.res.barcode, action };
     if (quantity) message.quantity = quantity;
     const res = await this._call(message);
     this._closeDialog();
@@ -3994,7 +4006,7 @@ class OmniPlanCard extends HTMLElement {
     this._scanSyncLink();
     const d = this._dialog;
     if (d?.kind !== "scan-link" || d.busy) return;
-    const message = { type: "omniplan/barcode_bind", barcode: d.res.barcode, target_type: d.type, default_delta_qty: d.delta, apply_default: true };
+    const message = { type: "taskdragon/barcode_bind", barcode: d.res.barcode, target_type: d.type, default_delta_qty: d.delta, apply_default: true };
     if (d.res.symbology && SCAN_FORMATS.includes(d.res.symbology)) message.format = d.res.symbology;
     if (d.res.suggestion) {
       message.product_name = d.res.suggestion.name || null;
@@ -4067,7 +4079,7 @@ class OmniPlanCard extends HTMLElement {
       }
       case "s-unlink": {
         if (!confirm(`Unlink ${d.res.display} from ${d.res.match.part.part_name}?`)) return;
-        await this._call({ type: "omniplan/barcode_unbind", barcode: d.res.barcode });
+        await this._call({ type: "taskdragon/barcode_unbind", barcode: d.res.barcode });
         this._closeDialog();
         return this._showToast("Barcode unlinked");
       }
@@ -4099,7 +4111,7 @@ class OmniPlanCard extends HTMLElement {
     this._openDialog(d);
     if (d.awake) this._wakeOn(d);
     try {
-      d.detail = await this._store.call({ type: "omniplan/mealie_get_recipe_detail", recipe_slug: slug });
+      d.detail = await this._store.call({ type: "taskdragon/mealie_get_recipe_detail", recipe_slug: slug });
       d.name = d.detail.name;
     } catch (err) {
       d.error = err.message || String(err);
@@ -4464,7 +4476,7 @@ class OmniPlanCard extends HTMLElement {
         if (!plan || !indices.length) return;
         el.disabled = true;
         try {
-          const res = await this._call({ type: "omniplan/mealie_add_recipe_to_groceries", recipe_slug: d.slug, plan_id: plan.id, ingredients: indices, scale: d.scale });
+          const res = await this._call({ type: "taskdragon/mealie_add_recipe_to_groceries", recipe_slug: d.slug, plan_id: plan.id, ingredients: indices, scale: d.scale });
           this._recipeResultToast(res);
         } finally {
           el.disabled = false;
@@ -4482,8 +4494,8 @@ class OmniPlanCard extends HTMLElement {
     const admin = !!this._board.user?.is_admin;
     const d = { kind: "settings", admin, barcode: null, backups: null, error: null, mode: "merge", report: null, busy: null };
     this._openDialog(d);
-    const jobs = [this._store.call({ type: "omniplan/barcode_settings" }).then((s) => (d.barcode = s))];
-    if (admin) jobs.push(this._store.call({ type: "omniplan/backup_list" }).then((b) => (d.backups = b)));
+    const jobs = [this._store.call({ type: "taskdragon/barcode_settings" }).then((s) => (d.barcode = s))];
+    if (admin) jobs.push(this._store.call({ type: "taskdragon/backup_list" }).then((b) => (d.backups = b)));
     try {
       await Promise.all(jobs);
     } catch (err) {
@@ -4498,7 +4510,7 @@ class OmniPlanCard extends HTMLElement {
     const snapshots = backups?.snapshots || [];
     const busy = (key) => (d.busy === key ? html`disabled` : "");
     const backupCard = !d.admin
-      ? html`<div class="empty sm">Only a Home Assistant administrator can download, snapshot or restore OmniPlan backups.</div>`
+      ? html`<div class="empty sm">Only a Home Assistant administrator can download, snapshot or restore TaskDragon backups.</div>`
       : !backups
         ? html`<div class="empty sm">${d.error ? `Couldn't load backups: ${d.error}` : "Loading backups…"}</div>`
         : html`<div class="bk-actions">
@@ -4510,7 +4522,7 @@ class OmniPlanCard extends HTMLElement {
               <input type="time" data-bk-setting="time" value="${backups.settings.time}" aria-label="Snapshot time">
               <label class="inline">keep the last <input type="number" min="1" max="365" data-bk-setting="retention" value="${backups.settings.retention}" aria-label="Snapshots to keep"> snapshots</label>
             </div>
-            <div class="lastdone">Snapshots are written to <code>/config/${backups.directory}/</code> on the Home Assistant server. Automations can call <code>omniplan.create_backup</code> before updates.</div>
+            <div class="lastdone">Snapshots are written to <code>/config/${backups.directory}/</code> on the Home Assistant server. Automations can call <code>taskdragon.create_backup</code> before updates.</div>
             <div class="bk-list">${snapshots.length
               ? snapshots.map(
                   (s) => html`<div class="bk-row"><span class="grow"><strong>${new Date(s.taken_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</strong>
@@ -4530,9 +4542,9 @@ class OmniPlanCard extends HTMLElement {
             <div class="lastdone">A safety snapshot of the current data is written first, and every file is checked against its SHA-256 before anything changes. Restores from snapshots above use the same mode.</div>
             ${d.report ? this._settingsReportHtml(d.report) : ""}
             <details style="margin-top:12px"><summary>What's in a portable backup?</summary>
-              <div class="lastdone">A <code>.zip</code> with <code>manifest_bridge.json</code> (checksums, a portable profile for every person and a map of every Home Assistant entity, NFC tag, area and service OmniPlan uses), <code>database_dump.json</code> (every table as plain JSON), a hot copy of <code>omniplan.db</code> and every uploaded manual, receipt and photo. It's enough to rebuild OmniPlan on another Home Assistant, or to move it to a standalone app later.</div>
+              <div class="lastdone">A <code>.zip</code> with <code>manifest_bridge.json</code> (checksums, a portable profile for every person and a map of every Home Assistant entity, NFC tag, area and service TaskDragon uses), <code>database_dump.json</code> (every table as plain JSON), a hot copy of <code>taskdragon.db</code> and every uploaded manual, receipt and photo. It's enough to rebuild TaskDragon on another Home Assistant, or to move it to a standalone app later.</div>
             </details>`;
-    return html`<h2><span class="grow">OmniPlan settings</span>${this._closeButton()}</h2>
+    return html`<h2><span class="grow">TaskDragon settings</span>${this._closeButton()}</h2>
       <div class="mcard"><h3><ha-icon icon="mdi:cellphone"></ha-icon>On this device</h3>
         <label class="inline rrow"><input type="checkbox" data-action="b-keep-awake" ${keepAwake ? html`checked` : ""}><span class="grow">Keep the screen on whenever I open a recipe</span></label>
       </div>
@@ -4558,7 +4570,7 @@ class OmniPlanCard extends HTMLElement {
 
   async _settingsReload(d) {
     try {
-      d.backups = await this._store.call({ type: "omniplan/backup_list" });
+      d.backups = await this._store.call({ type: "taskdragon/backup_list" });
     } catch (err) {
       d.error = err.message || String(err);
     }
@@ -4585,7 +4597,7 @@ class OmniPlanCard extends HTMLElement {
         return;
       case "b-off":
         try {
-          d.barcode = await this._call({ type: "omniplan/barcode_settings", settings: { openfoodfacts: el.checked } });
+          d.barcode = await this._call({ type: "taskdragon/barcode_settings", settings: { openfoodfacts: el.checked } });
         } catch (_err) {
           el.checked = !el.checked;
         }
@@ -4593,14 +4605,14 @@ class OmniPlanCard extends HTMLElement {
       case "b-auto":
         return this._settingsSave(d, { enabled: el.checked });
       case "b-download":
-        return this._mOpenSigned("/api/omniplan/backup/download");
+        return this._mOpenSigned("/api/taskdragon/backup/download");
       case "b-snap-download":
-        return this._mOpenSigned(`/api/omniplan/backup/download?snapshot=${encodeURIComponent(el.dataset.id)}`);
+        return this._mOpenSigned(`/api/taskdragon/backup/download?snapshot=${encodeURIComponent(el.dataset.id)}`);
       case "b-snapshot": {
         d.busy = "snapshot";
         this._renderDialog();
         try {
-          const snap = await this._call({ type: "omniplan/backup_create" });
+          const snap = await this._call({ type: "taskdragon/backup_create" });
           this._showToast(`Snapshot saved: ${snap.name} (${fmtBytes(snap.size)})`);
         } catch (_err) {
           /* shown by _call */
@@ -4610,17 +4622,17 @@ class OmniPlanCard extends HTMLElement {
       }
       case "b-snap-delete": {
         if (!confirm(`Delete the snapshot ${el.dataset.id}?`)) return;
-        await this._call({ type: "omniplan/backup_delete", name: el.dataset.id });
+        await this._call({ type: "taskdragon/backup_delete", name: el.dataset.id });
         return this._settingsReload(d);
       }
       case "b-snap-restore": {
         const mode = d.mode;
-        const warning = mode === "replace" ? "Everything in OmniPlan will be REPLACED by this snapshot." : "Missing items from this snapshot will be added; nothing is deleted.";
+        const warning = mode === "replace" ? "Everything in TaskDragon will be REPLACED by this snapshot." : "Missing items from this snapshot will be added; nothing is deleted.";
         if (!confirm(`${warning}\n\nA safety snapshot is taken first. Restore ${el.dataset.id}?`)) return;
         d.busy = "restore";
         this._renderDialog();
         try {
-          const report = await this._call({ type: "omniplan/backup_restore_snapshot", name: el.dataset.id, mode });
+          const report = await this._call({ type: "taskdragon/backup_restore_snapshot", name: el.dataset.id, mode });
           d.busy = null;
           return this._afterRestore(d, report);
         } catch (err) {
@@ -4633,14 +4645,14 @@ class OmniPlanCard extends HTMLElement {
         const file = this.shadowRoot.querySelector("[data-bk-file]")?.files?.[0];
         if (!file) return this._showToast("Choose a backup file first");
         const mode = d.mode;
-        if (mode === "replace" && !confirm(`Everything in OmniPlan will be REPLACED by ${file.name}.\n\nA safety snapshot is taken first. Continue?`)) return;
+        if (mode === "replace" && !confirm(`Everything in TaskDragon will be REPLACED by ${file.name}.\n\nA safety snapshot is taken first. Continue?`)) return;
         d.busy = "restore";
         this._renderDialog();
         try {
           const body = new FormData();
           body.append("mode", mode);
           body.append("file", file, file.name);
-          const response = await this._hass.fetchWithAuth("/api/omniplan/backup/restore", { method: "POST", body });
+          const response = await this._hass.fetchWithAuth("/api/taskdragon/backup/restore", { method: "POST", body });
           const data = await response.json().catch(() => ({}));
           d.busy = null;
           if (!response.ok) {
@@ -4661,7 +4673,7 @@ class OmniPlanCard extends HTMLElement {
 
   async _settingsSave(d, changes) {
     try {
-      const settings = await this._call({ type: "omniplan/backup_settings", settings: changes });
+      const settings = await this._call({ type: "taskdragon/backup_settings", settings: changes });
       if (d.backups) d.backups.settings = settings;
     } catch (_err) {
       /* shown by _call */
@@ -4720,7 +4732,7 @@ class OmniPlanCard extends HTMLElement {
   }
 
   _renderDialog() {
-    const host = this.shadowRoot.querySelector(".op-dialog-host");
+    const host = this.shadowRoot.querySelector(".td-dialog-host");
     if (!this._dialog) {
       setHTML(host, html``);
       return;
@@ -4803,8 +4815,8 @@ class OmniPlanCard extends HTMLElement {
           ? html`<label>Trip<select name="trip_id"><option value="">Always pack (master list)</option>${trips.map(
               (x) => html`<option value="${x.id}" ${t.trip_id === x.id ? html`selected` : ""}>${x.name}</option>`,
             )}</select></label>
-            <label>Group<input name="category" value="${t.category || ""}" maxlength="120" list="op-pack-groups" placeholder="Clothes, Tech…">
-              <datalist id="op-pack-groups">${PACKING_GROUPS.map((g) => html`<option value="${g}">`)}</datalist></label>
+            <label>Group<input name="category" value="${t.category || ""}" maxlength="120" list="td-pack-groups" placeholder="Clothes, Tech…">
+              <datalist id="td-pack-groups">${PACKING_GROUPS.map((g) => html`<option value="${g}">`)}</datalist></label>
             <label class="inline full"><input type="checkbox" name="is_repeatable" ${t.is_repeatable ? html`checked` : ""}>Repeatable — always pack on new trips</label>`
           : ""}
         ${isShopping || isPacking
@@ -4936,12 +4948,12 @@ class OmniPlanCard extends HTMLElement {
       <div class="snooze-grid">
         <button data-action="snooze-ctx" data-type="person_home" ${me ? "" : html`disabled`}><ha-icon icon="mdi:home-import-outline"></ha-icon><span>Next time I'm home<small>${me ? this._person(me).name : "Link your user to a person"}</small></span></button>
         <button data-action="snooze-ctx" data-type="all_home"><ha-icon icon="mdi:home-group"></ha-icon><span>When we're all home<small>${(this._board.people || []).map((p) => p.name).join(" + ") || "Household"}</small></span></button>
-        <button data-action="snooze-ctx" data-type="weekend_dry" ${hasWeather ? "" : html`disabled`}><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon><span>This weekend if it's not raining<small>${hasWeather ? this._board.options.weather_entity : "Set a weather entity in OmniPlan options"}</small></span></button>
+        <button data-action="snooze-ctx" data-type="weekend_dry" ${hasWeather ? "" : html`disabled`}><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon><span>This weekend if it's not raining<small>${hasWeather ? this._board.options.weather_entity : "Set a weather entity in TaskDragon options"}</small></span></button>
       </div>
       <div class="section-head">When an entity changes</div>
       <div class="form">
-        <label class="full">Entity<input class="snooze-entity" maxlength="255" placeholder="e.g. binary_sensor.garage_door" list="op-all-entities">
-          <datalist id="op-all-entities">${Object.keys(this._hass?.states || {}).slice(0, 600).map((e) => html`<option value="${e}">`)}</datalist></label>
+        <label class="full">Entity<input class="snooze-entity" maxlength="255" placeholder="e.g. binary_sensor.garage_door" list="td-all-entities">
+          <datalist id="td-all-entities">${Object.keys(this._hass?.states || {}).slice(0, 600).map((e) => html`<option value="${e}">`)}</datalist></label>
         <label>Becomes state<input class="snooze-state" maxlength="255" placeholder="on / home / open"></label>
         <label>…or goes above<input class="snooze-above" type="number" step="any"></label>
         <label>…or goes below<input class="snooze-below" type="number" step="any"></label>
@@ -5144,7 +5156,7 @@ class OmniPlanCard extends HTMLElement {
   _pantryLowHtml(d) {
     const i = d.item;
     return html`<h2><span class="grow">${i.name} is ${d.state === "out" ? "out" : "running low"}</span>${this._closeButton()}</h2>
-      <p>What should OmniPlan do?</p>
+      <p>What should TaskDragon do?</p>
       <div class="snooze-grid">
         <button data-action="pantry-low-choice" data-choice="shopping"><ha-icon icon="mdi:cart-plus"></ha-icon><span>Add to shopping list<small>${i.ingredients?.length ? `${i.ingredients.length} raw ingredients` : i.name}</small></span></button>
         <button data-action="pantry-low-choice" data-choice="batch_task"><ha-icon icon="mdi:pot-steam-outline"></ha-icon><span>Make a new batch<small>Adds a chore with the recipe</small></span></button>
@@ -5158,10 +5170,10 @@ class OmniPlanCard extends HTMLElement {
   _showToast(message, undo = null, actions = []) {
     clearTimeout(this._toastTimer);
     this._toast = { message, undo, actions };
-    const host = this.shadowRoot.querySelector(".op-toast-host");
+    const host = this.shadowRoot.querySelector(".td-toast-host");
     setHTML(
       host,
-      html`<div class="op-toast" role="status"><span>${message}</span>${actions.map((a, i) => html`<button data-action="toast-act" data-index="${i}">${a.label}</button>`)}${undo ? html`<button data-action="undo">Undo</button>` : ""}</div>`,
+      html`<div class="td-toast" role="status"><span>${message}</span>${actions.map((a, i) => html`<button data-action="toast-act" data-index="${i}">${a.label}</button>`)}${undo ? html`<button data-action="undo">Undo</button>` : ""}</div>`,
     );
     this._toastTimer = setTimeout(() => {
       this._toast = null;
@@ -5170,13 +5182,13 @@ class OmniPlanCard extends HTMLElement {
   }
 
   _fail(err) {
-    console.error("OmniPlan:", err);
+    console.error("TaskDragon:", err);
     this._showToast(err?.message || String(err));
   }
 
   /** An undo callback for a server-side undo token (or nothing when there is none). */
   _undoWith(token) {
-    return token ? () => this._call({ type: "omniplan/undo", token }) : null;
+    return token ? () => this._call({ type: "taskdragon/undo", token }) : null;
   }
 
   /* ---------------- Maintenance dialogs ---------------- */
@@ -5225,7 +5237,7 @@ class OmniPlanCard extends HTMLElement {
         <label>Warranty reminder (days before)<input type="number" min="0" max="365" name="warranty_reminder_days" value="${o.warranty_reminder_days ?? 30}"></label>
         <label class="full">Notes (Markdown)<textarea name="notes" maxlength="20000" placeholder="Filter size, service company phone, quirks…">${o.notes || ""}</textarea></label>
         ${softener
-          ? html`<div class="full banner"><ha-icon icon="mdi:water-opacity"></ha-icon>Link a total water volume sensor (Droplet, a utility_meter…) and OmniPlan learns how many gallons each level of salt lasts.</div>
+          ? html`<div class="full banner"><ha-icon icon="mdi:water-opacity"></ha-icon>Link a total water volume sensor (Droplet, a utility_meter…) and TaskDragon learns how many gallons each level of salt lasts.</div>
             ${field("Total water volume sensor", "cfg_volume_entity", cfg.volume_entity, html`list="m-sensors" maxlength="255" placeholder="sensor.droplet_water_total"`)}
             ${field("Flow rate sensor (regeneration)", "cfg_flow_entity", cfg.flow_entity, html`list="m-sensors" maxlength="255" placeholder="sensor.droplet_flow_rate"`)}
             <label>Volume unit<select name="cfg_unit">${this._mOptions([["gal", "Gallons"], ["L", "Liters"]], cfg.unit || "gal")}</select></label>
@@ -5563,7 +5575,7 @@ class OmniPlanCard extends HTMLElement {
     Object.assign(ui, { addMenu: false, headMenu: false, search: false }, changes);
     if (changes.taskId !== undefined || changes.objectId !== undefined) {
       ui.taskTab = "overview";
-      const top = this.shadowRoot.querySelector(".op-body");
+      const top = this.shadowRoot.querySelector(".td-body");
       if (top?.scrollIntoView && (ui.taskId || ui.objectId)) top.scrollIntoView({ block: "start" });
     }
     this._renderBody();
@@ -5575,7 +5587,7 @@ class OmniPlanCard extends HTMLElement {
     const key = ui.taskId || ui.objectId;
     if (!key) return;
     try {
-      const events = await this._store.call({ type: "omniplan/maint_history", ...(ui.taskId ? { task_id: ui.taskId } : { object_id: ui.objectId }), limit: 1000 });
+      const events = await this._store.call({ type: "taskdragon/maint_history", ...(ui.taskId ? { task_id: ui.taskId } : { object_id: ui.objectId }), limit: 1000 });
       this._mHistory = { ...(this._mHistory || {}), [key]: events };
       if ((ui.taskId || ui.objectId) === key) this._renderBody();
     } catch (_err) {
@@ -5684,7 +5696,7 @@ class OmniPlanCard extends HTMLElement {
         return this._mComplete(id, { method: "qr" });
       case "m-skip": {
         const task = this._mTaskById(id);
-        const res = await this._call({ type: "omniplan/maint_skip", task_id: id });
+        const res = await this._call({ type: "taskdragon/maint_skip", task_id: id });
         this._mRefresh();
         return this._showToast(`${res.kind === "missed" ? "Marked missed" : "Skipped"}: ${task?.name || "task"}`);
       }
@@ -5706,7 +5718,7 @@ class OmniPlanCard extends HTMLElement {
       case "m-delete-object": {
         const obj = idx?.objects.get(id);
         if (!confirm(`Delete “${obj?.name || "this object"}” with its tasks, parts, documents and history?`)) return;
-        const res = await this._call({ type: "omniplan/maint_delete_object", object_id: id });
+        const res = await this._call({ type: "taskdragon/maint_delete_object", object_id: id });
         if (this._dialog) this._closeDialog();
         this._mNavigate({ objectId: null, taskId: null });
         this._mRefresh();
@@ -5749,7 +5761,7 @@ class OmniPlanCard extends HTMLElement {
       case "m-delete-task": {
         const task = idx?.tasks.get(id);
         if (!confirm(`Delete “${task?.name || "this task"}” and its history?`)) return;
-        const res = await this._call({ type: "omniplan/maint_delete_task", task_id: id });
+        const res = await this._call({ type: "taskdragon/maint_delete_task", task_id: id });
         if (this._dialog) this._closeDialog();
         if (ui.taskId === id) this._mNavigate({ taskId: null });
         this._mRefresh();
@@ -5768,17 +5780,17 @@ class OmniPlanCard extends HTMLElement {
         return this._renderDialog();
       case "m-nfc-listen": {
         ui.headMenu = false;
-        const res = await this._call({ type: "omniplan/maint_nfc_listen", task_id: id });
+        const res = await this._call({ type: "taskdragon/maint_nfc_listen", task_id: id });
         this._mRefresh();
         return this._showToast(`Scan the NFC tag now (until ${fmtTime(new Date(res.expires))})`);
       }
       case "m-apply-rec": {
-        const res = await this._call({ type: "omniplan/maint_recommendation", task_id: id, apply: true });
+        const res = await this._call({ type: "taskdragon/maint_recommendation", task_id: id, apply: true });
         this._mRefresh();
         return this._showToast(`Interval set to every ${res.task.interval_value} ${res.task.interval_unit}`);
       }
       case "m-reanalyze": {
-        const res = await this._call({ type: "omniplan/maint_recommendation", task_id: id });
+        const res = await this._call({ type: "taskdragon/maint_recommendation", task_id: id });
         const task = idx?.tasks.get(id);
         if (task) task.recommendation = res.recommendation;
         this._renderBody();
@@ -5790,7 +5802,7 @@ class OmniPlanCard extends HTMLElement {
         return this._openDialog({ kind: "maint-template" });
       case "m-template-apply": {
         this._closeDialog();
-        const obj = await this._call({ type: "omniplan/maint_apply_template", plan_id: planId, template_id: id });
+        const obj = await this._call({ type: "taskdragon/maint_apply_template", plan_id: planId, template_id: id });
         await this._loadMaint(planId);
         this._mNavigate({ objectId: obj.id, taskId: null });
         return this._showToast(`Added ${obj.name}`);
@@ -5798,7 +5810,7 @@ class OmniPlanCard extends HTMLElement {
       case "m-fleet": {
         ui.addMenu = false;
         if (!confirm("Scan Home Assistant for battery-powered devices and add a “Replace Battery” task for each one (triggered below 15%)?")) return this._renderBody();
-        const res = await this._call({ type: "omniplan/maint_battery_fleet", plan_id: planId });
+        const res = await this._call({ type: "taskdragon/maint_battery_fleet", plan_id: planId });
         await this._loadMaint(planId);
         this._mNavigate({ objectId: res.object_id, taskId: null });
         return this._showToast(res.created ? `Added ${res.created} battery task${res.created === 1 ? "" : "s"}` : "Every battery is already tracked");
@@ -5816,13 +5828,13 @@ class OmniPlanCard extends HTMLElement {
         return this._mPartSave();
       case "m-part-delete": {
         if (!confirm("Delete this part? Tasks stop using it.")) return;
-        const res = await this._call({ type: "omniplan/maint_delete_part", part_id: id });
+        const res = await this._call({ type: "taskdragon/maint_delete_part", part_id: id });
         this._closeDialog();
         this._mRefresh();
         return this._showToast("Part deleted", this._undoWith(res.undo));
       }
       case "m-stock": {
-        const part = await this._call({ type: "omniplan/maint_adjust_stock", part_id: id, delta: Number(el.dataset.delta) });
+        const part = await this._call({ type: "taskdragon/maint_adjust_stock", part_id: id, delta: Number(el.dataset.delta) });
         this._mRefresh();
         const low = part.restock_action !== "none" && Number(part.current_stock) <= Number(part.reorder_threshold);
         return this._showToast(`${part.part_name}: ${part.current_stock} in stock${low ? (part.restock_action === "task" ? " · “Buy” task added" : " · on the shopping list") : ""}`);
@@ -5835,7 +5847,7 @@ class OmniPlanCard extends HTMLElement {
         const form = this.shadowRoot.querySelector(".mlink-form");
         const url = form.querySelector('[name="url"]').value.trim();
         if (!safeUrl(url) || !/^https?:/i.test(url)) return this._showToast("Links must start with http:// or https://");
-        await this._call({ type: "omniplan/maint_add_link", object_id: id, url, title: form.querySelector('[name="title"]').value.trim() || null, category: form.querySelector('[name="category"]').value });
+        await this._call({ type: "taskdragon/maint_add_link", object_id: id, url, title: form.querySelector('[name="title"]').value.trim() || null, category: form.querySelector('[name="category"]').value });
         this._closeDialog();
         this._mRefresh();
         return this._showToast("Link added");
@@ -5845,7 +5857,7 @@ class OmniPlanCard extends HTMLElement {
       case "m-doc-delete": {
         const doc = mb?.documents.find((d) => d.id === id);
         if (!confirm(`Delete “${doc?.title || "this document"}”?`)) return;
-        const res = await this._call({ type: "omniplan/maint_delete_document", document_id: id });
+        const res = await this._call({ type: "taskdragon/maint_delete_document", document_id: id });
         this._mRefresh();
         return this._showToast("Document deleted", this._undoWith(res.undo));
       }
@@ -5863,19 +5875,19 @@ class OmniPlanCard extends HTMLElement {
         const form = this.shadowRoot.querySelector(".msalt-form");
         const bags = form.querySelector('[name="bags"]').value;
         const level = form.querySelector('[name="level"]').value;
-        const res = await this._call({ type: "omniplan/maint_salt_log", object_id: id, kind: "fill", ...(bags ? { bags: Number(bags) } : { level: Number(level) }) });
+        const res = await this._call({ type: "taskdragon/maint_salt_log", object_id: id, kind: "fill", ...(bags ? { bags: Number(bags) } : { level: Number(level) }) });
         this._closeDialog();
         this._mRefresh();
         return this._showToast("Salt fill logged", this._undoWith(res.undo));
       }
       case "m-salt-level": {
-        await this._call({ type: "omniplan/maint_salt_log", object_id: id, kind: "level", level: Number(el.dataset.level) });
+        await this._call({ type: "taskdragon/maint_salt_log", object_id: id, kind: "level", level: Number(el.dataset.level) });
         this._mRefresh();
         return this._showToast(`Logged salt at ${el.textContent.trim()} — the estimate recalibrates`);
       }
       case "m-salt-empty": {
         if (!confirm("Log the tank as empty (and salt bridges checked)?")) return;
-        await this._call({ type: "omniplan/maint_salt_log", object_id: id, kind: "empty" });
+        await this._call({ type: "taskdragon/maint_salt_log", object_id: id, kind: "empty" });
         this._mRefresh();
         return this._showToast("Logged an empty tank — time to fill");
       }
@@ -5914,7 +5926,7 @@ class OmniPlanCard extends HTMLElement {
           chore_plan_id: val("chore_plan_id") || null,
         };
         if (this._isAdmin()) settings.notify_service = val("notify_service").trim() || null;
-        await this._call({ type: "omniplan/maint_save_settings", plan_id: planId, settings });
+        await this._call({ type: "taskdragon/maint_save_settings", plan_id: planId, settings });
         this._mRefresh();
         return this._showToast("Maintenance settings saved");
       }
@@ -5973,7 +5985,7 @@ class OmniPlanCard extends HTMLElement {
 
   async _mComplete(taskId, extra = {}) {
     const task = this._mTaskById(taskId);
-    const res = await this._call({ type: "omniplan/maint_complete", task_id: taskId, ...extra });
+    const res = await this._call({ type: "taskdragon/maint_complete", task_id: taskId, ...extra });
     this._mRefresh();
     this._showToast(`Done: ${task?.name || "task"}${res.next_due ? ` · next due ${usDate(res.next_due)}` : ""}`, this._undoWith(res.undo));
   }
@@ -5982,7 +5994,7 @@ class OmniPlanCard extends HTMLElement {
     const d = this._dialog;
     const form = this.shadowRoot.querySelector(".mcomplete-form");
     const val = (name) => form.querySelector(`[name="${name}"]`)?.value ?? "";
-    const message = { type: "omniplan/maint_complete", task_id: d.task.id };
+    const message = { type: "taskdragon/maint_complete", task_id: d.task.id };
     const day = val("completed_at");
     if (day && day !== this._today()) message.completed_at = day;
     if (val("performed_by")) message.performed_by = val("performed_by");
@@ -6058,7 +6070,7 @@ class OmniPlanCard extends HTMLElement {
     else payload.plan_id = d.obj.plan_id;
     if (payload.object_type !== "water_softener") delete payload.config;
     try {
-      const saved = await this._store.call({ type: "omniplan/maint_save_object", object: payload });
+      const saved = await this._store.call({ type: "taskdragon/maint_save_object", object: payload });
       this._closeDialog();
       await this._loadMaint(saved.plan_id);
       if (!d.obj.id) this._mNavigate({ objectId: saved.id, taskId: null });
@@ -6140,7 +6152,7 @@ class OmniPlanCard extends HTMLElement {
     if (d.task.id) payload.id = d.task.id;
     if (!this._isAdmin()) delete payload.on_complete_action;
     try {
-      const saved = await this._store.call({ type: "omniplan/maint_save_task", task: payload });
+      const saved = await this._store.call({ type: "taskdragon/maint_save_task", task: payload });
       this._closeDialog();
       await this._loadMaint(this._mPlanId());
       if (!d.task.id) this._mNavigate({ taskId: saved.id, objectId: null });
@@ -6173,7 +6185,7 @@ class OmniPlanCard extends HTMLElement {
     if (d.part.id) part.id = d.part.id;
     else part.plan_id = d.part.plan_id;
     try {
-      await this._store.call({ type: "omniplan/maint_save_part", part });
+      await this._store.call({ type: "taskdragon/maint_save_part", part });
       this._closeDialog();
       this._mRefresh();
       this._showToast(d.part.id ? "Part saved" : `Added ${part.part_name}`);
@@ -6187,7 +6199,7 @@ class OmniPlanCard extends HTMLElement {
     const ids = [...ui.selected];
     if (!ids.length) return;
     if (action === "delete" && !confirm(`Delete ${ids.length} task${ids.length === 1 ? "" : "s"} and their history?`)) return;
-    const res = await this._call({ type: "omniplan/maint_bulk", task_ids: ids, action, value });
+    const res = await this._call({ type: "taskdragon/maint_bulk", task_ids: ids, action, value });
     ui.selected.clear();
     this._mRefresh();
     const verb = { complete: "Completed", skip: "Skipped", delete: "Deleted", assign: "Reassigned", priority: "Updated" }[action] || "Updated";
@@ -6205,7 +6217,7 @@ class OmniPlanCard extends HTMLElement {
     if (taskId) body.append("task_id", taskId);
     if (title) body.append("title", title);
     body.append("file", file, file.name || "upload");
-    const response = await this._hass.fetchWithAuth("/api/omniplan/documents", { method: "POST", body });
+    const response = await this._hass.fetchWithAuth("/api/taskdragon/documents", { method: "POST", body });
     let result = null;
     try {
       result = await response.json();
@@ -6241,7 +6253,7 @@ class OmniPlanCard extends HTMLElement {
       if (ui.histTask) params.set("task", ui.histTask);
     }
     const query = params.toString();
-    return `/api/omniplan/service_record/${encodeURIComponent(objectId)}${query ? `?${query}` : ""}`;
+    return `/api/taskdragon/service_record/${encodeURIComponent(objectId)}${query ? `?${query}` : ""}`;
   }
 
   /** Open an authenticated download in a new tab via a short-lived signed path. */
@@ -6270,13 +6282,13 @@ class OmniPlanCard extends HTMLElement {
       return;
     }
     const hash = page && doc.content_type === "application/pdf" ? `#page=${Number(page)}` : "";
-    return this._mOpenSigned(`/api/omniplan/documents/${encodeURIComponent(doc.id)}`, hash);
+    return this._mOpenSigned(`/api/taskdragon/documents/${encodeURIComponent(doc.id)}`, hash);
   }
 
   async _mLoadQr(dialog) {
     try {
       const res = await this._store.call({
-        type: "omniplan/maint_qr",
+        type: "taskdragon/maint_qr",
         ...(dialog.qrKind === "task" ? { task_id: dialog.id, action: dialog.action } : { object_id: dialog.id }),
         origin: window.location.origin,
       });
@@ -6297,7 +6309,7 @@ class OmniPlanCard extends HTMLElement {
     if (!data) return;
     const link = document.createElement("a");
     link.href = data;
-    link.download = `omniplan-${(this._dialog.name || "qr").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.png`;
+    link.download = `taskdragon-${(this._dialog.name || "qr").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.png`;
     this.shadowRoot.append(link);
     link.click();
     link.remove();
@@ -6376,7 +6388,7 @@ class OmniPlanCard extends HTMLElement {
     this._store.patchPrefs(changes);
     if (this._dialog?.kind === "categories") this._renderDialog();
     try {
-      await this._store.call({ type: "omniplan/set_prefs", prefs: changes });
+      await this._store.call({ type: "taskdragon/set_prefs", prefs: changes });
     } catch (err) {
       this._fail(err);
       this._store.refresh();
@@ -6423,7 +6435,7 @@ class OmniPlanCard extends HTMLElement {
       maint.addMenu = maint.headMenu = false;
       this._renderBody();
     }
-    this._handleAction(action, target, event).catch((err) => console.debug("OmniPlan action failed", err));
+    this._handleAction(action, target, event).catch((err) => console.debug("TaskDragon action failed", err));
   }
 
   async _handleAction(action, el, event) {
@@ -6457,7 +6469,7 @@ class OmniPlanCard extends HTMLElement {
       case "refresh":
         return this._store.refresh();
       case "mealie-sync": {
-        const status = await this._call({ type: "omniplan/mealie_sync" });
+        const status = await this._call({ type: "taskdragon/mealie_sync" });
         return this._showToast(status.ok ? "Mealie synced" : `Mealie: ${status.error || "sync failed"}`);
       }
       case "plan-menu":
@@ -6479,7 +6491,7 @@ class OmniPlanCard extends HTMLElement {
       case "toggle":
         return this._toggleTask(id);
       case "claim": {
-        await this._call({ type: "omniplan/claim_task", uid: id });
+        await this._call({ type: "taskdragon/claim_task", uid: id });
         return this._showToast("Claimed — it's yours");
       }
       case "open":
@@ -6490,10 +6502,10 @@ class OmniPlanCard extends HTMLElement {
       case "snooze":
         return this._openDialog({ kind: "snooze", task: this._idx.tasks.get(id) });
       case "unsnooze":
-        await this._call({ type: "omniplan/unsnooze", uid: id });
+        await this._call({ type: "taskdragon/unsnooze", uid: id });
         return this._showToast("Back on the list");
       case "delete-sub": {
-        const res = await this._call({ type: "omniplan/delete_tasks", uids: [id] });
+        const res = await this._call({ type: "taskdragon/delete_tasks", uids: [id] });
         return this._showToast("Checklist item removed", this._undoWith(res.undo));
       }
       case "brain-send":
@@ -6504,7 +6516,7 @@ class OmniPlanCard extends HTMLElement {
       /* Quick lists */
       case "quick-scope":
         ui.quickScope = id === "private" ? "private" : "shared";
-        storage.set("omniplan.quickScope", ui.quickScope);
+        storage.set("taskdragon.quickScope", ui.quickScope);
         return this._renderBody();
       case "quick-add":
         return this._quickAdd(el.dataset.plan);
@@ -6521,7 +6533,7 @@ class OmniPlanCard extends HTMLElement {
       case "section-move":
         return this._sectionMove(id, Number(el.dataset.dir));
       case "section-delete": {
-        const res = await this._call({ type: "omniplan/delete_section", section_id: id });
+        const res = await this._call({ type: "taskdragon/delete_section", section_id: id });
         return this._showToast(res.moved ? `Section deleted · ${res.moved} task(s) moved to the inbox` : "Section deleted", this._undoWith(res.undo));
       }
       case "promote":
@@ -6565,12 +6577,12 @@ class OmniPlanCard extends HTMLElement {
         if (ui.showHistory) this._loadHistory(el.dataset.plan);
         return this._renderBody();
       case "history-add": {
-        const res = await this._call({ type: "omniplan/add_shopping_item", plan_id: el.dataset.plan, text: el.dataset.name });
+        const res = await this._call({ type: "taskdragon/add_shopping_item", plan_id: el.dataset.plan, text: el.dataset.name });
         this._loadHistory(el.dataset.plan);
         return this._showToast(res.merged ? `${res.task.summary} is already on the list` : `Added ${res.task.summary}`);
       }
       case "clear-completed": {
-        const res = await this._call({ type: "omniplan/clear_completed", plan_id: el.dataset.plan });
+        const res = await this._call({ type: "taskdragon/clear_completed", plan_id: el.dataset.plan });
         return this._showToast(`Cleared ${res.count}`, this._undoWith(res.undo));
       }
 
@@ -6581,11 +6593,11 @@ class OmniPlanCard extends HTMLElement {
       case "bom-add":
         return this._bomAdd(el.dataset.plan);
       case "bom-toggle":
-        return this._call({ type: "omniplan/save_bom_item", item: { id, acquired: el.checked } });
+        return this._call({ type: "taskdragon/save_bom_item", item: { id, acquired: el.checked } });
       case "bom-delete":
-        return this._call({ type: "omniplan/delete_bom_item", item_id: id });
+        return this._call({ type: "taskdragon/delete_bom_item", item_id: id });
       case "bom-push": {
-        const res = await this._call({ type: "omniplan/push_bom", plan_id: el.dataset.plan });
+        const res = await this._call({ type: "taskdragon/push_bom", plan_id: el.dataset.plan });
         return this._showToast(res.pushed.length ? `Pushed ${res.pushed.length} item(s) to the hardware list` : "Everything is already on the list");
       }
 
@@ -6599,18 +6611,18 @@ class OmniPlanCard extends HTMLElement {
       case "trip-reset": {
         const trip = this._findTrip(id);
         if (!confirm(`Uncheck everything on “${trip?.name || "this trip"}”?`)) return;
-        const res = await this._call({ type: "omniplan/reset_trip", trip_id: id });
+        const res = await this._call({ type: "taskdragon/reset_trip", trip_id: id });
         return this._showToast(`Unchecked ${res.reset} item(s)`);
       }
       case "trip-archive": {
         const archived = !!el.dataset.archived;
-        await this._call({ type: "omniplan/save_trip", trip: { id, status: archived ? "active" : "archived" } });
+        await this._call({ type: "taskdragon/save_trip", trip: { id, status: archived ? "active" : "archived" } });
         return this._showToast(archived ? "Trip restored" : "Trip archived");
       }
       case "trip-delete": {
         const trip = this._findTrip(id);
         if (!confirm(`Delete “${trip?.name || "this trip"}” and its packing list?`)) return;
-        const res = await this._call({ type: "omniplan/delete_trip", trip_id: id });
+        const res = await this._call({ type: "taskdragon/delete_trip", trip_id: id });
         return this._showToast("Trip deleted", this._undoWith(res.undo));
       }
       case "repeat-toggle":
@@ -6637,12 +6649,12 @@ class OmniPlanCard extends HTMLElement {
       case "pantry-save":
         return this._pantrySave();
       case "pantry-delete": {
-        const res = await this._call({ type: "omniplan/delete_pantry_item", item_id: this._dialog.item.id });
+        const res = await this._call({ type: "taskdragon/delete_pantry_item", item_id: this._dialog.item.id });
         this._closeDialog();
         return this._showToast("Pantry item deleted", this._undoWith(res.undo));
       }
       case "pantry-fetch": {
-        const item = await this._call({ type: "omniplan/pantry_fetch_recipe", item_id: this._dialog.item.id });
+        const item = await this._call({ type: "taskdragon/pantry_fetch_recipe", item_id: this._dialog.item.id });
         this._dialog.item = item;
         this._renderDialog();
         return this._showToast(`Loaded ${item.ingredients.length} ingredients`);
@@ -6650,7 +6662,7 @@ class OmniPlanCard extends HTMLElement {
       case "pantry-low-choice": {
         const d = this._dialog;
         this._closeDialog();
-        const res = await this._call({ type: "omniplan/trigger_pantry_low", item_id: d.item.id, state: d.state, action: el.dataset.choice });
+        const res = await this._call({ type: "taskdragon/trigger_pantry_low", item_id: d.item.id, state: d.state, action: el.dataset.choice });
         return this._reportPantry(res);
       }
 
@@ -6664,7 +6676,7 @@ class OmniPlanCard extends HTMLElement {
         this._openDialog(dialog);
         if (plan.archetype === "shopping_errands" && this._board.mealie?.enabled && this._isAdmin()) {
           try {
-            dialog.mealieLists = await this._store.call({ type: "omniplan/mealie_lists" });
+            dialog.mealieLists = await this._store.call({ type: "taskdragon/mealie_lists" });
             if (this._dialog === dialog) this._renderDialog();
           } catch (err) {
             this._fail(err);
@@ -6675,18 +6687,18 @@ class OmniPlanCard extends HTMLElement {
       case "plan-save":
         return this._planSave();
       case "plan-archive": {
-        await this._call({ type: "omniplan/save_plan", plan: { id: this._dialog.plan.id, archived: true } });
+        await this._call({ type: "taskdragon/save_plan", plan: { id: this._dialog.plan.id, archived: true } });
         this._closeDialog();
         ui.tab = null;
         return this._showToast("Category archived · restore it from ⚙ Manage categories");
       }
       case "plan-unarchive":
-        await this._call({ type: "omniplan/save_plan", plan: { id, archived: false } });
+        await this._call({ type: "taskdragon/save_plan", plan: { id, archived: false } });
         return this._showToast("Category restored");
       case "plan-delete": {
         const plan = this._dialog.plan;
         if (!confirm(`Delete “${plan.name}” and everything in it? This cannot be undone.`)) return;
-        await this._call({ type: plan.is_private ? "omniplan/delete_private_plan" : "omniplan/delete_plan", plan_id: plan.id });
+        await this._call({ type: plan.is_private ? "taskdragon/delete_private_plan" : "taskdragon/delete_plan", plan_id: plan.id });
         this._closeDialog();
         ui.tab = null;
         return this._showToast("Category deleted");
@@ -6710,29 +6722,29 @@ class OmniPlanCard extends HTMLElement {
       case "dialog-delete": {
         const uid = this._dialog.task.uid;
         this._closeDialog();
-        const res = await this._call({ type: "omniplan/delete_tasks", uids: [uid] });
+        const res = await this._call({ type: "taskdragon/delete_tasks", uids: [uid] });
         return this._showToast("Task deleted", this._undoWith(res.undo));
       }
       case "snooze-time":
-        return this._snooze({ type: "omniplan/snooze", until: el.dataset.until });
+        return this._snooze({ type: "taskdragon/snooze", until: el.dataset.until });
       case "snooze-custom": {
         const value = this.shadowRoot.querySelector(".snooze-custom")?.value;
         if (!value) return;
-        return this._snooze({ type: "omniplan/snooze", until: new Date(value).toISOString() });
+        return this._snooze({ type: "taskdragon/snooze", until: new Date(value).toISOString() });
       }
       case "snooze-ctx":
-        return this._snooze({ type: "omniplan/snooze_context", rule_type: el.dataset.type, config: {} });
+        return this._snooze({ type: "taskdragon/snooze_context", rule_type: el.dataset.type, config: {} });
       case "snooze-entity": {
         const q = (sel) => this.shadowRoot.querySelector(sel)?.value?.trim();
         const config = { entity_id: q(".snooze-entity") };
         if (q(".snooze-state")) config.state = q(".snooze-state");
         if (q(".snooze-above")) config.above = Number(q(".snooze-above"));
         if (q(".snooze-below")) config.below = Number(q(".snooze-below"));
-        return this._snooze({ type: "omniplan/snooze_context", rule_type: "entity_state", config });
+        return this._snooze({ type: "taskdragon/snooze_context", rule_type: "entity_state", config });
       }
       case "undo": {
         const undo = this._toast?.undo;
-        setHTML(this.shadowRoot.querySelector(".op-toast-host"), html``);
+        setHTML(this.shadowRoot.querySelector(".td-toast-host"), html``);
         this._toast = null;
         if (undo) await undo();
         return;
@@ -6740,7 +6752,7 @@ class OmniPlanCard extends HTMLElement {
       case "toast-act": {
         const act = this._toast?.actions?.[Number(el.dataset.index)];
         clearTimeout(this._toastTimer);
-        setHTML(this.shadowRoot.querySelector(".op-toast-host"), html``);
+        setHTML(this.shadowRoot.querySelector(".td-toast-host"), html``);
         this._toast = null;
         if (act) await act.run();
         return;
@@ -6822,7 +6834,7 @@ class OmniPlanCard extends HTMLElement {
   _onInput(event) {
     const el = event.composedPath()[0];
     if (this._extrasInput(el)) return;
-    if (el.classList?.contains("op-search")) {
+    if (el.classList?.contains("td-search")) {
       this._ui.search = el.value;
       clearTimeout(this._searchTimer);
       this._searchTimer = setTimeout(() => this._renderBody(), 80);
@@ -6869,10 +6881,10 @@ class OmniPlanCard extends HTMLElement {
     // Optimistic: the row is crossed out before the server answers.
     this._store.patchTask(uid, { status: completed ? "completed" : "needs_action", completed_at: completed ? new Date().toISOString() : null });
     try {
-      const res = await this._store.call({ type: "omniplan/set_completed", uid, completed });
+      const res = await this._store.call({ type: "taskdragon/set_completed", uid, completed });
       if (completed && this._planOf(task).archetype !== "packing_trips") {
         const extra = res.unblocked?.length ? ` · unblocked ${res.unblocked.length}` : res.next_due ? ` · next ${res.next_due === addDays(this._today(), 1) ? "tomorrow" : monthDay(res.next_due)}` : "";
-        this._showToast(`Done: ${task.summary}${extra}`, () => this._call({ type: "omniplan/set_completed", uid, completed: false }));
+        this._showToast(`Done: ${task.summary}${extra}`, () => this._call({ type: "taskdragon/set_completed", uid, completed: false }));
       }
     } catch (err) {
       this._store.patchTask(uid, previous);
@@ -6886,7 +6898,7 @@ class OmniPlanCard extends HTMLElement {
     const repeatable = !task.is_repeatable;
     this._store.patchTask(uid, { is_repeatable: repeatable });
     try {
-      await this._store.call({ type: "omniplan/set_repeatable", uid, repeatable });
+      await this._store.call({ type: "taskdragon/set_repeatable", uid, repeatable });
       this._showToast(repeatable ? `“${task.summary}” will be added to every new trip` : `“${task.summary}” is a one-off now`);
     } catch (err) {
       this._store.patchTask(uid, { is_repeatable: !repeatable });
@@ -6929,7 +6941,7 @@ class OmniPlanCard extends HTMLElement {
     this._openDialog(dialog);
     if (uid) {
       try {
-        dialog.history = await this._store.call({ type: "omniplan/task_history", uid });
+        dialog.history = await this._store.call({ type: "taskdragon/task_history", uid });
         const block = this.shadowRoot.querySelector(".history-block");
         if (this._dialog === dialog && block) setHTML(block, this._historyHtml(dialog.history));
       } catch (_err) {
@@ -7000,9 +7012,9 @@ class OmniPlanCard extends HTMLElement {
     if (d.task.uid) payload.uid = d.task.uid;
     else payload.dedupe = true;
     try {
-      const saved = await this._store.call({ type: "omniplan/save_task", task: payload });
+      const saved = await this._store.call({ type: "taskdragon/save_task", task: payload });
       for (const summary of subtasks) {
-        await this._store.call({ type: "omniplan/save_task", task: { parent_uid: saved.uid, summary } });
+        await this._store.call({ type: "taskdragon/save_task", task: { parent_uid: saved.uid, summary } });
       }
       this._closeDialog();
       const planName = this._idx.plans.get(saved.plan_id)?.name || "";
@@ -7017,14 +7029,14 @@ class OmniPlanCard extends HTMLElement {
     if (!summary) return;
     input.value = "";
     this._ui.expanded.add(parentUid);
-    await this._call({ type: "omniplan/save_task", task: { parent_uid: parentUid, summary } });
+    await this._call({ type: "taskdragon/save_task", task: { parent_uid: parentUid, summary } });
   }
 
   async _snooze(message) {
     const task = this._dialog.task;
     this._closeDialog();
     await this._call({ ...message, uid: task.uid });
-    this._showToast(`Snoozed: ${task.summary}`, () => this._call({ type: "omniplan/unsnooze", uid: task.uid }));
+    this._showToast(`Snoozed: ${task.summary}`, () => this._call({ type: "taskdragon/unsnooze", uid: task.uid }));
   }
 
   /* Quick lists */
@@ -7047,16 +7059,16 @@ class OmniPlanCard extends HTMLElement {
       }
     }
     input.value = "";
-    const task = await this._call({ type: "omniplan/save_task", task: { plan_id: planId, summary, section_id: sectionId } });
+    const task = await this._call({ type: "taskdragon/save_task", task: { plan_id: planId, summary, section_id: sectionId } });
     const where = this._idx.sections.get(planId)?.find((s) => s.id === sectionId)?.name || "Inbox";
-    this._showToast(`Added to ${where}`, () => this._call({ type: "omniplan/delete_tasks", uids: [task.uid] }));
+    this._showToast(`Added to ${where}`, () => this._call({ type: "taskdragon/delete_tasks", uids: [task.uid] }));
   }
 
   async _sectionTaskAdd(input) {
     const summary = input.value.trim();
     if (!summary) return;
     input.value = "";
-    await this._call({ type: "omniplan/save_task", task: { plan_id: input.dataset.plan, summary, section_id: input.dataset.sectionInput || null } });
+    await this._call({ type: "taskdragon/save_task", task: { plan_id: input.dataset.plan, summary, section_id: input.dataset.sectionInput || null } });
   }
 
   async _sectionAdd(planId) {
@@ -7064,7 +7076,7 @@ class OmniPlanCard extends HTMLElement {
     const name = input?.value.trim();
     if (!name) return;
     input.value = "";
-    await this._call({ type: "omniplan/save_section", section: { plan_id: planId, name } });
+    await this._call({ type: "taskdragon/save_section", section: { plan_id: planId, name } });
     this._showToast(`Section “${name}” added`);
   }
 
@@ -7073,7 +7085,7 @@ class OmniPlanCard extends HTMLElement {
     const name = input?.value.trim();
     this._ui.renaming = null;
     if (!name) return this._renderBody();
-    await this._call({ type: "omniplan/save_section", section: { id: sectionId, name } });
+    await this._call({ type: "taskdragon/save_section", section: { id: sectionId, name } });
     return this._renderBody();
   }
 
@@ -7085,7 +7097,7 @@ class OmniPlanCard extends HTMLElement {
     const to = from + dir;
     if (to < 0 || to >= ids.length) return;
     [ids[from], ids[to]] = [ids[to], ids[from]];
-    await this._call({ type: "omniplan/reorder_sections", plan_id: section.plan_id, section_ids: ids });
+    await this._call({ type: "taskdragon/reorder_sections", plan_id: section.plan_id, section_ids: ids });
   }
 
   async _promoteTo(planId) {
@@ -7093,10 +7105,10 @@ class OmniPlanCard extends HTMLElement {
     if (!task) return;
     const from = { plan_id: task.plan_id, section_id: task.section_id || null };
     this._closeDialog();
-    await this._call({ type: "omniplan/transfer_task", uid: task.uid, plan_id: planId });
+    await this._call({ type: "taskdragon/transfer_task", uid: task.uid, plan_id: planId });
     const name = this._idx.plans.get(planId)?.name || "the plan";
     this._showToast(`Moved “${task.summary}” to ${name}`, () =>
-      this._call({ type: "omniplan/move_task", uid: task.uid, plan_id: from.plan_id, section_id: from.section_id }),
+      this._call({ type: "taskdragon/move_task", uid: task.uid, plan_id: from.plan_id, section_id: from.section_id }),
     );
   }
 
@@ -7130,7 +7142,7 @@ class OmniPlanCard extends HTMLElement {
     } else {
       trip.plan_id = d.trip.plan_id;
     }
-    const res = await this._call({ type: "omniplan/save_trip", trip });
+    const res = await this._call({ type: "taskdragon/save_trip", trip });
     this._closeDialog();
     if (!d.trip.id) {
       // Make sure the new trip is open.
@@ -7153,7 +7165,7 @@ class OmniPlanCard extends HTMLElement {
       summary = prefix[2].trim();
     }
     input.value = category ? `${category}: ` : "";
-    await this._call({ type: "omniplan/save_task", task: { plan_id: planId, trip_id: tripId || null, summary, category } });
+    await this._call({ type: "taskdragon/save_task", task: { plan_id: planId, trip_id: tripId || null, summary, category } });
   }
 
   /* Brain dump & voice */
@@ -7165,7 +7177,7 @@ class OmniPlanCard extends HTMLElement {
     input.value = "";
     input.disabled = true;
     try {
-      const res = await this._store.call({ type: "omniplan/brain_dump", text });
+      const res = await this._store.call({ type: "taskdragon/brain_dump", text });
       const ok = res.results.filter((r) => r.ok);
       const failed = res.results.filter((r) => !r.ok);
       if (!ok.length && !failed.length) {
@@ -7178,7 +7190,7 @@ class OmniPlanCard extends HTMLElement {
       const created = ok.filter((r) => !r.merged).map((r) => r.uid);
       this._showToast(
         `${res.engine === "llm" ? "🤖 " : ""}Added ${summary}${failed.length ? ` (${failed.length} failed)` : ""}`,
-        created.length ? () => this._call({ type: "omniplan/delete_tasks", uids: created }) : null,
+        created.length ? () => this._call({ type: "taskdragon/delete_tasks", uids: created }) : null,
       );
     } catch (err) {
       input.value = text;
@@ -7234,17 +7246,17 @@ class OmniPlanCard extends HTMLElement {
     const text = input?.value.trim();
     if (!text) return;
     input.value = "";
-    const res = await this._call({ type: "omniplan/add_shopping_item", plan_id: planId, text });
+    const res = await this._call({ type: "taskdragon/add_shopping_item", plan_id: planId, text });
     if (this._ui.showHistory) this._loadHistory(planId);
     this._showToast(
       res.merged ? `Merged into ${res.task.summary}${res.task.quantity ? ` (${res.task.quantity})` : ""}` : `Added ${res.task.summary} · ${res.task.category}`,
-      res.merged ? null : () => this._call({ type: "omniplan/delete_tasks", uids: [res.task.uid] }),
+      res.merged ? null : () => this._call({ type: "taskdragon/delete_tasks", uids: [res.task.uid] }),
     );
   }
 
   async _loadHistory(planId) {
     try {
-      this._history[planId] = await this._store.call({ type: "omniplan/item_history", plan_id: planId });
+      this._history[planId] = await this._store.call({ type: "taskdragon/item_history", plan_id: planId });
     } catch (_err) {
       this._history[planId] = [];
     }
@@ -7260,7 +7272,7 @@ class OmniPlanCard extends HTMLElement {
     nameEl.value = "";
     if (qtyEl) qtyEl.value = "";
     this._ui.showDone.add(`bom-${planId}`);
-    await this._call({ type: "omniplan/save_bom_item", item: { plan_id: planId, name, quantity } });
+    await this._call({ type: "taskdragon/save_bom_item", item: { plan_id: planId, name, quantity } });
   }
 
   async _pantryAdd(planId) {
@@ -7268,13 +7280,13 @@ class OmniPlanCard extends HTMLElement {
     const name = input?.value.trim();
     if (!name) return;
     input.value = "";
-    await this._call({ type: "omniplan/save_pantry_item", item: { plan_id: planId, name } });
+    await this._call({ type: "taskdragon/save_pantry_item", item: { plan_id: planId, name } });
   }
 
   async _pantryState(itemId, state) {
     const item = (this._board.pantry || []).find((i) => i.id === itemId);
     if (!item || item.stock_state === state) return;
-    const res = await this._call({ type: "omniplan/trigger_pantry_low", item_id: itemId, state });
+    const res = await this._call({ type: "taskdragon/trigger_pantry_low", item_id: itemId, state });
     if (res.action_needed) {
       this._openDialog({ kind: "pantry-low", item: res.item, state });
       return;
@@ -7291,7 +7303,7 @@ class OmniPlanCard extends HTMLElement {
     const created = res.created.filter((c) => !c.merged).map((c) => c.uid);
     this._showToast(
       res.action === "batch_task" ? `Added chore: ${names}` : `Added to shopping list: ${names}`,
-      created.length ? () => this._call({ type: "omniplan/delete_tasks", uids: created }) : null,
+      created.length ? () => this._call({ type: "taskdragon/delete_tasks", uids: created }) : null,
     );
   }
 
@@ -7311,7 +7323,7 @@ class OmniPlanCard extends HTMLElement {
     if (!item.name) return this._showToast("A pantry item needs a name");
     if (this._dialog.item.id) item.id = this._dialog.item.id;
     else item.plan_id = this._currentTab();
-    await this._call({ type: "omniplan/save_pantry_item", item });
+    await this._call({ type: "taskdragon/save_pantry_item", item });
     this._closeDialog();
   }
 
@@ -7334,7 +7346,7 @@ class OmniPlanCard extends HTMLElement {
     if (Object.keys(settings).length) plan.settings = settings;
     if (d.plan.id) plan.id = d.plan.id;
     else plan.archetype = form.querySelector('[name="archetype"]:checked')?.value || "quick_list";
-    const saved = await this._call({ type: "omniplan/save_plan", plan });
+    const saved = await this._call({ type: "taskdragon/save_plan", plan });
     this._closeDialog();
     const hidden = this._prefs().hidden_tabs;
     if (!d.plan.id && hidden.includes(saved.id)) await this._savePrefs({ hidden_tabs: hidden.filter((k) => k !== saved.id) });
@@ -7346,13 +7358,13 @@ class OmniPlanCard extends HTMLElement {
     const uids = [...this._ui.selected];
     if (!uids.length) return;
     if (action === "delete" && !confirm(`Delete ${uids.length} task(s)?`)) return;
-    const res = await this._call({ type: "omniplan/bulk_action", uids, action, value });
+    const res = await this._call({ type: "taskdragon/bulk_action", uids, action, value });
     this._ui.selected.clear();
     this._renderBulkBar();
     if (action === "delete") {
       this._showToast(`Deleted ${res.count}`, this._undoWith(res.undo));
     } else if (action === "complete") {
-      this._showToast(`Completed ${res.count}`, () => this._call({ type: "omniplan/bulk_action", uids, action: "uncomplete" }));
+      this._showToast(`Completed ${res.count}`, () => this._call({ type: "taskdragon/bulk_action", uids, action: "uncomplete" }));
     } else {
       this._showToast(`Updated ${res.count}`);
     }
@@ -7435,7 +7447,7 @@ class OmniPlanCard extends HTMLElement {
     const task = this._idx.tasks.get(drag.uid);
     if (!task) return;
     const { row, before, zone } = drag.target;
-    const message = { type: "omniplan/move_task", uid: drag.uid };
+    const message = { type: "taskdragon/move_task", uid: drag.uid };
     if (row) {
       const target = this._idx.tasks.get(row.dataset.uid);
       if (target && target.plan_id === task.plan_id && target.parent_uid === task.parent_uid) {
@@ -7482,7 +7494,7 @@ class OmniPlanCard extends HTMLElement {
 /* Sidebar panel                                                       */
 /* ------------------------------------------------------------------ */
 
-class OmniPlanPanel extends HTMLElement {
+class TaskDragonPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -7498,11 +7510,11 @@ class OmniPlanPanel extends HTMLElement {
     toolbar.className = "toolbar";
     this._menu = document.createElement("ha-menu-button");
     const title = document.createElement("div");
-    title.textContent = "OmniPlan";
+    title.textContent = "TaskDragon";
     toolbar.append(this._menu, title);
     const wrap = document.createElement("div");
     wrap.className = "wrap";
-    this._card = document.createElement("omniplan-card");
+    this._card = document.createElement("taskdragon-card");
     this._card.setAttribute("panel", "");
     wrap.append(this._card);
     this.shadowRoot.replaceChildren(style, toolbar, wrap);
@@ -7534,7 +7546,7 @@ class OmniPlanPanel extends HTMLElement {
 /* Visual card editor                                                  */
 /* ------------------------------------------------------------------ */
 
-class OmniPlanCardEditor extends HTMLElement {
+class TaskDragonCardEditor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -7552,7 +7564,7 @@ class OmniPlanCardEditor extends HTMLElement {
     if (this._plans === null) {
       this._plans = [];
       hass.connection
-        .sendMessagePromise({ type: "omniplan/get_board" })
+        .sendMessagePromise({ type: "taskdragon/get_board" })
         .then((board) => {
           this._plans = board.plans.filter((p) => !p.archived);
           this._render();
@@ -7582,7 +7594,7 @@ class OmniPlanCardEditor extends HTMLElement {
     setHTML(
       container,
       html`<div class="form">
-        <label>Title<input data-key="title" value="${c.title ?? ""}" placeholder="OmniPlan"></label>
+        <label>Title<input data-key="title" value="${c.title ?? ""}" placeholder="TaskDragon"></label>
         <label>Opens on<select data-key="view_mode">${modes.map(([v, l]) => html`<option value="${v}" ${(c.view_mode || "quick") === v ? html`selected` : ""}>${l}</option>`)}</select></label>
         <label>Single plan (hides the category dropdown)<select data-key="plan"><option value="">— all plans —</option>
           ${plans.map((p) => html`<option value="${p.id}" ${c.plan === p.id ? html`selected` : ""}>${p.name}</option>`)}</select></label>
@@ -7598,7 +7610,7 @@ class OmniPlanCardEditor extends HTMLElement {
   }
 
   _changed() {
-    const config = { ...this._config, type: this._config.type || "custom:omniplan-card" };
+    const config = { ...this._config, type: this._config.type || "custom:taskdragon-card" };
     for (const el of this.shadowRoot.querySelectorAll("[data-key]")) {
       const key = el.dataset.key;
       const value = el.type === "checkbox" ? el.checked : el.value;
@@ -7617,18 +7629,20 @@ class OmniPlanCardEditor extends HTMLElement {
 /* Registration                                                        */
 /* ------------------------------------------------------------------ */
 
-if (!customElements.get("omniplan-card")) customElements.define("omniplan-card", OmniPlanCard);
-if (!customElements.get("omniplan-panel")) customElements.define("omniplan-panel", OmniPlanPanel);
-if (!customElements.get("omniplan-card-editor")) customElements.define("omniplan-card-editor", OmniPlanCardEditor);
+if (!customElements.get("taskdragon-card")) customElements.define("taskdragon-card", TaskDragonCard);
+if (!customElements.get("taskdragon-panel")) customElements.define("taskdragon-panel", TaskDragonPanel);
+if (!customElements.get("taskdragon-card-editor")) customElements.define("taskdragon-card-editor", TaskDragonCardEditor);
+// Dashboards saved before the rename keep working until their YAML says taskdragon-card (not offered in the card picker).
+if (!customElements.get("omniplan-card")) customElements.define("omniplan-card", class extends TaskDragonCard {});
 
 window.customCards = window.customCards || [];
-if (!window.customCards.some((c) => c.type === "omniplan-card")) {
+if (!window.customCards.some((c) => c.type === "taskdragon-card")) {
   window.customCards.push({
-    type: "omniplan-card",
-    name: "OmniPlan",
+    type: "taskdragon-card",
+    name: "TaskDragon",
     description: "Household planner: quick lists, My Day, family kiosk split, shopping aisles, kanban, maintenance, trip packing and pantry.",
     preview: false,
   });
 }
 
-console.info(`%c OMNIPLAN %c ${OP_VERSION} `, "background:#03a9f4;color:#fff;font-weight:700", "background:#eee;color:#03a9f4");
+console.info(`%c TASKDRAGON %c ${TD_VERSION} `, "background:#111;color:#fff;font-weight:700", "background:#eee;color:#111");

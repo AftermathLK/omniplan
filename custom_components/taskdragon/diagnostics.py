@@ -1,4 +1,4 @@
-"""Diagnostics for OmniPlan (Settings → Devices & services → OmniPlan → Download diagnostics).
+"""Diagnostics for TaskDragon (Settings → Devices & services → TaskDragon → Download diagnostics).
 
 The download is meant to be attached to bug reports, so it carries settings and
 counts only: the Mealie token and URL, user ids, calendars and every other

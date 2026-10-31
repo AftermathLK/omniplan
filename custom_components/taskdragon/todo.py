@@ -1,6 +1,6 @@
-"""Native Home Assistant to-do entities: one ``todo.*`` entity per OmniPlan plan.
+"""Native Home Assistant to-do entities: one ``todo.*`` entity per TaskDragon plan.
 
-These keep OmniPlan visible to Assist, automations and the stock to-do panel.
+These keep TaskDragon visible to Assist, automations and the stock to-do panel.
 Rich metadata (assignees, subtasks, snoozes…) stays in the custom WebSocket API;
 here tasks are flattened to the fields ``TodoItem`` supports. Snoozed items and
 subtasks are hidden from the native view. Pantry plans map "in stock" to a
@@ -51,7 +51,7 @@ from .const import (
     TRIP_ARCHIVED,
     VERSION,
 )
-from .coordinator import OmniPlanCoordinator
+from .coordinator import TaskDragonCoordinator
 from .planner import PlannerError
 from .timeutil import parse_date, parse_datetime
 
@@ -82,11 +82,11 @@ PANTRY_SUPPORTED = (
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    coordinator: OmniPlanCoordinator = entry.runtime_data
-    entities: dict[str, OmniPlanTodoList] = {}
+    coordinator: TaskDragonCoordinator = entry.runtime_data
+    entities: dict[str, TaskDragonTodoList] = {}
 
-    def build(plan: dict[str, Any]) -> OmniPlanTodoList:
-        entity = OmniPlanTodoList(coordinator, plan)
+    def build(plan: dict[str, Any]) -> TaskDragonTodoList:
+        entity = TaskDragonTodoList(coordinator, plan)
         entities[plan["id"]] = entity
         return entity
 
@@ -113,13 +113,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_PLAN_REMOVED, plan_removed))
 
 
-class OmniPlanTodoList(TodoListEntity):
+class TaskDragonTodoList(TodoListEntity):
     """A plan exposed as a native to-do list."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
 
-    def __init__(self, coordinator: OmniPlanCoordinator, plan: dict[str, Any]) -> None:
+    def __init__(self, coordinator: TaskDragonCoordinator, plan: dict[str, Any]) -> None:
         self.coordinator = coordinator
         self._plan_id = plan["id"]
         self._archetype = plan["archetype"]
@@ -138,8 +138,8 @@ class OmniPlanTodoList(TodoListEntity):
         self._trip_names: dict[str, str] = {}
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, coordinator.entry.entry_id)},
-            name="OmniPlan",
-            manufacturer="OmniPlan",
+            name="TaskDragon",
+            manufacturer="TaskDragon",
             model="Household planner",
             sw_version=VERSION,
             entry_type=DeviceEntryType.SERVICE,

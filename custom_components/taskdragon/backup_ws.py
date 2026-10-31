@@ -1,8 +1,8 @@
-"""WebSocket commands for portable backups (``omniplan/backup_*``), administrators only.
+"""WebSocket commands for portable backups (``taskdragon/backup_*``), administrators only.
 
 Downloads and uploads go through the authenticated HTTP views in
 :mod:`.http_views`; these commands list, create, delete and restore the
-rolling snapshots kept in ``<config>/backups/omniplan/`` and edit the schedule.
+rolling snapshots kept in ``<config>/backups/taskdragon/`` and edit the schedule.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ NAME = vol.All(str, vol.Length(min=1, max=120))
 MODE = vol.In(("replace", "merge"))
 
 
-@_command({vol.Required("type"): "omniplan/backup_list"}, admin=True)
+@_command({vol.Required("type"): "taskdragon/backup_list"}, admin=True)
 async def ws_backup_list(hass, connection, msg, coordinator, actor):
     backups = coordinator.backups
     return {
@@ -27,17 +27,17 @@ async def ws_backup_list(hass, connection, msg, coordinator, actor):
     }
 
 
-@_command({vol.Required("type"): "omniplan/backup_create"}, admin=True)
+@_command({vol.Required("type"): "taskdragon/backup_create"}, admin=True)
 async def ws_backup_create(hass, connection, msg, coordinator, actor):
     return await coordinator.backups.create_snapshot("snapshot")
 
 
-@_command({vol.Required("type"): "omniplan/backup_restore_snapshot", vol.Required("name"): NAME, vol.Required("mode"): MODE}, admin=True)
+@_command({vol.Required("type"): "taskdragon/backup_restore_snapshot", vol.Required("name"): NAME, vol.Required("mode"): MODE}, admin=True)
 async def ws_backup_restore_snapshot(hass, connection, msg, coordinator, actor):
     return await coordinator.backups.restore_snapshot(msg["name"], msg["mode"])
 
 
-@_command({vol.Required("type"): "omniplan/backup_delete", vol.Required("name"): NAME}, admin=True)
+@_command({vol.Required("type"): "taskdragon/backup_delete", vol.Required("name"): NAME}, admin=True)
 async def ws_backup_delete(hass, connection, msg, coordinator, actor):
     await coordinator.backups.delete_snapshot(msg["name"])
     return {"snapshots": await coordinator.backups.list_snapshots()}
@@ -45,7 +45,7 @@ async def ws_backup_delete(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/backup_settings",
+        vol.Required("type"): "taskdragon/backup_settings",
         vol.Optional("settings"): vol.Schema(
             {
                 vol.Optional("enabled"): bool,

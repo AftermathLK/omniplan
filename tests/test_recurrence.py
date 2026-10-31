@@ -7,8 +7,8 @@ from datetime import date
 import pytest
 from conftest import plan_by_name
 
-from omniplan.planner import Actor, PlannerError
-from omniplan.recurrence import describe, next_calendar_occurrence, next_due_date, validate_rrule
+from taskdragon.planner import Actor, PlannerError
+from taskdragon.recurrence import describe, next_calendar_occurrence, next_due_date, validate_rrule
 
 ALEX = Actor(user_id="u1", user_name="Alex", person="person.alex")
 SAM = Actor(user_id="u2", user_name="Sam", person="person.sam")

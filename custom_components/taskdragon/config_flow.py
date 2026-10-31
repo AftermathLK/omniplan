@@ -1,4 +1,4 @@
-"""Config and options flow for OmniPlan.
+"""Config and options flow for TaskDragon.
 
 Steps (shared by setup and options):
 
@@ -64,6 +64,7 @@ from .const import (
     MEALIE_DATA_KEYS,
 )
 from .mealie_client import InvalidMealieUrl, MealieAuthError, MealieClient, MealieError, validate_base_url
+from .migration import LEGACY_DOMAIN
 
 CONF_HOUSEHOLD = "household"
 
@@ -185,7 +186,7 @@ def split_legacy_mealie(data: dict[str, Any], options: dict[str, Any]) -> tuple[
     return data, options
 
 
-class _OmniPlanSteps:
+class _TaskDragonSteps:
     """Steps shared by the config flow and the options flow."""
 
     hass: HomeAssistant
@@ -272,7 +273,7 @@ class _OmniPlanSteps:
         raise NotImplementedError
 
 
-class OmniPlanConfigFlow(_OmniPlanSteps, ConfigFlow, domain=DOMAIN):
+class TaskDragonConfigFlow(_TaskDragonSteps, ConfigFlow, domain=DOMAIN):
     """Initial setup."""
 
     VERSION = 1
@@ -283,25 +284,39 @@ class OmniPlanConfigFlow(_OmniPlanSteps, ConfigFlow, domain=DOMAIN):
         self._data: dict[str, Any] = {}
         self._queue: list[str] = []
         self._previous_people: dict[str, dict[str, Any]] = {}
+        self._legacy_declined = False
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
+        if user_input is None and not self._legacy_declined and self.hass.config_entries.async_entries(LEGACY_DOMAIN):
+            return await self.async_step_import_legacy()
         if user_input is not None:
             self._store_household(user_input)
             return await self.async_step_shift()
         return self.async_show_form(step_id="user", data_schema=household_schema(self._options))
 
+    async def async_step_import_legacy(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """The integration's previous install is still configured: offer to bring its settings over."""
+        if user_input is not None:
+            if user_input.get("import_settings", True):
+                old = self.hass.config_entries.async_entries(LEGACY_DOMAIN)[0]
+                self._data, self._options = split_legacy_mealie(dict(old.data), dict(old.options))
+                return self._finish()
+            self._legacy_declined = True
+            return await self.async_step_user()
+        return self.async_show_form(step_id="import_legacy", data_schema=vol.Schema({vol.Required("import_settings", default=True): bool}))
+
     def _finish(self) -> ConfigFlowResult:
-        return self.async_create_entry(title="OmniPlan", data=self._data, options=self._options)
+        return self.async_create_entry(title="TaskDragon", data=self._data, options=self._options)
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        return OmniPlanOptionsFlow()
+        return TaskDragonOptionsFlow()
 
 
-class OmniPlanOptionsFlow(_OmniPlanSteps, OptionsFlow):
+class TaskDragonOptionsFlow(_TaskDragonSteps, OptionsFlow):
     """Edit any setting after setup; the entry reloads when saved."""
 
     def __init__(self) -> None:

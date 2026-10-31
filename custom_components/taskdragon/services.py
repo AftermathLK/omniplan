@@ -1,8 +1,8 @@
-"""``omniplan.*`` services for automations, scripts and voice pipelines.
+"""``taskdragon.*`` services for automations, scripts and voice pipelines.
 
 A service call made by a signed-in user (from a dashboard button, a script they
 ran or Assist) acts as that user, so it only sees household plans and that
-user's own private lists. Calls without a user (automations) act as OmniPlan.
+user's own private lists. Calls without a user (automations) act as TaskDragon.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from .const import (
     STOCK_STATES,
 )
 from .backup_manager import BackupError
-from .coordinator import OmniPlanCoordinator
+from .coordinator import TaskDragonCoordinator
 from .database import MOBJECTS, MTASKS
 from .mealie_client import MealieError
 from .planner import Actor, PlannerError
@@ -133,14 +133,14 @@ TRIP_SCHEMA = vol.Schema(
 )
 
 
-def _coordinator(hass: HomeAssistant) -> OmniPlanCoordinator:
+def _coordinator(hass: HomeAssistant) -> TaskDragonCoordinator:
     coordinator = hass.data.get(DOMAIN)
     if coordinator is None:
-        raise HomeAssistantError("OmniPlan is not set up")
+        raise HomeAssistantError("TaskDragon is not set up")
     return coordinator
 
 
-async def _resolve_plan(coordinator: OmniPlanCoordinator, ref: str, actor: Actor) -> dict[str, Any]:
+async def _resolve_plan(coordinator: TaskDragonCoordinator, ref: str, actor: Actor) -> dict[str, Any]:
     """Find a plan the actor may use by id, exact name, or the plan's ``todo.*`` entity."""
     plans = await coordinator.planner.accessible_plans(actor, include_archived=True)
     needle = ref.strip()
@@ -154,7 +154,7 @@ async def _resolve_plan(coordinator: OmniPlanCoordinator, ref: str, actor: Actor
             for plan in plans:
                 if plan["id"] == plan_id:
                     return plan
-    raise ServiceValidationError(f"No OmniPlan plan matches '{ref}'")
+    raise ServiceValidationError(f"No TaskDragon plan matches '{ref}'")
 
 
 @callback
@@ -324,7 +324,7 @@ def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_LOG_SALT, log_salt_level, SALT_SCHEMA, SupportsResponse.OPTIONAL)
 
     async def create_backup(call: ServiceCall) -> ServiceResponse:
-        """A portable snapshot into <config>/backups/omniplan (e.g. before an update); old ones are pruned.
+        """A portable snapshot into <config>/backups/taskdragon (e.g. before an update); old ones are pruned.
 
         Like an admin service: users must be administrators, automations (no user) may call it.
         (``async_register_admin_service`` cannot return a response on every supported core.)
@@ -344,14 +344,14 @@ def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_CREATE_BACKUP, create_backup, vol.Schema({}), SupportsResponse.OPTIONAL)
 
 
-async def _maintenance_rows(coordinator: OmniPlanCoordinator, actor: Actor) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+async def _maintenance_rows(coordinator: TaskDragonCoordinator, actor: Actor) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     plans = [p["id"] for p in await coordinator.planner.accessible_plans(actor) if p["archetype"] == "home_maintenance"]
     objects = await coordinator.db.rows(MOBJECTS, {"plan_id": plans})
     tasks = await coordinator.db.rows(MTASKS, {"plan_id": plans})
     return objects, tasks
 
 
-async def _resolve_maintenance_task(coordinator: OmniPlanCoordinator, ref: str, actor: Actor) -> dict[str, Any]:
+async def _resolve_maintenance_task(coordinator: TaskDragonCoordinator, ref: str, actor: Actor) -> dict[str, Any]:
     """A maintenance task by id, "#3.1" code, "Furnace / Replace Filter" or a unique task name."""
     needle = ref.strip()
     objects, tasks = await _maintenance_rows(coordinator, actor)
@@ -370,7 +370,7 @@ async def _resolve_maintenance_task(coordinator: OmniPlanCoordinator, ref: str, 
     raise ServiceValidationError(f"No single maintenance task matches '{ref}'")
 
 
-async def _resolve_maintenance_object(coordinator: OmniPlanCoordinator, ref: str, actor: Actor) -> dict[str, Any]:
+async def _resolve_maintenance_object(coordinator: TaskDragonCoordinator, ref: str, actor: Actor) -> dict[str, Any]:
     needle = ref.strip()
     objects, _ = await _maintenance_rows(coordinator, actor)
     matches = [o for o in objects if needle in (o["id"], f"#{o['number']}") or o["name"].lower() == needle.lower()]

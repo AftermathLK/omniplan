@@ -95,7 +95,7 @@ from .const import (
     STATUS_COMPLETED,
     VERSION,
 )
-from .database import OmniPlanDB
+from .database import TaskDragonDB
 from .kitchen import build_prep_steps, ingredient_lines, leftover_summary, parse_configured_rules
 from .maintenance_runtime import MaintenanceRuntime
 from .mealie_client import InvalidMealieUrl, MealieAuthError, MealieClient, MealieError, item_hash, item_text
@@ -121,7 +121,7 @@ MEALIE_ACTOR = Actor(user_name="Mealie")
 MEALIE_PUSH_DELAY = 3.0
 
 
-class OmniPlanCoordinator:
+class TaskDragonCoordinator:
     """Glue between Home Assistant and the planner."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -129,7 +129,7 @@ class OmniPlanCoordinator:
         self.entry = entry
         self.options: dict[str, Any] = dict(entry.options)
         self.tz = dt_util.get_default_time_zone()
-        self.db = OmniPlanDB(hass.config.path(".storage", DB_FILENAME))
+        self.db = TaskDragonDB(hass.config.path(".storage", DB_FILENAME))
         self.planner = Planner(
             self.db,
             tz=self.tz,
@@ -196,7 +196,7 @@ class OmniPlanCoordinator:
             try:
                 self.mealie = MealieClient(session, url, token)
             except InvalidMealieUrl:
-                _LOGGER.error("The stored Mealie URL is not a valid http(s) URL; reconfigure Mealie in OmniPlan's options")
+                _LOGGER.error("The stored Mealie URL is not a valid http(s) URL; reconfigure Mealie in TaskDragon's options")
             else:
                 self.mealie_status = {"enabled": True, "ok": None, "last_sync": None, "error": None}
 
@@ -224,7 +224,7 @@ class OmniPlanCoordinator:
         await self.async_refresh_listeners()
         await self._startup_catch_up()
         if self.mealie is not None:
-            self.entry.async_create_background_task(self.hass, self.async_sync_mealie(), "omniplan_mealie_initial_sync")
+            self.entry.async_create_background_task(self.hass, self.async_sync_mealie(), "taskdragon_mealie_initial_sync")
 
     async def async_shutdown(self) -> None:
         self._shutting_down = True
@@ -380,7 +380,7 @@ class OmniPlanCoordinator:
         plan_ids, self._pending_plans = self._pending_plans, set()
         async_dispatcher_send(self.hass, SIGNAL_UPDATED, plan_ids)
         self.hass.bus.async_fire(EVENT_UPDATED, {"plan_ids": sorted(plan_ids)})
-        self._spawn(self._after_change(plan_ids), "omniplan_after_change")
+        self._spawn(self._after_change(plan_ids), "taskdragon_after_change")
 
     @property
     def closing(self) -> bool:
@@ -418,7 +418,7 @@ class OmniPlanCoordinator:
     async def _minute_tick(self, now: datetime) -> None:
         if self.backups.restoring:
             return
-        self._spawn(self.backups.daily_tick(), "omniplan_daily_backup")
+        self._spawn(self.backups.daily_tick(), "taskdragon_daily_backup")
         try:
             await self.planner.process_rollover()
             await self.planner.wake_due_snoozes()
@@ -427,19 +427,19 @@ class OmniPlanCoordinator:
             await self.maintenance.tick()
             await self._check_leftovers()
         except Exception:  # noqa: BLE001 - a failing tick must not stop future ticks
-            _LOGGER.exception("OmniPlan minute tick failed")
+            _LOGGER.exception("TaskDragon minute tick failed")
 
     async def _shift_tick(self, now: datetime) -> None:
         try:
             await self.async_run_shift_balance()
         except Exception:  # noqa: BLE001
-            _LOGGER.exception("OmniPlan shift balancing failed")
+            _LOGGER.exception("TaskDragon shift balancing failed")
 
     async def _weekend_tick(self, now: datetime) -> None:
         try:
             await self.async_check_weekend_snoozes()
         except Exception:  # noqa: BLE001
-            _LOGGER.exception("OmniPlan weekend snooze check failed")
+            _LOGGER.exception("TaskDragon weekend snooze check failed")
 
     async def _mealie_tick(self, now: datetime) -> None:
         await self.async_sync_mealie()
@@ -553,7 +553,7 @@ class OmniPlanCoordinator:
                 if entity_condition_reached(old_state, new_state, config):
                     to_wake.append((rule["task_uid"], "entity_state"))
         if to_wake:
-            self._spawn(self._handle_state_change(to_wake), "omniplan_state_change")
+            self._spawn(self._handle_state_change(to_wake), "taskdragon_state_change")
 
     async def _handle_state_change(self, to_wake: list[tuple[str, str]]) -> None:
         for uid, reason in to_wake:
@@ -626,7 +626,7 @@ class OmniPlanCoordinator:
         def _fire(_now: datetime) -> None:
             self._push_unsub = None
             self.entry.async_create_background_task(
-                self.hass, self.async_sync_mealie(meal_plans=False), "omniplan_mealie_push"
+                self.hass, self.async_sync_mealie(meal_plans=False), "taskdragon_mealie_push"
             )
 
         self._push_unsub = async_call_later(self.hass, MEALIE_PUSH_DELAY, _fire)
@@ -656,7 +656,7 @@ class OmniPlanCoordinator:
     def _mealplan_changed(self) -> None:
         """A meal was planned from the recipe browser: pick up its prep and cook tasks now."""
         if self.mealie is not None and not self._shutting_down:
-            self.entry.async_create_background_task(self.hass, self.async_sync_mealie(), "omniplan_mealie_mealplan")
+            self.entry.async_create_background_task(self.hass, self.async_sync_mealie(), "taskdragon_mealie_mealplan")
 
     async def async_mealie_lists(self) -> list[dict[str, Any]]:
         if self.mealie is None:

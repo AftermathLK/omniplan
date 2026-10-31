@@ -1,4 +1,4 @@
-"""Constants for OmniPlan.
+"""Constants for TaskDragon.
 
 This module must stay free of Home Assistant imports so the pure-logic modules
 (units, dependencies, recurrence, shift balancing, brain dump parsing, database)
@@ -7,29 +7,29 @@ can be unit tested without a Home Assistant installation.
 
 from __future__ import annotations
 
-DOMAIN = "omniplan"
-VERSION = "1.3.3"
+DOMAIN = "taskdragon"
+VERSION = "1.3.4"
 
-DB_FILENAME = "omniplan.db"
+DB_FILENAME = "taskdragon.db"
 
 # Frontend
-FRONTEND_URL_BASE = "/omniplan_static"
-CARD_FILENAME = "omniplan-card.js"
+FRONTEND_URL_BASE = "/taskdragon_static"
+CARD_FILENAME = "taskdragon-card.js"
 CARD_URL = f"{FRONTEND_URL_BASE}/{CARD_FILENAME}"
-PANEL_URL_PATH = "omniplan"
-PANEL_ELEMENT = "omniplan-panel"
-PANEL_TITLE = "OmniPlan"
-PANEL_ICON = "mdi:clipboard-check-multiple-outline"
+PANEL_URL_PATH = "taskdragon"
+PANEL_ELEMENT = "taskdragon-panel"
+PANEL_TITLE = "TaskDragon"
+PANEL_ICON = "taskdragon:dragon"  # icon set registered by the card bundle
 
 # Bus events (for automations) and dispatcher signals (internal)
-EVENT_UPDATED = "omniplan_updated"
-EVENT_TASK_COMPLETED = "omniplan_task_completed"
-EVENT_TASK_UNSNOOZED = "omniplan_task_unsnoozed"
-EVENT_PANTRY_LOW = "omniplan_pantry_low"
-EVENT_BARCODE_ACTION = "omniplan_barcode_action"
-SIGNAL_UPDATED = "omniplan_updated_signal"
-SIGNAL_PLAN_ADDED = "omniplan_plan_added"
-SIGNAL_PLAN_REMOVED = "omniplan_plan_removed"
+EVENT_UPDATED = "taskdragon_updated"
+EVENT_TASK_COMPLETED = "taskdragon_task_completed"
+EVENT_TASK_UNSNOOZED = "taskdragon_task_unsnoozed"
+EVENT_PANTRY_LOW = "taskdragon_pantry_low"
+EVENT_BARCODE_ACTION = "taskdragon_barcode_action"
+SIGNAL_UPDATED = "taskdragon_updated_signal"
+SIGNAL_PLAN_ADDED = "taskdragon_plan_added"
+SIGNAL_PLAN_REMOVED = "taskdragon_plan_removed"
 
 # ---------------------------------------------------------------------------
 # Config entry options
@@ -283,7 +283,7 @@ SALT_OBS_EMPTY = "empty"
 SALT_OBS_KINDS = (SALT_OBS_FILL, SALT_OBS_LEVEL, SALT_OBS_EMPTY)
 
 DOC_CATEGORIES = ("manual", "invoice", "warranty", "photo", "other")
-DOCS_DIRNAME = "omniplan_docs"
+DOCS_DIRNAME = "taskdragon_docs"
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 # Only these types are stored and served (never HTML or SVG, which could run script).
 DOC_CONTENT_TYPES = {
@@ -296,8 +296,8 @@ DOC_CONTENT_TYPES = {
     "text/plain": "txt",
 }
 
-EVENT_MAINT_DUE = "omniplan_maintenance_due"
-EVENT_MAINT_COMPLETED = "omniplan_maintenance_completed"
+EVENT_MAINT_DUE = "taskdragon_maintenance_due"
+EVENT_MAINT_COMPLETED = "taskdragon_maintenance_completed"
 SOURCE_MAINT_PART = "maint_part"
 CONF_MAINT_NOTIFY = "maintenance_notify_service"
 
@@ -319,6 +319,6 @@ OPENFOODFACTS_TIMEOUT_SECONDS = 4
 # ---------------------------------------------------------------------------
 # Portable backups
 # ---------------------------------------------------------------------------
-BACKUP_DIRNAME = "omniplan"  # under <config>/backups/
+BACKUP_DIRNAME = "taskdragon"  # under <config>/backups/
 BACKUP_DEFAULT_RETENTION = 14
 BACKUP_DEFAULT_TIME = "03:15"

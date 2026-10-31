@@ -1,4 +1,4 @@
-"""OmniPlan business logic.
+"""TaskDragon business logic.
 
 :class:`Planner` owns every task lifecycle rule – completion with audit log,
 recurrence and rollover, blocking dependencies, snoozing, shopping-list
@@ -97,7 +97,7 @@ from .const import (
     TRIP_UPCOMING,
     UNDO_TTL_SECONDS,
 )
-from .database import MDOCS, MOBJECTS, MPARTS, MTASKS, OmniPlanDB, new_id
+from .database import MDOCS, MOBJECTS, MPARTS, MTASKS, TaskDragonDB, new_id
 from .snooze import describe_rule, validate_rule
 from .timeutil import (
     bucket_for_hour,
@@ -136,7 +136,7 @@ class Actor:
         return self.person or self.user_name
 
 
-SYSTEM = Actor(user_name="OmniPlan")
+SYSTEM = Actor(user_name="TaskDragon")
 
 QUICK_LIST_PLAN: dict[str, Any] = {
     "name": "Quick List",
@@ -174,11 +174,11 @@ PREF_VALUE_MAX = 200
 
 
 class Planner:
-    """Task lifecycle rules on top of :class:`OmniPlanDB`."""
+    """Task lifecycle rules on top of :class:`TaskDragonDB`."""
 
     def __init__(
         self,
-        db: OmniPlanDB,
+        db: TaskDragonDB,
         *,
         tz: tzinfo,
         rollover_hour: int = 0,
@@ -443,7 +443,7 @@ class Planner:
         merged = {**current}
         for key, value in incoming.items():
             if key == PERSONAL_QUICK_KEY:
-                continue  # set by OmniPlan only
+                continue  # set by TaskDragon only
             if key in _ADMIN_SETTINGS and value != current.get(key) and actor.user_id is not None and not actor.is_admin:
                 raise PlannerError("unauthorized", "Only administrators can change list routing and Mealie links")
             if key == "role":

@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 from conftest import TZ
 
-from omniplan.brain_dump import (
+from taskdragon.brain_dump import (
     BrainDumpContext,
     async_parse,
     build_prompt,

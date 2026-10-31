@@ -65,7 +65,7 @@ async def _context(request: web.Request) -> tuple[Any, Any]:
     hass: HomeAssistant = request.app[KEY_HASS]
     coordinator = hass.data.get(DOMAIN)
     if coordinator is None:
-        raise web.HTTPServiceUnavailable(text="OmniPlan is not set up")
+        raise web.HTTPServiceUnavailable(text="TaskDragon is not set up")
     user = request.get(KEY_HASS_USER)
     if user is None:
         raise web.HTTPUnauthorized()
@@ -79,8 +79,8 @@ def _error(err: PlannerError) -> web.Response:
 
 
 class DocumentUploadView(HomeAssistantView):
-    url = "/api/omniplan/documents"
-    name = "api:omniplan:documents"
+    url = "/api/taskdragon/documents"
+    name = "api:taskdragon:documents"
     requires_auth = True
 
     async def post(self, request: web.Request) -> web.Response:
@@ -133,8 +133,8 @@ class DocumentUploadView(HomeAssistantView):
 
 
 class DocumentView(HomeAssistantView):
-    url = "/api/omniplan/documents/{doc_id}"
-    name = "api:omniplan:document"
+    url = "/api/taskdragon/documents/{doc_id}"
+    name = "api:taskdragon:document"
     requires_auth = True
 
     async def get(self, request: web.Request, doc_id: str) -> web.StreamResponse:
@@ -157,8 +157,8 @@ class DocumentView(HomeAssistantView):
 
 
 class ServiceRecordView(HomeAssistantView):
-    url = "/api/omniplan/service_record/{object_id}"
-    name = "api:omniplan:service_record"
+    url = "/api/taskdragon/service_record/{object_id}"
+    name = "api:taskdragon:service_record"
     requires_auth = True
 
     async def get(self, request: web.Request, object_id: str) -> web.StreamResponse:
@@ -177,8 +177,8 @@ class ServiceRecordView(HomeAssistantView):
 
 
 class MealieImageView(HomeAssistantView):
-    url = "/api/omniplan/mealie_image/{recipe_id}"
-    name = "api:omniplan:mealie_image"
+    url = "/api/taskdragon/mealie_image/{recipe_id}"
+    name = "api:taskdragon:mealie_image"
     requires_auth = True
 
     async def get(self, request: web.Request, recipe_id: str) -> web.StreamResponse:
@@ -207,8 +207,8 @@ def _admin_only(actor: Any) -> web.Response | None:
 class BackupDownloadView(HomeAssistantView):
     """A fresh portable backup (or, with ``?snapshot=<name>``, one of the rolling snapshots)."""
 
-    url = "/api/omniplan/backup/download"
-    name = "api:omniplan:backup_download"
+    url = "/api/taskdragon/backup/download"
+    name = "api:taskdragon:backup_download"
     requires_auth = True
 
     async def get(self, request: web.Request) -> web.StreamResponse:
@@ -261,8 +261,8 @@ class BackupDownloadView(HomeAssistantView):
 class BackupRestoreView(HomeAssistantView):
     """Upload a portable backup (.zip) or its database_dump.json and restore it (``mode`` = replace | merge)."""
 
-    url = "/api/omniplan/backup/restore"
-    name = "api:omniplan:backup_restore"
+    url = "/api/taskdragon/backup/restore"
+    name = "api:taskdragon:backup_restore"
     requires_auth = True
 
     async def post(self, request: web.Request) -> web.Response:

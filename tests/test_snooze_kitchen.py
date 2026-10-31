@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from conftest import TZ
 
-from omniplan.kitchen import (
+from taskdragon.kitchen import (
     build_prep_steps,
     discover_rules,
     find_meat,
@@ -15,8 +15,8 @@ from omniplan.kitchen import (
     leftover_summary,
     parse_configured_rules,
 )
-from omniplan.mealie_client import item_hash, item_text
-from omniplan.snooze import (
+from taskdragon.mealie_client import item_hash, item_text
+from taskdragon.snooze import (
     StateView,
     caught_up_on_startup,
     entity_condition_met,
@@ -139,7 +139,7 @@ def test_discover_rules_from_tags_notes_and_keywords() -> None:
 
 
 def test_extras_override_hours() -> None:
-    recipe = {**BRISKET, "notes": [], "extras": {"omniplan": "thaw 48h, rest 30m"}}
+    recipe = {**BRISKET, "notes": [], "extras": {"taskdragon": "thaw 48h, rest 30m"}}
     rules = {r.key: r.hours for r in discover_rules(recipe, CONFIGURED)}
     assert rules["thaw"] == 48.0 and rules["rest"] == 0.5
 

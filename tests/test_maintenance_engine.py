@@ -9,7 +9,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 from conftest import TZ
 
-from omniplan import maintenance as m
+from taskdragon import maintenance as m
 
 UTC = timezone.utc
 

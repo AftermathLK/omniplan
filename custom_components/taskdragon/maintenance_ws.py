@@ -1,4 +1,4 @@
-"""WebSocket commands for the maintenance subsystem (``omniplan/maint_*``).
+"""WebSocket commands for the maintenance subsystem (``taskdragon/maint_*``).
 
 Every command goes through :func:`.websocket_api._command`, so it is
 authenticated, every object/task/part/document id is authorized against the
@@ -145,7 +145,7 @@ def _undo(coordinator: Any, kind: str, payload: Any, actor: Any) -> str:
     return coordinator.planner.stash_undo(kind, payload, actor)
 
 
-@_command({vol.Required("type"): "omniplan/maint_board", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
+@_command({vol.Required("type"): "taskdragon/maint_board", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
 async def ws_board(hass, connection, msg, coordinator, actor):
     board = await _manager(coordinator).board(msg["plan_id"], actor)
     board["people"] = coordinator.people_info()
@@ -154,21 +154,21 @@ async def ws_board(hass, connection, msg, coordinator, actor):
 
 
 @_command(
-    {vol.Required("type"): "omniplan/maint_save_object", vol.Required("object"): OBJECT_SCHEMA},
+    {vol.Required("type"): "taskdragon/maint_save_object", vol.Required("object"): OBJECT_SCHEMA},
     guard=lambda m: {"mobjects": [m["object"].get("id"), m["object"].get("parent_object_id")], "plans": [m["object"].get("plan_id")]},
 )
 async def ws_save_object(hass, connection, msg, coordinator, actor):
     return await _manager(coordinator).save_object(msg["object"], actor)
 
 
-@_command({vol.Required("type"): "omniplan/maint_delete_object", vol.Required("object_id"): ID}, guard=lambda m: {"mobjects": [m["object_id"]]})
+@_command({vol.Required("type"): "taskdragon/maint_delete_object", vol.Required("object_id"): ID}, guard=lambda m: {"mobjects": [m["object_id"]]})
 async def ws_delete_object(hass, connection, msg, coordinator, actor):
     payload = await _manager(coordinator).delete_object(msg["object_id"])
     return {"undo": _undo(coordinator, "maint_object", payload, actor)}
 
 
 @_command(
-    {vol.Required("type"): "omniplan/maint_save_task", vol.Required("task"): TASK_SCHEMA},
+    {vol.Required("type"): "taskdragon/maint_save_task", vol.Required("task"): TASK_SCHEMA},
     guard=lambda m: {
         "mtasks": [m["task"].get("id")],
         "mobjects": [m["task"].get("object_id")],
@@ -180,7 +180,7 @@ async def ws_save_task(hass, connection, msg, coordinator, actor):
     return await _manager(coordinator).save_task(msg["task"], actor)
 
 
-@_command({vol.Required("type"): "omniplan/maint_delete_task", vol.Required("task_id"): ID}, guard=lambda m: {"mtasks": [m["task_id"]]})
+@_command({vol.Required("type"): "taskdragon/maint_delete_task", vol.Required("task_id"): ID}, guard=lambda m: {"mtasks": [m["task_id"]]})
 async def ws_delete_task(hass, connection, msg, coordinator, actor):
     payload = await _manager(coordinator).delete_task(msg["task_id"])
     return {"undo": _undo(coordinator, "maint_task", payload, actor)}
@@ -188,7 +188,7 @@ async def ws_delete_task(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/maint_complete",
+        vol.Required("type"): "taskdragon/maint_complete",
         vol.Required("task_id"): ID,
         vol.Optional("cost"): NUMBER,
         vol.Optional("duration_minutes"): NUMBER,
@@ -222,7 +222,7 @@ async def ws_complete(hass, connection, msg, coordinator, actor):
 
 
 @_command(
-    {vol.Required("type"): "omniplan/maint_skip", vol.Required("task_id"): ID, vol.Optional("notes"): vol.Any(None, _text(4000))},
+    {vol.Required("type"): "taskdragon/maint_skip", vol.Required("task_id"): ID, vol.Optional("notes"): vol.Any(None, _text(4000))},
     guard=lambda m: {"mtasks": [m["task_id"]]},
 )
 async def ws_skip(hass, connection, msg, coordinator, actor):
@@ -231,7 +231,7 @@ async def ws_skip(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/maint_bulk",
+        vol.Required("type"): "taskdragon/maint_bulk",
         vol.Required("task_ids"): IDS,
         vol.Required("action"): vol.In(("complete", "skip", "assign", "delete", "priority")),
         vol.Optional("value"): vol.Any(None, _text(255)),
@@ -261,7 +261,7 @@ async def ws_bulk(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/maint_history",
+        vol.Required("type"): "taskdragon/maint_history",
         vol.Optional("object_id"): ID,
         vol.Optional("task_id"): ID,
         vol.Optional("from"): DATE,
@@ -275,21 +275,21 @@ async def ws_history(hass, connection, msg, coordinator, actor):
 
 
 @_command(
-    {vol.Required("type"): "omniplan/maint_save_part", vol.Required("part"): PART_SCHEMA},
+    {vol.Required("type"): "taskdragon/maint_save_part", vol.Required("part"): PART_SCHEMA},
     guard=lambda m: {"mparts": [m["part"].get("id")], "plans": [m["part"].get("plan_id")], "mobjects": [m["part"].get("object_id")]},
 )
 async def ws_save_part(hass, connection, msg, coordinator, actor):
     return await _manager(coordinator).save_part(msg["part"], actor)
 
 
-@_command({vol.Required("type"): "omniplan/maint_delete_part", vol.Required("part_id"): ID}, guard=lambda m: {"mparts": [m["part_id"]]})
+@_command({vol.Required("type"): "taskdragon/maint_delete_part", vol.Required("part_id"): ID}, guard=lambda m: {"mparts": [m["part_id"]]})
 async def ws_delete_part(hass, connection, msg, coordinator, actor):
     payload = await _manager(coordinator).delete_part(msg["part_id"])
     return {"undo": _undo(coordinator, "maint_part", payload, actor)}
 
 
 @_command(
-    {vol.Required("type"): "omniplan/maint_adjust_stock", vol.Required("part_id"): ID, vol.Required("delta"): vol.All(vol.Coerce(float), vol.Range(min=-10000, max=10000))},
+    {vol.Required("type"): "taskdragon/maint_adjust_stock", vol.Required("part_id"): ID, vol.Required("delta"): vol.All(vol.Coerce(float), vol.Range(min=-10000, max=10000))},
     guard=lambda m: {"mparts": [m["part_id"]]},
 )
 async def ws_adjust_stock(hass, connection, msg, coordinator, actor):
@@ -298,7 +298,7 @@ async def ws_adjust_stock(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/maint_add_link",
+        vol.Required("type"): "taskdragon/maint_add_link",
         vol.Required("object_id"): ID,
         vol.Required("url"): _text(2048),
         vol.Optional("title"): OPT_NAME,
@@ -314,7 +314,7 @@ async def ws_add_link(hass, connection, msg, coordinator, actor):
     )
 
 
-@_command({vol.Required("type"): "omniplan/maint_delete_document", vol.Required("document_id"): ID}, guard=lambda m: {"mdocs": [m["document_id"]]})
+@_command({vol.Required("type"): "taskdragon/maint_delete_document", vol.Required("document_id"): ID}, guard=lambda m: {"mdocs": [m["document_id"]]})
 async def ws_delete_document(hass, connection, msg, coordinator, actor):
     payload = await _manager(coordinator).delete_document(msg["document_id"])
     return {"undo": _undo(coordinator, "maint_document", payload, actor)}
@@ -322,7 +322,7 @@ async def ws_delete_document(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/maint_salt_log",
+        vol.Required("type"): "taskdragon/maint_salt_log",
         vol.Required("object_id"): ID,
         vol.Required("kind"): vol.In(SALT_OBS_KINDS),
         vol.Optional("level"): NUMBER,
@@ -340,7 +340,7 @@ async def ws_salt_log(hass, connection, msg, coordinator, actor):
     return {"observation": await manager.salt_log(msg["object_id"], msg["kind"], level=msg.get("level"), actor=actor)}
 
 
-@_command({vol.Required("type"): "omniplan/maint_nfc_listen", vol.Required("task_id"): ID}, guard=lambda m: {"mtasks": [m["task_id"]]})
+@_command({vol.Required("type"): "taskdragon/maint_nfc_listen", vol.Required("task_id"): ID}, guard=lambda m: {"mtasks": [m["task_id"]]})
 async def ws_nfc_listen(hass, connection, msg, coordinator, actor):
     manager = _manager(coordinator)
     expires = manager.start_nfc_binding(msg["task_id"], actor)
@@ -361,7 +361,7 @@ def _base_url(hass: Any, origin: str | None) -> str:
 
 @_command(
     {
-        vol.Required("type"): "omniplan/maint_qr",
+        vol.Required("type"): "taskdragon/maint_qr",
         vol.Optional("task_id"): ID,
         vol.Optional("object_id"): ID,
         vol.Optional("action"): vol.In(("open", "complete")),
@@ -372,16 +372,16 @@ def _base_url(hass: Any, origin: str | None) -> str:
 async def ws_qr(hass, connection, msg, coordinator, actor):
     base = _base_url(hass, msg.get("origin"))
     if msg.get("task_id"):
-        url = f"{base}/omniplan?maint_task={msg['task_id']}" + ("&do=complete" if msg.get("action") == "complete" else "")
+        url = f"{base}/taskdragon?maint_task={msg['task_id']}" + ("&do=complete" if msg.get("action") == "complete" else "")
     elif msg.get("object_id"):
-        url = f"{base}/omniplan?maint_object={msg['object_id']}"
+        url = f"{base}/taskdragon?maint_object={msg['object_id']}"
     else:
         raise PlannerError("invalid", "Pick a task or an object")
     return {"url": url, "rows": encode_rows(url)}
 
 
 @_command(
-    {vol.Required("type"): "omniplan/maint_recommendation", vol.Required("task_id"): ID, vol.Optional("apply", default=False): bool},
+    {vol.Required("type"): "taskdragon/maint_recommendation", vol.Required("task_id"): ID, vol.Optional("apply", default=False): bool},
     guard=lambda m: {"mtasks": [m["task_id"]]},
 )
 async def ws_recommendation(hass, connection, msg, coordinator, actor):
@@ -394,7 +394,7 @@ async def ws_recommendation(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/maint_apply_template",
+        vol.Required("type"): "taskdragon/maint_apply_template",
         vol.Required("plan_id"): ID,
         vol.Required("template_id"): _text(40),
         vol.Optional("parent_object_id"): OPT_ID,
@@ -406,14 +406,14 @@ async def ws_apply_template(hass, connection, msg, coordinator, actor):
     return await _manager(coordinator).apply_template(msg["plan_id"], msg["template_id"], actor, parent_object_id=msg.get("parent_object_id"), name=msg.get("name"))
 
 
-@_command({vol.Required("type"): "omniplan/maint_battery_fleet", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
+@_command({vol.Required("type"): "taskdragon/maint_battery_fleet", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
 async def ws_battery_fleet(hass, connection, msg, coordinator, actor):
     states = [(s.entity_id, s.state, dict(s.attributes)) for domain in ("sensor", "binary_sensor") for s in hass.states.async_all(domain)]
     return await _manager(coordinator).battery_fleet(msg["plan_id"], states, actor)
 
 
 @_command(
-    {vol.Required("type"): "omniplan/maint_spend", vol.Required("plan_id"): ID, vol.Required("year"): vol.All(int, vol.Range(min=2000, max=2200))},
+    {vol.Required("type"): "taskdragon/maint_spend", vol.Required("plan_id"): ID, vol.Required("year"): vol.All(int, vol.Range(min=2000, max=2200))},
     guard=lambda m: {"plans": [m["plan_id"]]},
 )
 async def ws_spend(hass, connection, msg, coordinator, actor):
@@ -422,7 +422,7 @@ async def ws_spend(hass, connection, msg, coordinator, actor):
 
 @_command(
     {
-        vol.Required("type"): "omniplan/maint_save_settings",
+        vol.Required("type"): "taskdragon/maint_save_settings",
         vol.Required("plan_id"): ID,
         vol.Required("settings"): vol.Schema(
             {
