@@ -5,6 +5,7 @@
 **OmniPlan is now TaskDragon.** Same integration, new name and emblem (a monochrome ouroboros dragon).
 
 - Domain `taskdragon`: folder `custom_components/taskdragon`, services `taskdragon.*`, events `taskdragon_*`, WebSocket commands `taskdragon/*`, card `custom:taskdragon-card` (bundle `/taskdragon_static/taskdragon-card.js`), sidebar panel `/taskdragon`.
+- The repository is now [AftermathLK/taskdragon](https://github.com/AftermathLK/taskdragon); the old `AftermathLK/omniplan` address redirects.
 - The card header and the sidebar show the TaskDragon emblem (the `taskdragon:dragon` icon, also usable anywhere Home Assistant takes an icon).
 - **Upgrading**: the first start copies the previous installation's database and documents, the config flow imports its people, schedule and Mealie connection, dashboards that still say `custom:omniplan-card` keep working, old `/omniplan` QR links still open, and old backups and Mealie `omniplan:` prep notes are still understood. See [Coming from OmniPlan?](README.md#coming-from-omniplan).
 

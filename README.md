@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/banner.webp" alt="TaskDragon: the household planner that lives inside Home Assistant" width="100%">
+  <img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/banner.webp" alt="TaskDragon: the household planner that lives inside Home Assistant" width="100%">
 </p>
 
 <p align="center">
-  <a href="https://hacs.xyz/"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/badges/hacs.svg" alt="HACS custom repository"></a>
-  <a href="https://www.home-assistant.io/"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/badges/home-assistant.svg" alt="Home Assistant 2024.11 or newer"></a>
-  <img src="https://img.shields.io/github/manifest-json/v/AftermathLK/omniplan?filename=custom_components%2Ftaskdragon%2Fmanifest.json&style=for-the-badge&label=version&color=0A84E0" alt="Version">
-  <img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/badges/no-cloud.svg" alt="No cloud">
+  <a href="https://hacs.xyz/"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/badges/hacs.svg" alt="HACS custom repository"></a>
+  <a href="https://www.home-assistant.io/"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/badges/home-assistant.svg" alt="Home Assistant 2024.11 or newer"></a>
+  <img src="https://img.shields.io/github/manifest-json/v/AftermathLK/taskdragon?filename=custom_components%2Ftaskdragon%2Fmanifest.json&style=for-the-badge&label=version&color=0A84E0" alt="Version">
+  <img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/badges/no-cloud.svg" alt="No cloud">
 </p>
 
 <p align="center">
@@ -45,7 +45,7 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 
 ### Quick List and categories
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/quick-list.webp" alt="The Quick List on desktop, and the category dropdown on a phone" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/quick-list.webp" alt="The Quick List on desktop, and the category dropdown on a phone" width="100%"></p>
 
 - The card opens on a zero-friction **Quick List**. Switch between the **shared household** list and **your private** one, file items into collapsible sections ("Calls to Make", "House Stuff"…), and type `Calls: dentist` to land straight in a section.
 - **Promote** an item into any plan (shopping items get an aisle, packing items go to the next trip), or **Repeat it…** to turn it into a recurring chore.
@@ -54,7 +54,7 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 
 ### Chores, My Day and the family view
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/family.webp" alt="Family split view with a column per person, and My Day on a phone" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/family.webp" alt="Family split view with a column per person, and My Day on a phone" width="100%"></p>
 
 - **Time-blocked chores** with calendar (RRULE) or rolling recurrence, streaks, and a rollover hour so late-night completions count for today.
 - **My Day** for whoever is signed in, and a **family split** for a wall tablet: a column per person plus the up-for-grabs pool with one-tap **Claim**. "Last done by Sam yesterday at 6:15 PM" on every recurring chore.
@@ -63,7 +63,7 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 
 ### Groceries and pantry
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/groceries.webp" alt="Aisle-grouped shopping tiles, and the pantry drawer after scanning an item" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/groceries.webp" alt="Aisle-grouped shopping tiles, and the pantry drawer after scanning an item" width="100%"></p>
 
 - A compact **aisle grid** (Produce, Meat, Dairy, Spices/Pantry…) that merges duplicates and units, with a frequently-bought drawer.
 - A **pantry** with In stock / Low / Out. Going low can push the item (or a batch recipe's raw ingredients) to the list, or create a "make a new batch" chore.
@@ -71,7 +71,7 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 
 ### Mealie recipe browser
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/recipes.webp" alt="Mealie recipe browser with photos, filters and one-tap actions" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/recipes.webp" alt="Mealie recipe browser with photos, filters and one-tap actions" width="100%"></p>
 
 - Every Mealie recipe with its photo, categories, time and how often you cooked it. Filter by category or tag, sort, and search.
 - **Add ingredients** skips seasonings and anything your pantry has in stock: *"Added 6 items from Chicken Sausage Orzo (Skipped 4 seasonings/pantry items)"*. **Review** lets you choose, and **Plan meal** puts it on Mealie's meal plan.
@@ -80,7 +80,7 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 
 ### Cooking view
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/cooking-view.webp" alt="Full-screen cooking view with keep-screen-on, batch size, ingredients, steps and a running timer" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/cooking-view.webp" alt="Full-screen cooking view with keep-screen-on, batch size, ingredients, steps and a running timer" width="100%"></p>
 
 - Open any recipe full screen, readable from across the counter. **Keep screen on while viewing** holds a wake lock and takes it back when you return to the app.
 - A **½× to 3× batch multiplier** rescales every amount (1½ cups, ⅔ tsp), ingredients strike through as you measure, and the current step is highlighted.
@@ -89,7 +89,7 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 
 ### Barcode scanner
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/barcode-scanner.webp" alt="Scanning a salt bag, using or restocking the part, and linking a new barcode" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/barcode-scanner.webp" alt="Scanning a salt bag, using or restocking the part, and linking a new barcode" width="100%"></p>
 
 - Scan from the header, the pantry, or a maintenance object's parts. The camera opens with a framing guide, **flashlight** and **camera switch**, and turns off the moment a code is read.
 - **Parts**: one tap for **−1 Use part** (which re-orders when stock runs low), or **Restock** with +1 / +2 / +4 / +6. **Pantry**: a scan marks the item In Stock so recipe imports skip it.
@@ -98,7 +98,7 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 
 ### Home maintenance and assets
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/maintenance.webp" alt="Maintenance dashboard with status, progress and actions, and a water softener's salt gauge" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/maintenance.webp" alt="Maintenance dashboard with status, progress and actions, and a water softener's salt gauge" width="100%"></p>
 
 - Every appliance, system or vehicle is an **object** (`#3`) with **tasks** (`#3.1`), a parts inventory, manuals and invoices, and a full service history.
 - Tasks fall due on **rolling or planned intervals**, seasonal windows, or **sensor triggers**: thresholds, counters (gallons, miles, kWh), runtime hours, cycle counts and leak sensors. Feedback (*too early / just right / too late*) teaches TaskDragon a better interval.
@@ -107,14 +107,14 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 
 ### Projects and trip packing
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/packing-projects.webp" alt="Projects Kanban board, and a trip packing list on a phone" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/packing-projects.webp" alt="Projects Kanban board, and a trip packing list on a phone" width="100%"></p>
 
 - **Projects** switch between a Kanban board and a dependency tree, with a bill of materials that can be pushed to the hardware list.
 - **Trips** are dated and grouped (Clothes, Toiletries, Tech…), with a live "18 / 24 packed" bar. Items flagged *repeatable* start fresh on every new trip.
 
 ### Backups and the standalone bridge
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/backups.webp" alt="Settings and backups: download, snapshots, schedule and restore" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/backups.webp" alt="Settings and backups: download, snapshots, schedule and restore" width="100%"></p>
 
 - **Download a portable backup** (`.zip`) with the database, a plain-JSON dump of every table, every uploaded document and a checksum manifest.
 - **Daily snapshots** at 03:15 into `/config/backups/taskdragon/` (the last 14 are kept), plus the `taskdragon.create_backup` service for automations.
@@ -123,7 +123,7 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 
 ### Light and dark
 
-<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/omniplan/main/docs/images/dark-mode.webp" alt="TaskDragon following a dark Home Assistant theme" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/dark-mode.webp" alt="TaskDragon following a dark Home Assistant theme" width="100%"></p>
 
 The card uses your Home Assistant theme's colors, so it follows light, dark and custom themes.
 
@@ -133,7 +133,7 @@ The card uses your Home Assistant theme's colors, so it follows light, dark and 
 
 [![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=AftermathLK&repository=taskdragon&category=integration)
 
-1. Click the button above, or in HACS open **⋮ → Custom repositories**, add `https://github.com/AftermathLK/omniplan` with type **Integration**.
+1. Click the button above, or in HACS open **⋮ → Custom repositories**, add `https://github.com/AftermathLK/taskdragon` with type **Integration**.
 2. Find **TaskDragon** in HACS and **Download** it.
 3. **Restart Home Assistant.** The Python requirements (`aiosqlite`, `python-dateutil`) install automatically.
 
@@ -150,7 +150,7 @@ The card uses your Home Assistant theme's colors, so it follows light, dark and 
 
 ### Coming from OmniPlan?
 
-TaskDragon is the new name of the integration previously published as OmniPlan. Nothing is lost when you switch:
+TaskDragon is the new name of the integration previously published as OmniPlan. The repository moved from `AftermathLK/omniplan` to `AftermathLK/taskdragon`, and the old address redirects here. Nothing is lost when you switch:
 
 1. Install TaskDragon (above) and restart. On its first start TaskDragon copies the old database (lists, maintenance history, barcodes, settings) and the uploaded documents into its own files. The old ones are left untouched.
 2. **Add integration → TaskDragon** offers to **import your existing setup** (people, schedule and Mealie connection) in one step.

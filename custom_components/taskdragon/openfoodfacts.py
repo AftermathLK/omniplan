@@ -25,7 +25,7 @@ MAX_RESPONSE_BYTES = 512 * 1024
 CACHE_ENTRIES = 500
 FOUND_SECONDS = 24 * 3600
 MISSING_SECONDS = 3600
-USER_AGENT = f"TaskDragon/{VERSION} (Home Assistant integration; https://github.com/AftermathLK/omniplan)"
+USER_AGENT = f"TaskDragon/{VERSION} (Home Assistant integration; https://github.com/AftermathLK/taskdragon)"
 
 
 class LookupFailed(Exception):
