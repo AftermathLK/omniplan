@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <b>Chores, groceries, Mealie recipes, home maintenance, trips and projects in one card.</b><br>
+  <b>Chores, groceries, Mealie recipes, home maintenance, wishlists and gift plans with price tracking, trips and projects in one card.</b><br>
   Local-first: no cloud, no add-on, no Docker. Everything lives in your Home Assistant.
 </p>
 
@@ -26,7 +26,7 @@
 
 ---
 
-TaskDragon is a Home Assistant custom integration plus a dashboard card and sidebar panel. It keeps a household's lists in one SQLite file inside Home Assistant (`.storage/taskdragon.db`), exposes every shared plan as a native `todo.*` entity, and adds what plain to-do lists can't do: recurring chores with streaks, a shopping grid that merges quantities, a Mealie recipe browser and cooking view, an asset register with sensor-driven maintenance, a camera barcode scanner, and portable backups.
+TaskDragon is a Home Assistant custom integration plus a dashboard card and sidebar panel. It keeps a household's lists in one SQLite file inside Home Assistant (`.storage/taskdragon.db`), exposes every shared plan as a native `todo.*` entity, and adds what plain to-do lists can't do: recurring chores with streaks, a shopping grid that merges quantities, a Mealie recipe browser and cooking view, an asset register with sensor-driven maintenance, a wishlist and gift planner that tracks prices across stores, a camera barcode scanner, and portable backups.
 
 <table>
   <tr>
@@ -38,6 +38,11 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
     <td valign="top"><b>Mealie recipes &amp; cooking view</b><br>Browse recipes, add ingredients without the spice rack, plan meals, and cook full screen with timers and keep-awake.</td>
     <td valign="top"><b>Home maintenance</b><br>Objects, intervals, sensor triggers, parts, manuals, NFC and QR completion, learning intervals and a water-softener salt model.</td>
     <td valign="top"><b>Barcode scanner &amp; backups</b><br>Scan filters, salt bags and groceries with the phone camera. Download one portable <code>.zip</code> that can rebuild everything.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>Wishlists &amp; gift planning</b><br>Want to Buy, holidays with budgets and countdowns, birthdays. Gifts stay hidden from the person they're for.</td>
+    <td valign="top"><b>Price tracking across stores</b><br>Track one item at several shops, see the trend, get alerts at your target price, and claim refunds when it drops after you buy.</td>
+    <td valign="top"><b>In-store price check</b><br>Scan a barcode in the aisle, type the shelf price, and see at once whether it's cheaper here or online.</td>
   </tr>
 </table>
 
@@ -96,6 +101,18 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 - **New barcodes** are linked in one tap, with the product name suggested by Open Food Facts. Several brands can share one part.
 - Works on Android with the built-in barcode reader and on iPhone, the iOS Companion app and desktops with a bundled ZXing reader, so no internet access is needed.
 
+### Wishlist, gifts & price tracker
+
+A **Wishlist & Gifts** category for everything that isn't groceries: a personal or household **Want to Buy** list, holidays (Christmas comes ready, with a **$ budget** and a countdown) and **birthdays and events** for a person.
+
+- **Start vague, get specific.** Type "4k monitor" with notes ("27-inch+, IPS or OLED, USB-C PD") and a target price; no link needed. Turn on the **deal radar** and TaskDragon searches Slickdeals and Reddit's deal subreddits for matching posts ("🔥 3 live deal matches found"), each one a tap away from being tracked.
+- **Track one item at many stores.** Paste product pages from Amazon, Best Buy, Walmart, Target, Home Depot, Menards, B&H, Newegg or any shop. Prices and stock are checked every few hours; the card shows the **best current price** in green, the other stores, a **30-day sparkline**, how far below average it is, and the lowest price seen. You get a notification at your **target price** or a **new all-time low**.
+- **Refund guard.** Mark it bought with the price you paid and TaskDragon keeps watching during the 14- or 30-day return window: *"💰 Price Drop Alert! … $20 less than you paid 9 days ago — Claim your price adjustment!"*
+- **In-store scan & price check.** Scan the barcode in the aisle: you get the product, recorded online prices and one-tap searches (Amazon, Walmart, Best Buy, Target, Google Shopping, CamelCamelCamel). Type the shelf price for an instant **✅ Buy here** or **⚠️ Cheaper online** verdict, then add it to the list, add it as a gift, or mark it **bought here** to start the refund guard.
+- **No spoilers.** A gift for someone is hidden from that person on their own login ("🐉 1 secret gift hidden by Sam"); the server never sends it to them. **Stealth** items and sections are visible only to whoever added them, and wall tablets in kiosk mode cover secret gifts until someone taps **Show**.
+- **Gift pipeline** from Idea to Watching, Purchased, Shipped, Stashed, Wrapped and Gifted, with an encrypted **hiding spot** note ("top shelf of the pole barn, tote #4") so early purchases don't get lost.
+- **7-day impulse cooldown** for bigger Want to Buy items, so the tracker can hunt for a sale first.
+
 ### Home maintenance and assets
 
 <p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/maintenance.webp" alt="Maintenance dashboard with status, progress and actions, and a water softener's salt gauge" width="100%"></p>
@@ -135,7 +152,7 @@ The card uses your Home Assistant theme's colors, so it follows light, dark and 
 
 1. Click the button above, or in HACS open **⋮ → Custom repositories**, add `https://github.com/AftermathLK/taskdragon` with type **Integration**.
 2. Find **TaskDragon** in HACS and **Download** it.
-3. **Restart Home Assistant.** The Python requirements (`aiosqlite`, `python-dateutil`) install automatically.
+3. **Restart Home Assistant.** The Python requirements (`aiosqlite`, `beautifulsoup4`, `python-dateutil`) install automatically.
 
 ### Manual
 
@@ -227,13 +244,15 @@ plan: Groceries        # plan name or id
 
 | | |
 | --- | --- |
-| [User guide](docs/GUIDE.md) | Everyday use, recurrence, home maintenance, Mealie and the cooking view, barcode scanning, backups. |
+| [User guide](docs/GUIDE.md) | Everyday use, recurrence, home maintenance, Mealie and the cooking view, the wishlist and price tracker, barcode scanning, backups. |
 | [Reference](docs/REFERENCE.md) | Services, events for automations, the privacy and security model, code layout and development. |
 | [Changelog](CHANGELOG.md) | What changed in each version. |
 
 ## Privacy and security
 
-- **Local-first.** Data stays in Home Assistant. The only outside calls are the ones you set up: your Mealie server, and Open Food Facts for unknown barcodes (barcode number only; an administrator can turn it off).
+- **Local-first.** Data stays in Home Assistant. The only outside calls are the ones you set up: your Mealie server, Open Food Facts for unknown barcodes, and for the wishlist the store pages you add, the deal radar's searches (Slickdeals, Reddit) and UPCitemdb for scanned products. Only the page address, search words or barcode number are sent, and an administrator can turn each one off.
+- **Gifts stay secret on the server.** A gift is never sent to the person it's for, stealth items only to whoever added them, and alerts about secret gifts leave out the name and price. Wishlists get no `todo.*` entity.
+- **Store links can't reach your network.** The price tracker only fetches public `http(s)` addresses on the standard ports, re-checks every redirect, and refuses DNS answers that point inside your network, so a pasted link can't probe your router or Home Assistant.
 - **Private lists are filtered on the server.** Every command checks each id against the signed-in user, and other people's private items answer exactly like items that don't exist. Private lists get no `todo.*` entity.
 - **Secrets stay on the server.** The Mealie token never reaches the browser; recipe photos come through an authenticated proxy.
 - **Escape-by-default rendering** with an allow-list sanitizer, parameterized SQL everywhere, server-side undo tokens, and administrator-only backups and household settings.

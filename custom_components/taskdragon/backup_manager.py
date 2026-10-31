@@ -16,6 +16,9 @@ A backup is one ``taskdragon_portable_backup_YYYYMMDD_HHMMSS.zip`` holding:
     A hot, consistent copy of the database from SQLite's online backup API.
 ``documents/<sha256>``
     Every uploaded manual, receipt and photo still referenced by the data.
+``secrets/<name>``
+    Small keys the data depends on (the wishlist's hiding-spot encryption key),
+    so a restore on another installation can still read what they protect.
 
 Restores accept such a zip (or a bare ``database_dump.json``), verify every
 checksum and the schema before touching anything, write a safety snapshot of
@@ -79,7 +82,11 @@ PERSON_FIELDS = (
     ("maint_tasks", "assigned_to"),
     ("maint_tasks", "rotation"),
     ("maint_events", "person_entity_id"),
+    ("hoard_sections", "gift_for_person_id"),
+    ("hoard_items", "gift_for_person_id"),
 )
+SECRET_NAME_RE = re.compile(r"^[a-z0-9_.-]{1,64}$")
+MAX_SECRET_BYTES = 4096
 
 
 class BackupError(Exception):
@@ -186,6 +193,8 @@ class BackupManager:
         run_blocking: Callable[..., Awaitable[Any]] | None = None,
         before_restore: Callable[[], Awaitable[None]] | None = None,
         on_restored: Callable[[], Awaitable[None]] | None = None,
+        secrets_provider: Callable[[], Awaitable[Mapping[str, bytes]]] | None = None,
+        restore_secrets: Callable[[Mapping[str, bytes]], Awaitable[None]] | None = None,
     ) -> None:
         self.db = db
         self.docs_dir = docs_dir
@@ -198,6 +207,8 @@ class BackupManager:
         self._run = run_blocking or asyncio.to_thread
         self._before_restore = before_restore
         self._on_restored = on_restored
+        self._secrets_provider = secrets_provider
+        self._restore_secrets = restore_secrets
         self._lock = asyncio.Lock()
         # True while a restore runs; background writers (sensor counters) hold off meanwhile.
         self.restoring = False
@@ -355,7 +366,8 @@ class BackupManager:
                 "users_bridge_map": await self._users_bridge(dump["tables"]),
                 "hardware_bindings_bridge": await self._bindings_bridge(dump["tables"]),
             }
-            await self._run(self._write_zip, path, manifest, dump_doc, copy_path, documents)
+            keys = dict(await self._secrets_provider()) if self._secrets_provider is not None else {}
+            await self._run(self._write_zip, path, manifest, dump_doc, copy_path, documents, keys)
             return manifest
         except (OSError, sqlite3.Error) as err:
             await self._run(_remove_quietly, path)
@@ -376,7 +388,15 @@ class BackupManager:
                     entry[key].append(str(row[field])[:200])
         return docs
 
-    def _write_zip(self, path: str, manifest: dict[str, Any], dump_doc: dict[str, Any], copy_path: str, documents: Mapping[str, Mapping[str, Any]]) -> None:
+    def _write_zip(
+        self,
+        path: str,
+        manifest: dict[str, Any],
+        dump_doc: dict[str, Any],
+        copy_path: str,
+        documents: Mapping[str, Mapping[str, Any]],
+        keys: Mapping[str, bytes] | None = None,
+    ) -> None:
         temp = path + ".partial"
         dump_bytes = json.dumps(dump_doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         db_sha, db_size = _sha256_file(copy_path)
@@ -403,6 +423,12 @@ class BackupManager:
                     stored = all(t in STORED_TYPES for t in info["content_types"]) and bool(info["content_types"])
                     archive.write(source, "documents/" + sha, compress_type=zipfile.ZIP_STORED if stored else zipfile.ZIP_DEFLATED)
                     manifest["documents"].append({"path": "documents/" + sha, "sha256": sha, "size": size, **info})
+                for name, data in sorted((keys or {}).items()):
+                    if not SECRET_NAME_RE.match(name) or len(data) > MAX_SECRET_BYTES:
+                        continue
+                    member = "secrets/" + name
+                    archive.writestr(member, data)
+                    manifest["files"][member] = {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
                 archive.writestr(MANIFEST, json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8"))
             os.replace(temp, path)
         finally:
@@ -427,6 +453,12 @@ class BackupManager:
                 referenced.add(row["owner_user_id"])
             referenced.update(str(u) for u in _json_cell(row.get("shared_with"), []) or [] if u)
         referenced.update(row["user_id"] for row in rows("user_prefs") if row.get("user_id"))
+        for table in ("hoard_sections", "hoard_items"):
+            for row in rows(table):
+                if row.get("created_by"):
+                    referenced.add(row["created_by"])
+                    if row.get("created_by_name"):
+                        names.setdefault(row["created_by"], str(row["created_by_name"]))
 
         profiles: list[dict[str, Any]] = []
         seen_people: set[str] = set()
@@ -577,6 +609,8 @@ class BackupManager:
                     db_report = await self.db.restore_portable(parsed["tables"], mode=mode)
                 except ValueError as err:
                     raise BackupError(str(err)) from err
+                if parsed.get("secrets") and self._restore_secrets is not None:
+                    await self._restore_secrets(parsed["secrets"])
                 if self._on_restored is not None:
                     await self._on_restored()
             finally:
@@ -664,7 +698,18 @@ class BackupManager:
                 if digest.hexdigest() != sha:
                     raise BackupError("A document in the backup failed its SHA-256 check")
                 documents.append(sha)
-        return {"format": "zip", "manifest": manifest, "tables": tables, "documents": documents, "warnings": warnings, "temp_db": temp_db}
+            keys: dict[str, bytes] = {}
+            for member, info in members.items():
+                if not member.startswith("secrets/"):
+                    continue
+                name = member[len("secrets/") :]
+                if not SECRET_NAME_RE.match(name):
+                    warnings.append("Skipped an unexpected file in the backup's secrets folder")
+                    continue
+                data = self._member_bytes(archive, info, MAX_SECRET_BYTES)
+                self._verify(member, hashlib.sha256(data).hexdigest(), len(data), files)
+                keys[name] = data
+        return {"format": "zip", "manifest": manifest, "tables": tables, "documents": documents, "warnings": warnings, "temp_db": temp_db, "secrets": keys}
 
     @staticmethod
     def _verify(name: str, sha: str, size: int, files: Mapping[str, Any]) -> None:

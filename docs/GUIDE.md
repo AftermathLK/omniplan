@@ -6,6 +6,7 @@ Everything TaskDragon does, screen by screen. New here? Start with the [README](
 - [Recurrence](#recurrence)
 - [Home maintenance & assets](#home-maintenance--assets)
 - [Groceries, Mealie & the cooking view](#groceries-mealie--the-cooking-view)
+- [Wishlist, gifts & price tracker](#wishlist-gifts--price-tracker)
 - [Barcode scanning](#barcode-scanning)
 - [Backup, restore & standalone bridge](#backup-restore--standalone-bridge)
 - [Services, events and security](REFERENCE.md)
@@ -114,6 +115,65 @@ Upgrading from 1.1 moves the old maintenance list into a "General" object. Rolli
 
 <p align="center"><img src="images/cooking-view.webp" alt="The cooking view with keep-awake, batch size, ingredients and timers" width="100%"></p>
 
+
+## Wishlist, gifts & price tracker
+
+The **Wishlist & Gifts** category (new installations and upgrades get one; add more under **New category / plan → Wishlist, gifts & price tracker**) is for things you want or plan to give, not everyday consumables. It has no `todo.*` entity, because entity states are visible to everyone in the household.
+
+### Sections, budgets and countdowns
+
+The pills along the top switch between **All**, **Want to Buy**, **Christmas**, **Birthdays** and any **New occasion section** you add (Halloween, Easter, Black Friday, Alex's 40th…). A section can have:
+
+- a **budget**: the bar shows *Spent $420 / $1,000 budget · 6 bought · 3 watching · 2 wrapped* and turns amber near the limit and red over it ("spent" is what you entered as paid for bought items);
+- a **date**, optionally **every year**, for a countdown (*23 days to go*);
+- a person it's **for** (a household member, or any name);
+- **secret**: only you can see the section and everything in it.
+
+### Three tiers: concept → tracked product → bought
+
+1. **Concept tag.** Type a name in **+ Add an idea** ("4k monitor", "cordless router", "toddler rain boots"). Open it to add **spec notes**, a **priority** and a **target price**. Turn on **Deal radar** to have TaskDragon search Slickdeals' front-page deals and Reddit's r/buildapcsales and r/deals every few hours. A post matches when every search word is in its title (*monitor* also matches *monitors*) and its price is at most your max price (or the target price). Matches appear on the card as **🔥 N live deal matches found**. **Track this** turns a deal's link into a tracked store; the dismiss button hides one for good.
+2. **Tracked product.** Paste one or more product pages under **Stores** (up to 12). Each page is fetched every few hours (6 by default) with a desktop browser's headers and read in this order:
+   1. the page's **schema.org product data** (JSON-LD `Product` / `Offer` / `AggregateOffer`: price, currency, stock);
+   2. **product meta tags** (`product:price:amount`, `og:price:amount`, `itemprop="price"`, Twitter labels);
+   3. **built-in layouts** for Amazon, Best Buy, Walmart, Target, Home Depot, Lowe's, Menards, Newegg, B&H, Costco, eBay, Micro Center, Kohl's and Staples;
+   4. your own **custom price selector** (under the store, *advanced*), which is tried first when set. It's a CSS selector for the element holding the price, like `.price-now`; add `@attribute` to read an attribute instead of the text, like `#price@data-value`.
+
+   The card shows the **best current price** (in-stock stores win) in green, the next stores, a **30-day sparkline** with your target as a dashed line, *N % below average* and the lowest price seen. The item sheet lists every store with stock, low/high, when it was last checked, how the price was found, and what went wrong if it wasn't (some large stores block automated checks; the store row says so, and checks back off to every 12 to 48 hours after failures). **Check now** re-checks right away (once a minute). **Saw it in a store?** records a shelf price you saw, so the history shows it too.
+3. **Bought.** **Bought it** asks for the price you paid, the date, the store and the **price protection** window (14 or 30 days, default from the tracker settings, or none). During the window the stores keep being checked; if any drops below what you paid, you get a high-priority alert and the card shows *Now $109.99 at Amazon — claim $20.00 back (21 days left)*.
+
+### Alerts
+
+A price alert goes to a **persistent notification** with a link straight to the item, to the wishlist's **notify service** if an administrator set one in the category's settings, and to the `taskdragon_price_alert` event for automations. You're told once per price: when a store reaches your **target**, when the best price beats the lowest seen by at least 1 % (**new all-time low**), and when a bought item drops below what you paid (**price protection**). Alerts about secret gifts say only *"🐉 A secret gift on your list dropped in price"*, because notifications can be seen by others.
+
+### In-store scan & price check
+
+**In-store scan & price check** (or the header's barcode button while the wishlist is open) opens the camera. After a scan:
+
+- the product's photo, name, brand and model come from **UPCitemdb** (its free tier allows about 100 lookups a day; when that's used up the sheet says so), with Open Food Facts and your own list as fallbacks;
+- **Shelf price you see right now** and **Store you're in**: as you type, the verdict switches between **✅ BUY HERE — Beats lowest online price by $X** and **⚠️ CHEAPER ONLINE — Save $X at [store]**;
+- the **online prices** UPCitemdb has recorded (and your own tracked prices if the item is already on your list), plus one-tap searches for the UPC at Amazon, Walmart, Best Buy, Target, Google Shopping and CamelCamelCamel, and for the model number;
+- **Add to Want to Buy & track** saves the item with its barcode and the stores that offer it (and starts checking their prices), and records the shelf price you saw;
+- **Add to a gift list** lets you pick the list and the person and turns **stealth** on right there in the aisle;
+- **Bought it here** marks it purchased at the shelf price and starts the refund guard.
+
+From an item's sheet, **Scan** attaches a barcode (and the stores that sell it) to that item.
+
+### No spoilers
+
+Several people share the dashboard, so privacy is enforced by Home Assistant, not just hidden in the card:
+
+- An item or section marked as a gift **for a household member** is never sent to the Home Assistant user linked to that person, unless they added it themselves. In its place they see *🐉 1 secret gift hidden by Sam*, with no name, price or link, and any command that names it answers *not found*.
+- **Stealth** (*Keep it secret: only I can see this*) hides an item or a whole section from everyone but the person who added it. Only that person can turn stealth on or off.
+- On a **wall tablet** (`view_mode: kiosk_split`), every gift is covered until someone taps it or **Show secret gifts**; they cover up again after two minutes.
+- The **hiding spot** note is stored encrypted, with a key kept next to the database in `.storage`. Portable backups carry the key so a restore on another Home Assistant can still read the notes.
+
+### Impulse cooldown
+
+On **Want to Buy** items over the cooldown amount ($100 by default), **7-day impulse cooldown** shows *5-day impulse cooldown — let the tracker hunt for a sale* on the card until the time is up. The amount and length are in the tracker settings.
+
+### Tracker settings
+
+The gear on the wishlist toolbar opens **Price tracker** settings (administrators can change them): automatic price checks and how often, default price-protection days, deal radar and how often, UPCitemdb lookups, and the impulse cooldown amount and length. Only page addresses, search words and barcode numbers leave Home Assistant, and addresses on your own network are never fetched.
 
 ## Barcode scanning
 

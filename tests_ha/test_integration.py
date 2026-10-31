@@ -395,8 +395,8 @@ async def test_unload_and_reload(hass: HomeAssistant, people) -> None:
     assert DOMAIN not in hass.data
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
-    # Data survived the reload (same SQLite file).
-    assert len(await config_entry.runtime_data.db.list_plans()) == 8
+    # Data survived the reload (same SQLite file): eight starter plans plus Wishlist & Gifts.
+    assert len(await config_entry.runtime_data.db.list_plans()) == 9
     assert await async_setup_component(hass, DOMAIN, {})
     await hass.config_entries.async_unload(config_entry.entry_id)
     await hass.async_block_till_done()

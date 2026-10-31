@@ -241,9 +241,10 @@ def async_register(hass: HomeAssistant) -> None:
     # These modules import this one's helpers, so they load here.
     from .backup_ws import COMMANDS as BACKUP_COMMANDS
     from .barcode_ws import COMMANDS as BARCODE_COMMANDS
+    from .hoard_ws import COMMANDS as HOARD_COMMANDS
     from .maintenance_ws import COMMANDS as MAINTENANCE_COMMANDS
 
-    for command in (*MAINTENANCE_COMMANDS, *BARCODE_COMMANDS, *BACKUP_COMMANDS):
+    for command in (*MAINTENANCE_COMMANDS, *BARCODE_COMMANDS, *BACKUP_COMMANDS, *HOARD_COMMANDS):
         websocket_api.async_register_command(hass, command)
 
 

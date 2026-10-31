@@ -432,6 +432,110 @@ CREATE INDEX IF NOT EXISTS idx_barcode_target ON barcode_mappings(target_type, t
 """
 
 
+SCHEMA_V5 = """
+CREATE TABLE IF NOT EXISTS hoard_sections (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'want',
+    name TEXT NOT NULL,
+    icon TEXT,
+    budget REAL,
+    event_date TEXT,
+    repeats_yearly INTEGER NOT NULL DEFAULT 0,
+    recipient_name TEXT,
+    gift_for_person_id TEXT,
+    stealth_mode INTEGER NOT NULL DEFAULT 0,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT,
+    created_by_name TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_hoard_sections_plan ON hoard_sections(plan_id, position);
+CREATE TABLE IF NOT EXISTS hoard_items (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+    section_id TEXT REFERENCES hoard_sections(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    spec_notes TEXT,
+    priority TEXT NOT NULL DEFAULT 'none',
+    target_price REAL,
+    status TEXT NOT NULL DEFAULT 'idea',
+    barcode TEXT,
+    brand TEXT,
+    model TEXT,
+    image_url TEXT,
+    recipient_name TEXT,
+    gift_for_person_id TEXT,
+    stealth_mode INTEGER NOT NULL DEFAULT 0,
+    hiding_spot TEXT,
+    watch_keyword_deals INTEGER NOT NULL DEFAULT 0,
+    deal_query TEXT,
+    deal_max_price REAL,
+    deals_checked_at TEXT,
+    paid_price REAL,
+    purchase_date TEXT,
+    purchase_store TEXT,
+    protection_days INTEGER,
+    impulse_cooldown INTEGER NOT NULL DEFAULT 0,
+    cooldown_until TEXT,
+    alert_state TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT,
+    created_by_name TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_hoard_items_plan ON hoard_items(plan_id, section_id, position);
+CREATE INDEX IF NOT EXISTS idx_hoard_items_barcode ON hoard_items(barcode);
+CREATE TABLE IF NOT EXISTS tracked_item_urls (
+    id TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL REFERENCES hoard_items(id) ON DELETE CASCADE,
+    retailer_name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    css_selector TEXT,
+    last_price REAL,
+    lowest_price REAL,
+    highest_price REAL,
+    currency TEXT,
+    in_stock INTEGER,
+    last_checked_at TEXT,
+    last_error TEXT,
+    extraction_method TEXT,
+    failures INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tracked_urls_item ON tracked_item_urls(item_id);
+CREATE TABLE IF NOT EXISTS price_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL REFERENCES hoard_items(id) ON DELETE CASCADE,
+    url_id TEXT REFERENCES tracked_item_urls(id) ON DELETE SET NULL,
+    source TEXT NOT NULL,
+    store TEXT,
+    price REAL NOT NULL,
+    currency TEXT,
+    in_stock INTEGER,
+    checked_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_price_history_item ON price_history(item_id, checked_at);
+CREATE TABLE IF NOT EXISTS hoard_deals (
+    id TEXT PRIMARY KEY,
+    item_id TEXT NOT NULL REFERENCES hoard_items(id) ON DELETE CASCADE,
+    source TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    discussion_url TEXT,
+    price REAL,
+    posted_at TEXT,
+    found_at TEXT NOT NULL,
+    dismissed INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (item_id, url)
+);
+CREATE INDEX IF NOT EXISTS idx_hoard_deals_item ON hoard_deals(item_id, found_at);
+"""
+
+
 async def _migrate_v3_data(conn: aiosqlite.Connection) -> None:
     """Move 1.1 "home maintenance" list items into the asset model.
 
@@ -550,6 +654,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (SCHEMA_V2, _migrate_v2_data),
     (SCHEMA_V3, _migrate_v3_data),
     (SCHEMA_V4, None),
+    (SCHEMA_V5, None),
 )
 # The first schema that portable backups (backup_manager.py) were written with.
 PORTABLE_MIN_SCHEMA = 4
@@ -764,7 +869,55 @@ BARCODES = _Table(
     ),
 )
 
-_TABLES = (PLANS, TASKS, PANTRY, SNOOZE, BOM, SECTIONS, TRIPS, MOBJECTS, MTASKS, MEVENTS, MPARTS, MDOCS, SALTOBS, MTASKPARTS, BARCODES)
+HSECTIONS = _Table(
+    "hoard_sections",
+    "id",
+    (
+        "id", "plan_id", "kind", "name", "icon", "budget", "event_date", "repeats_yearly", "recipient_name",
+        "gift_for_person_id", "stealth_mode", "position", "created_by", "created_by_name", "created_at", "updated_at",
+    ),
+    bool_fields=("repeats_yearly", "stealth_mode"),
+)
+
+HITEMS = _Table(
+    "hoard_items",
+    "id",
+    (
+        "id", "plan_id", "section_id", "title", "spec_notes", "priority", "target_price", "status", "barcode",
+        "brand", "model", "image_url", "recipient_name", "gift_for_person_id", "stealth_mode", "hiding_spot",
+        "watch_keyword_deals", "deal_query", "deal_max_price", "deals_checked_at", "paid_price", "purchase_date",
+        "purchase_store", "protection_days", "impulse_cooldown", "cooldown_until", "alert_state", "position",
+        "created_by", "created_by_name", "created_at", "updated_at",
+    ),
+    json_fields=("alert_state",),
+    bool_fields=("stealth_mode", "watch_keyword_deals", "impulse_cooldown"),
+    json_defaults={"alert_state": {}},
+)
+
+HURLS = _Table(
+    "tracked_item_urls",
+    "id",
+    (
+        "id", "item_id", "retailer_name", "url", "css_selector", "last_price", "lowest_price", "highest_price",
+        "currency", "in_stock", "last_checked_at", "last_error", "extraction_method", "failures", "created_at",
+        "updated_at",
+    ),
+)
+
+HPRICES = _Table(
+    "price_history",
+    "id",
+    ("id", "item_id", "url_id", "source", "store", "price", "currency", "in_stock", "checked_at"),
+)
+
+HDEALS = _Table(
+    "hoard_deals",
+    "id",
+    ("id", "item_id", "source", "title", "url", "discussion_url", "price", "posted_at", "found_at", "dismissed"),
+    bool_fields=("dismissed",),
+)
+
+_TABLES = (PLANS, TASKS, PANTRY, SNOOZE, BOM, SECTIONS, TRIPS, MOBJECTS, MTASKS, MEVENTS, MPARTS, MDOCS, SALTOBS, MTASKPARTS, BARCODES, HSECTIONS, HITEMS, HURLS, HPRICES, HDEALS)
 # Every identifier that may appear in generated SQL.
 _IDENTIFIERS = frozenset(
     name for table in _TABLES for name in (table.name, table.key, *table.columns)
@@ -1300,6 +1453,11 @@ class TaskDragonDB:
             "maint_parts": "SELECT COUNT(*) FROM maint_parts",
             "maint_documents": "SELECT COUNT(*) FROM maint_documents",
             "barcode_mappings": "SELECT COUNT(*) FROM barcode_mappings",
+            "hoard_sections": "SELECT COUNT(*) FROM hoard_sections",
+            "hoard_items": "SELECT COUNT(*) FROM hoard_items",
+            "tracked_item_urls": "SELECT COUNT(*) FROM tracked_item_urls",
+            "price_history": "SELECT COUNT(*) FROM price_history",
+            "hoard_deals": "SELECT COUNT(*) FROM hoard_deals",
         }
         out: dict[str, Any] = {}
         for name, sql in queries.items():
@@ -1933,6 +2091,110 @@ class TaskDragonDB:
                 "UPDATE barcode_mappings SET scan_count = scan_count + 1, last_scanned_at = ? WHERE barcode = ?",
                 (utc_now_iso(), barcode),
             )
+
+    # ------------------------------------------------------------------
+    # Wishlist, gift & price tracker ("Hoard", see hoard.py)
+    # ------------------------------------------------------------------
+    async def hoard_urls_for(self, item_ids: Sequence[str]) -> list[dict[str, Any]]:
+        if not item_ids:
+            return []
+        rows = await self._fetchall(
+            "SELECT * FROM tracked_item_urls WHERE item_id IN (" + _marks(len(item_ids)) + ") ORDER BY created_at",
+            tuple(item_ids),
+        )
+        return [HURLS.decode(row) for row in rows]
+
+    async def hoard_deals_for(self, item_ids: Sequence[str]) -> list[dict[str, Any]]:
+        if not item_ids:
+            return []
+        rows = await self._fetchall(
+            "SELECT * FROM hoard_deals WHERE dismissed = 0 AND item_id IN (" + _marks(len(item_ids)) + ") "
+            "ORDER BY found_at DESC",
+            tuple(item_ids),
+        )
+        return [HDEALS.decode(row) for row in rows]
+
+    async def price_points(self, item_ids: Sequence[str], since: str | None = None) -> list[dict[str, Any]]:
+        """Price checks for ``item_ids`` (oldest first), optionally only those at or after ``since``."""
+        if not item_ids:
+            return []
+        sql = "SELECT * FROM price_history WHERE item_id IN (" + _marks(len(item_ids)) + ")"
+        params: list[Any] = list(item_ids)
+        if since:
+            sql += " AND checked_at >= ?"
+            params.append(since)
+        sql += " ORDER BY checked_at, id"
+        return [HPRICES.decode(row) for row in await self._fetchall(sql, params)]
+
+    async def lowest_online_price(self, item_id: str, *, before: str | None = None) -> float | None:
+        sql = "SELECT MIN(price) FROM price_history WHERE item_id = ? AND source = 'online'"
+        params: list[Any] = [item_id]
+        if before:
+            sql += " AND checked_at < ?"
+            params.append(before)
+        row = await self._fetchone(sql, params)
+        return float(row[0]) if row and row[0] is not None else None
+
+    async def add_price_points(self, points: Sequence[dict[str, Any]]) -> None:
+        """Append price observations (the table numbers its own rows)."""
+        if not points:
+            return
+        columns = [c for c in HPRICES.columns if c != "id"]
+        sql = "INSERT INTO price_history (" + ", ".join(_ident(c) for c in columns) + ") VALUES (" + _marks(len(columns)) + ")"
+        async with self._tx():
+            for point in points:
+                encoded = HPRICES.encode({**point, "checked_at": point.get("checked_at") or utc_now_iso()})
+                await self.conn.execute(sql, tuple(encoded.get(c) for c in columns))
+
+    async def prune_price_history(self, before: str) -> int:
+        async with self._tx():
+            before_count = self.conn.total_changes
+            await self.conn.execute("DELETE FROM price_history WHERE checked_at < ?", (before,))
+            return self.conn.total_changes - before_count
+
+    async def save_deals(self, item_id: str, deals: Sequence[dict[str, Any]], keep: int) -> int:
+        """Store newly found deals (already-known links are left alone); keep the newest ``keep``."""
+        added = 0
+        async with self._tx():
+            for deal in deals:
+                before = self.conn.total_changes
+                encoded = HDEALS.encode({**deal, "id": new_id(), "item_id": item_id, "found_at": deal.get("found_at") or utc_now_iso(), "dismissed": False})
+                await self.conn.execute(
+                    "INSERT OR IGNORE INTO hoard_deals (" + ", ".join(_ident(c) for c in encoded) + ") VALUES (" + _marks(len(encoded)) + ")",
+                    tuple(encoded.values()),
+                )
+                added += self.conn.total_changes - before
+            await self.conn.execute(
+                "DELETE FROM hoard_deals WHERE item_id = ? AND dismissed = 0 AND id NOT IN "
+                "(SELECT id FROM hoard_deals WHERE item_id = ? AND dismissed = 0 ORDER BY found_at DESC, posted_at DESC LIMIT ?)",
+                (item_id, item_id, int(keep)),
+            )
+        return added
+
+    async def hoard_items_with_barcode(self, barcode: str) -> list[dict[str, Any]]:
+        rows = await self._fetchall("SELECT * FROM hoard_items WHERE barcode = ? ORDER BY updated_at DESC", (barcode,))
+        return [HITEMS.decode(row) for row in rows]
+
+    async def hoard_snapshot(self, item_id: str) -> dict[str, list[dict[str, Any]]]:
+        """Everything that belongs to one item, as raw rows (for undo after a delete)."""
+        out: dict[str, list[dict[str, Any]]] = {}
+        for table, column in ((HITEMS, "id"), (HURLS, "item_id"), (HDEALS, "item_id")):
+            rows = await self._fetchall("SELECT * FROM " + _ident(table.name) + " WHERE " + _ident(column) + " = ?", (item_id,))
+            out[table.name] = [dict(row) for row in rows]
+        rows = await self._fetchall("SELECT * FROM price_history WHERE item_id = ?", (item_id,))
+        out["price_history"] = [dict(row) for row in rows]
+        return out
+
+    async def restore_hoard_snapshot(self, snapshot: Mapping[str, Sequence[Mapping[str, Any]]]) -> None:
+        """Put a :meth:`hoard_snapshot` back (rows that exist again are skipped)."""
+        async with self._tx():
+            for table in (HITEMS, HURLS, HDEALS, HPRICES):
+                for record in snapshot.get(table.name) or []:
+                    columns = [c for c in table.columns if c in record]
+                    await self.conn.execute(
+                        "INSERT OR IGNORE INTO " + _ident(table.name) + " (" + ", ".join(_ident(c) for c in columns) + ") VALUES (" + _marks(len(columns)) + ")",
+                        tuple(record[c] for c in columns),
+                    )
 
     # ------------------------------------------------------------------
     # Portable backups (see backup_manager.py)

@@ -12,6 +12,9 @@ Responsibilities:
   I'm home", "both of us home", custom entity states) and the maintenance
   subsystem's sensor triggers and softener meters (:mod:`.maintenance_runtime`).
 * Two-way Mealie shopping-list sync and meal-plan prep timelines.
+* The wishlist & price tracker (:mod:`.hoard`): store-link price checks and
+  deal radar every few hours, price alerts (persistent notification, the
+  plan's notify service and the ``taskdragon_price_alert`` event).
 
 The Mealie URL and token come from ``ConfigEntry.data`` and stay inside this
 object and the client; nothing derived from them except recipe links is ever
@@ -26,6 +29,7 @@ import re
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
+from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -43,6 +47,7 @@ from .barcode_manager import BarcodeManager
 from .const import (
     AISLES,
     BACKUP_DIRNAME,
+    ARCHETYPE_HOARD,
     ARCHETYPE_SHOPPING,
     CONF_BREAKFAST_TIME,
     CONF_CONVERSATION_AGENT,
@@ -80,7 +85,10 @@ from .const import (
     DEFAULT_SHIFT_CHECK_TIME,
     DEFAULT_SHIFT_KEYWORDS,
     DEFAULT_WEEKEND_CHECK_TIME,
+    EVENT_PRICE_ALERT,
     EVENT_UPDATED,
+    HOARD_KEY_FILENAME,
+    PANEL_URL_PATH,
     SIGNAL_PLAN_ADDED,
     SIGNAL_PLAN_REMOVED,
     SIGNAL_UPDATED,
@@ -96,11 +104,13 @@ from .const import (
     VERSION,
 )
 from .database import TaskDragonDB
+from .hoard import HoardManager, SecretBox, alert_message
 from .kitchen import build_prep_steps, ingredient_lines, leftover_summary, parse_configured_rules
 from .maintenance_runtime import MaintenanceRuntime
 from .mealie_client import InvalidMealieUrl, MealieAuthError, MealieClient, MealieError, item_hash, item_text
 from .openfoodfacts import OpenFoodFactsClient
 from .planner import SYSTEM, Actor, Planner
+from .price_tracker import GuardedFetcher, ProductLookup
 from .recipe_browser import RecipeBrowser
 from .shift_balance import Chore, PersonAvailability, balance_chores, parse_keywords, shifts_for_day
 from .snooze import (
@@ -119,6 +129,9 @@ _LOGGER = logging.getLogger(__name__)
 
 MEALIE_ACTOR = Actor(user_name="Mealie")
 MEALIE_PUSH_DELAY = 3.0
+HOARD_TICK = timedelta(minutes=10)
+HOARD_FIRST_TICK_SECONDS = 120
+HOARD_SECRETS_FILE = "hoard.key"  # name inside portable backups (secrets/hoard.key)
 
 
 class TaskDragonCoordinator:
@@ -155,6 +168,21 @@ class TaskDragonCoordinator:
         )
         self._off: OpenFoodFactsClient | None = None
         self.barcodes = BarcodeManager(db=self.db, planner=self.planner, lookup=self._product_lookup)
+        self.fetcher = GuardedFetcher()
+        self.hoard = HoardManager(
+            self.db,
+            self.planner,
+            box=SecretBox(hass.config.path(".storage", HOARD_KEY_FILENAME)),
+            fetcher=self.fetcher,
+            products=ProductLookup(self.fetcher),
+            food_lookup=self._product_lookup,
+            run_blocking=hass.async_add_executor_job,
+            person_user=self._person_user,
+            on_alert=self._price_alert,
+            spawn=self.spawn,
+        )
+        self.planner.hoard = self.hoard
+        self.planner.undo_handlers["hoard_item"] = self.hoard.undo_delete
         self.backups = BackupManager(
             db=self.db,
             docs_dir=self.maintenance.docs_dir,
@@ -167,6 +195,8 @@ class TaskDragonCoordinator:
             run_blocking=hass.async_add_executor_job,
             before_restore=self._before_restore,
             on_restored=self.async_after_restore,
+            secrets_provider=self._backup_secrets,
+            restore_secrets=self._restore_secrets,
         )
         self._unsubs: list[CALLBACK_TYPE] = []
         self._state_unsub: CALLBACK_TYPE | None = None
@@ -187,6 +217,8 @@ class TaskDragonCoordinator:
         await self.planner.seed_defaults()
         await self.planner.ensure_defaults()
         await self.maintenance.async_start()
+        await self.hass.async_add_executor_job(self.hoard.box.load)
+        await self._ensure_hoard_plan()
         self._known_plans = await self._entity_plan_ids()
 
         url = (self.entry.data.get(CONF_MEALIE_URL) or "").strip()
@@ -216,6 +248,8 @@ class TaskDragonCoordinator:
         if self.mealie is not None:
             minutes = max(1, int(self.options.get(CONF_MEALIE_SYNC_MINUTES, DEFAULT_MEALIE_SYNC_MINUTES)))
             self._unsubs.append(async_track_time_interval(self.hass, self._mealie_tick, timedelta(minutes=minutes)))
+        self._unsubs.append(async_track_time_interval(self.hass, self._hoard_tick, HOARD_TICK))
+        self._unsubs.append(async_call_later(self.hass, HOARD_FIRST_TICK_SECONDS, self._hoard_tick))
 
         # Catch up on anything that happened while Home Assistant was down.
         await self.planner.process_rollover()
@@ -250,6 +284,7 @@ class TaskDragonCoordinator:
             await self.maintenance.async_stop()
         except RuntimeError:
             pass  # the database never opened
+        await self.fetcher.close()
         async with self._mealie_lock:
             await self.db.async_close()
 
@@ -328,6 +363,66 @@ class TaskDragonCoordinator:
             self._off = OpenFoodFactsClient(async_get_clientsession(self.hass))
         return await self._off.lookup(code)
 
+    def _person_user(self, entity_id: str) -> str | None:
+        state = self.hass.states.get(entity_id)
+        return state.attributes.get("user_id") if state else None
+
+    async def _ensure_hoard_plan(self) -> None:
+        """Existing installations get a Wishlist & Gifts plan once (new ones get it with the starter plans)."""
+        if await self.db.get_meta("hoard_plan_seeded"):
+            return
+        plans = await self.db.list_plans(include_archived=True)
+        if not any(plan["archetype"] == ARCHETYPE_HOARD for plan in plans):
+            await self.planner.create_plan({"name": "Wishlist & Gifts", "archetype": ARCHETYPE_HOARD, "icon": "mdi:treasure-chest-outline"})
+        await self.db.set_meta("hoard_plan_seeded", True)
+
+    async def _hoard_tick(self, _now: Any = None) -> None:
+        if self.backups.restoring or self._shutting_down:
+            return
+        self._spawn(self._run_hoard_tick(), "taskdragon_hoard_tick")
+
+    async def _run_hoard_tick(self) -> None:
+        try:
+            result = await self.hoard.tick()
+            if result["checked"] or result["deals"]:
+                _LOGGER.debug("Wishlist: checked %s store links, found %s new deals", result["checked"], result["deals"])
+        except Exception:  # noqa: BLE001 - a failing price round must not stop the next one
+            _LOGGER.exception("TaskDragon wishlist price check failed")
+
+    async def _price_alert(self, alert: dict[str, Any]) -> None:
+        """Deliver a price alert: bus event, persistent notification and the plan's notify service.
+
+        Secret gifts are announced without their title, price or store, because
+        all three channels can be seen by other members of the household.
+        """
+        plan = await self.db.get_plan(alert["plan_id"])
+        if plan is None:
+            return
+        settings = plan.get("settings") or {}
+        currency = settings.get("currency") or "$"
+        secret = bool(alert.get("secret")) or bool(plan.get("is_private"))
+        message = alert_message({**alert, "secret": secret}, currency)
+        event = {k: alert.get(k) for k in ("kind", "item_id", "plan_id", "title", "price", "retailer", "url", "target_price", "paid_price", "savings", "days_left")}
+        if secret:
+            event.update({"secret": True, "title": None, "price": None, "retailer": None, "url": None, "target_price": None, "paid_price": None, "savings": None})
+        self.hass.bus.async_fire(EVENT_PRICE_ALERT, event)
+        link = f"/{PANEL_URL_PATH}?hoard_plan={alert['plan_id']}&hoard_item={alert['item_id']}"
+        title = "TaskDragon price protection" if alert["kind"] == "protection" else "TaskDragon price alert"
+        persistent_notification.async_create(
+            self.hass, f"{message}\n\n[Open in TaskDragon]({link})", title=title, notification_id=f"taskdragon_price_{alert['item_id']}"
+        )
+        service = settings.get("notify_service")
+        if service:
+            domain, _, name = service.partition(".")
+            data: dict[str, Any] = {"url": link, "clickAction": link, "tag": f"taskdragon-price-{alert['item_id']}"}
+            if alert["kind"] == "protection":
+                data["priority"] = "high"
+                data["ttl"] = 0
+            try:
+                await self.hass.services.async_call(domain, name, {"title": title, "message": message, "data": data}, blocking=False)
+            except Exception as err:  # noqa: BLE001 - a missing notify service must not break price checks
+                _LOGGER.warning("Could not send the price alert through %s: %s", service, err)
+
     async def _backup_users(self) -> list[dict[str, Any]]:
         return [
             {"id": user.id, "name": user.name, "is_admin": user.is_admin, "is_active": user.is_active, "system_generated": user.system_generated}
@@ -344,6 +439,17 @@ class TaskDragonCoordinator:
     async def _before_restore(self) -> None:
         """Write pending sensor counters now so nothing stale lands on top of the restored rows."""
         await self.maintenance.manager.async_flush()
+
+    async def _backup_secrets(self) -> dict[str, bytes]:
+        return {HOARD_SECRETS_FILE: self.hoard.box.key} if self.hoard.box.ready else {}
+
+    async def _restore_secrets(self, keys: dict[str, bytes]) -> None:
+        """Hiding spots restored from another installation are re-encrypted under this one's key."""
+        old = keys.get(HOARD_SECRETS_FILE)
+        if old:
+            rotated = await self.hoard.rekey([old])
+            if rotated:
+                _LOGGER.info("Re-encrypted %s restored hiding-spot notes", rotated)
 
     async def async_after_restore(self) -> None:
         """Reload everything that caches database state, then tell every open card to refresh."""
@@ -386,17 +492,21 @@ class TaskDragonCoordinator:
     def closing(self) -> bool:
         return self._shutting_down
 
+    @staticmethod
+    def gets_entity(plan: dict[str, Any]) -> bool:
+        """Whether a plan gets a native ``todo.*`` entity. Entity state is readable by every
+        Home Assistant user, so private plans and wishlists (secret gifts) never get one."""
+        return not plan["is_private"] and plan["archetype"] != ARCHETYPE_HOARD
+
     async def _entity_plan_ids(self) -> set[str]:
-        """Plans that get a native ``todo.*`` entity. Entity state is readable by every
-        Home Assistant user, so private plans never get one."""
-        return {plan["id"] for plan in await self.db.list_plans(include_archived=True) if not plan["is_private"]}
+        return {plan["id"] for plan in await self.db.list_plans(include_archived=True) if self.gets_entity(plan)}
 
     async def _after_change(self, plan_ids: set[str]) -> None:
         """Keep entities, listeners and the Mealie push in step with data changes."""
         if self._shutting_down:
             return
         plans = {plan["id"]: plan for plan in await self.db.list_plans(include_archived=True)}
-        current = {plan_id for plan_id, plan in plans.items() if not plan["is_private"]}
+        current = {plan_id for plan_id, plan in plans.items() if self.gets_entity(plan)}
         for plan_id in current - self._known_plans:
             async_dispatcher_send(self.hass, SIGNAL_PLAN_ADDED, plans[plan_id])
         for plan_id in self._known_plans - current:

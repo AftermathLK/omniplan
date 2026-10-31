@@ -30,6 +30,7 @@ from . import dependencies, recurrence
 from .const import (
     AISLE_HARDWARE,
     ARCHETYPE_DAILY,
+    ARCHETYPE_HOARD,
     ARCHETYPE_MAINTENANCE,
     ARCHETYPE_PACKING,
     ARCHETYPE_PANTRY,
@@ -207,6 +208,7 @@ class Planner:
         self.completion_hooks: list[Callable[[dict[str, Any], Actor], Any]] = []
         self.undo_handlers: dict[str, Callable[[Any, Actor], Any]] = {}
         self.maintenance: Any = None
+        self.hoard: Any = None  # the wishlist & price tracker (hoard.py)
 
     # ------------------------------------------------------------------
     # Small helpers
@@ -627,6 +629,8 @@ class Planner:
                         "source": SOURCE_MANUAL,
                     }
                 )
+        if template["archetype"] == ARCHETYPE_HOARD and self.hoard is not None:
+            await self.hoard.clone_sections(template_id, plan["id"])
         self._notify([plan["id"]])
         return plan
 
@@ -1103,6 +1107,8 @@ class Planner:
         if data.get("parent_uid"):
             parent = await self._require_task(data["parent_uid"])
         plan = await self._require_plan(parent["plan_id"] if parent else data.get("plan_id"))
+        if plan["archetype"] == ARCHETYPE_HOARD:
+            raise PlannerError("invalid", "Add wishlist items in the Wishlist view")
         if plan["archetype"] == ARCHETYPE_MAINTENANCE:
             # Maintenance plans hold objects and their tasks, not plain to-dos.
             if self.maintenance is None or parent is not None:
@@ -1186,6 +1192,8 @@ class Planner:
         if target_plan_id not in plans:
             raise PlannerError("plan_not_found", f"Plan {target_plan_id} not found")
         plan = plans[target_plan_id]
+        if plan["archetype"] == ARCHETYPE_HOARD and target_plan_id != task["plan_id"]:
+            raise PlannerError("invalid", "Tasks can't move into a wishlist; add the item in the Wishlist view")
         if plan["archetype"] == ARCHETYPE_MAINTENANCE and target_plan_id != task["plan_id"]:
             if self.maintenance is None or task["parent_uid"]:
                 raise PlannerError("invalid", "Only top-level tasks can move into a maintenance plan")

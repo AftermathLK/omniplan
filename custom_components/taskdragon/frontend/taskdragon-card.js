@@ -14,7 +14,7 @@
  * inject markup or script into the dashboard.
  */
 
-const TD_VERSION = "1.3.4";
+const TD_VERSION = "1.4.0";
 
 /* The TaskDragon emblem (an ouroboros dragon) as a Home Assistant icon set, so
  * `taskdragon:dragon` works in the sidebar, in <ha-icon> and in this card. */
@@ -50,6 +50,7 @@ const ARCHETYPES = {
   packing_trips: { label: "Trip packing", icon: "mdi:bag-suitcase-outline", hint: "Dated trips, always-pack items added automatically." },
   home_maintenance: { label: "Home maintenance & assets", icon: "mdi:tools", hint: "Objects, intervals, sensor triggers, parts, documents, NFC & QR." },
   pantry_spices: { label: "Pantry & spices", icon: "mdi:shaker-outline", hint: "In stock / low / out with restock actions." },
+  wishlist_hoard: { label: "Wishlist, gifts & price tracker", icon: "mdi:treasure-chest-outline", hint: "Concept tags, multi-store price tracking, gift lists with stealth mode, in-store scan." },
 };
 const ACTIONABLE = new Set(["quick_list", "daily_chores", "projects_diy", "home_maintenance"]);
 const PACKING_GROUPS = ["Clothes", "Toiletries", "Tech", "Kids Gear", "Documents", "Food & Snacks", "Gear"];
@@ -61,7 +62,7 @@ const ICON_CHOICES = [
   "mdi:party-popper", "mdi:baby-carriage", "mdi:dog-side", "mdi:cat", "mdi:school-outline",
   "mdi:briefcase-outline", "mdi:laptop", "mdi:cash", "mdi:heart-pulse", "mdi:dumbbell",
   "mdi:book-open-variant", "mdi:music", "mdi:lightbulb-outline", "mdi:star-outline", "mdi:calendar-check",
-  "mdi:shaker-outline",
+  "mdi:shaker-outline", "mdi:treasure-chest-outline",
 ];
 const WEEKDAYS = [
   ["MO", "Mon"],
@@ -878,6 +879,151 @@ const SETTINGS_STYLES = `
 `;
 
 /* ------------------------------------------------------------------ */
+/* Wishlist, gifts & price tracker ("Hoard"): constants & styles       */
+/* ------------------------------------------------------------------ */
+
+const HOARD_STATUSES = [
+  ["idea", "Idea", "mdi:lightbulb-outline"],
+  ["watching", "Watching price", "mdi:eye-outline"],
+  ["purchased", "Purchased", "mdi:cart-check"],
+  ["shipped", "Shipped", "mdi:truck-delivery-outline"],
+  ["stashed", "Stashed / hidden", "mdi:archive-lock-outline"],
+  ["wrapped", "Wrapped", "mdi:gift-outline"],
+  ["gifted", "Gifted", "mdi:party-popper"],
+];
+const HOARD_WANT_STATUSES = ["idea", "watching", "purchased"];
+const HOARD_OWNED = new Set(["purchased", "shipped", "stashed", "wrapped", "gifted"]);
+const HOARD_KINDS = [
+  ["want", "Want to Buy", "mdi:cart-heart"],
+  ["holiday", "Holiday", "mdi:pine-tree"],
+  ["birthday", "Birthday or event", "mdi:cake-variant-outline"],
+  ["occasion", "Other occasion", "mdi:calendar-star"],
+];
+const HOARD_SECTION_ICONS = [
+  "mdi:cart-heart", "mdi:pine-tree", "mdi:cake-variant-outline", "mdi:pumpkin", "mdi:egg-easter", "mdi:tag-heart-outline",
+  "mdi:heart-outline", "mdi:school-outline", "mdi:ring", "mdi:baby-carriage", "mdi:party-popper", "mdi:gift-outline",
+  "mdi:calendar-star", "mdi:home-outline", "mdi:tools", "mdi:laptop",
+];
+const HOARD_PROTECTION = [[14, "14 days"], [30, "30 days"], [0, "No price protection"]];
+const HOARD_REVEAL_MS = 120000; // a kiosk re-hides secret gifts after two minutes
+
+const HOARD_STYLES = `
+.hoard { display: flex; flex-direction: column; gap: 10px; }
+.htools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.htools .hscan { background: var(--td-accent); color: var(--text-primary-color, #fff); border: none; border-radius: 22px; padding: 8px 16px; min-height: 44px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+.htools .hadd { flex: 1 1 220px; display: flex; gap: 6px; min-width: 0; }
+.htools .hadd input { flex: 1; min-width: 0; border-radius: 22px; padding-left: 14px; background: var(--td-surface); border-color: transparent; min-height: 44px; }
+.hpills { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 4px; scrollbar-width: thin; }
+.hpills .chip { flex: 0 0 auto; }
+.hpills .chip ha-icon { --mdc-icon-size: 16px; }
+.hpills .chip .n { font-size: .72rem; opacity: .75; }
+.hbudget { border: 1px solid var(--td-divider); border-radius: var(--td-radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: var(--td-bg); }
+.hbudget .hrow { display: flex; gap: 8px 14px; align-items: center; flex-wrap: wrap; font-size: .9rem; }
+.hbudget .hrow .grow { flex: 1; }
+.hbudget .spent { font-weight: 700; font-size: 1rem; }
+.hbudget .hbar { height: 8px; border-radius: 4px; background: var(--td-surface); overflow: hidden; }
+.hbudget .hbar > span { display: block; height: 100%; background: var(--td-ok); border-radius: 4px; transition: width .25s; }
+.hbudget .hbar.over > span { background: var(--td-danger); }
+.hbudget .hbar.near > span { background: var(--td-warn); }
+.hcount { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--td-accent); }
+.hcount ha-icon { --mdc-icon-size: 18px; }
+.hhidden { display: flex; gap: 6px; flex-wrap: wrap; }
+.hhidden .badge { font-size: .8rem; padding: 4px 10px; background: color-mix(in srgb, var(--td-accent) 10%, transparent); color: var(--td-text); }
+.hgroup-head { display: flex; align-items: center; gap: 8px; margin: 8px 2px 2px; font-weight: 600; color: var(--td-muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; }
+.hgroup-head ha-icon { --mdc-icon-size: 18px; }
+.hgroup-head .grow { flex: 1; }
+.hgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 10px; }
+.hcard { border: 1px solid var(--td-divider); border-radius: var(--td-radius); padding: 12px; background: var(--td-bg); display: flex; flex-direction: column; gap: 8px; cursor: pointer; min-width: 0; position: relative; }
+.hcard:hover { border-color: color-mix(in srgb, var(--td-accent) 55%, var(--td-divider)); }
+.hcard.secret { border-style: dashed; }
+.hcard.gifted { opacity: .7; }
+.hcard.masked { align-items: center; justify-content: center; text-align: center; min-height: 120px; color: var(--td-muted); gap: 4px; }
+.hcard.masked .dragon { font-size: 1.8rem; }
+.htop { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.hthumb { width: 56px; height: 56px; border-radius: 10px; flex: 0 0 auto; background: var(--td-surface) center / contain no-repeat; display: inline-flex; align-items: center; justify-content: center; color: var(--td-muted); }
+.hthumb ha-icon { --mdc-icon-size: 26px; }
+.hthumb.lg { width: 84px; height: 84px; }
+.htitle { font-weight: 600; line-height: 1.3; word-break: break-word; }
+.hsub { display: flex; gap: 4px 6px; flex-wrap: wrap; margin-top: 4px; }
+.hnotes { font-size: .85rem; color: var(--td-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+.hprices { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.hbest { background: color-mix(in srgb, var(--td-ok) 16%, transparent); color: var(--td-ok); border-radius: 14px; padding: 3px 10px; font-weight: 700; font-size: .9rem; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.hbest.oos { background: var(--td-surface); color: var(--td-muted); }
+.hother { font-size: .8rem; color: var(--td-muted); text-decoration: none; white-space: nowrap; }
+.hother:hover, .hbest:hover { text-decoration: underline; }
+.hspark { width: 100%; height: 36px; color: var(--td-accent); display: block; }
+.hspark.lg { height: 90px; }
+.hspark svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.hspark .none { font-size: .75rem; color: var(--td-muted); font-style: italic; }
+.hfacts { display: flex; gap: 4px 10px; flex-wrap: wrap; font-size: .8rem; color: var(--td-muted); }
+.hfacts .good { color: var(--td-ok); font-weight: 600; }
+.hfacts .warn { color: color-mix(in srgb, var(--td-warn) 75%, var(--td-text)); font-weight: 600; }
+.hnote-box { border-radius: 10px; padding: 8px 10px; font-size: .85rem; display: flex; gap: 8px; align-items: flex-start; background: var(--td-surface); }
+.hnote-box ha-icon { --mdc-icon-size: 18px; flex: 0 0 auto; margin-top: 1px; }
+.hnote-box.claim { background: color-mix(in srgb, var(--td-warn) 18%, transparent); color: var(--td-text); font-weight: 600; }
+.hnote-box.guard { background: color-mix(in srgb, var(--td-ok) 10%, transparent); }
+.hnote-box.cool { background: color-mix(in srgb, var(--td-accent) 10%, transparent); }
+.hnote-box .grow { flex: 1; min-width: 0; }
+.hpipe { display: flex; gap: 3px; align-items: center; }
+.hpipe .step { flex: 1; height: 5px; border-radius: 3px; background: var(--td-surface); }
+.hpipe .step.done { background: var(--td-accent); }
+.hpipe-full { display: flex; flex-wrap: wrap; gap: 6px; }
+.hpipe-full button { border: 1px solid var(--td-divider); background: var(--td-bg); border-radius: 16px; padding: 4px 10px; min-height: 34px; display: inline-flex; gap: 4px; align-items: center; font-size: .82rem; }
+.hpipe-full button ha-icon { --mdc-icon-size: 16px; }
+.hpipe-full button.done { border-color: var(--td-accent); color: var(--td-accent); }
+.hpipe-full button.on { background: var(--td-accent); color: var(--text-primary-color, #fff); border-color: var(--td-accent); font-weight: 600; }
+.hactions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.hactions .grow { flex: 1; }
+.hdeals { border-radius: 10px; background: color-mix(in srgb, #ff7043 10%, transparent); padding: 6px 10px; font-size: .85rem; }
+.hdeals summary { cursor: pointer; font-weight: 600; color: #e64a19; list-style: none; display: flex; align-items: center; gap: 6px; }
+.hdeals summary::-webkit-details-marker { display: none; }
+.hdeal { display: flex; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid var(--td-divider); flex-wrap: wrap; }
+.hdeal:first-of-type { border-top: none; }
+.hdeal .t { flex: 1 1 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.hdeal .t a { color: var(--td-text); text-decoration: none; }
+.hdeal .t a:hover { text-decoration: underline; }
+.hdeal .p { font-weight: 700; }
+.hstore-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--td-divider); }
+.hstore-row:first-child { border-top: none; }
+.hstore-row .name a { font-weight: 600; color: var(--td-text); text-decoration: none; }
+.hstore-row .name a:hover { text-decoration: underline; }
+.hstore-row .price { font-weight: 700; text-align: right; }
+.hstore-row .price.best { color: var(--td-ok); }
+.hstore-row .sub { grid-column: 1 / -1; font-size: .75rem; color: var(--td-muted); display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: center; }
+.hstore-row .err { color: var(--td-danger); }
+.hstore-row details { grid-column: 1 / -1; font-size: .8rem; }
+.hstore-row details .hsel { display: flex; gap: 6px; margin-top: 6px; }
+.hstore-row details input { flex: 1; min-width: 0; font-family: monospace; font-size: .8rem; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--td-muted); }
+.dot.in { background: var(--td-ok); }
+.dot.out { background: var(--td-danger); }
+.hblock { border-top: 1px solid var(--td-divider); padding-top: 12px; margin-top: 12px; }
+.hblock h3 { margin: 0 0 8px; font-size: .95rem; display: flex; align-items: center; gap: 6px; }
+.hblock h3 .grow { flex: 1; }
+.hinline { display: flex; gap: 6px; flex-wrap: wrap; }
+.hinline input { flex: 1 1 160px; min-width: 0; }
+.hhist { width: 100%; border-collapse: collapse; font-size: .82rem; }
+.hhist td { padding: 4px 6px; border-top: 1px solid var(--td-divider); }
+.hhist td.r { text-align: right; font-weight: 600; }
+.hverdict { border-radius: 12px; padding: 12px 14px; font-weight: 700; font-size: 1rem; display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+.hverdict.buy { background: color-mix(in srgb, var(--td-ok) 16%, transparent); color: var(--td-ok); }
+.hverdict.online { background: color-mix(in srgb, var(--td-warn) 20%, transparent); color: color-mix(in srgb, var(--td-warn) 60%, var(--td-text)); }
+.hverdict.idle { background: var(--td-surface); color: var(--td-muted); font-weight: 500; font-size: .9rem; }
+.hshelf { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.hshelf label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--td-muted); }
+.hshelf input.big { font-size: 1.4rem; font-weight: 700; min-height: 52px; }
+.honline { margin-top: 4px; }
+.hlinks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.hlinks a { text-decoration: none; }
+.hgift { border: 1px dashed var(--td-divider); border-radius: 12px; padding: 10px; margin-top: 10px; }
+.hsecret-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.btn.danger-text { color: var(--td-danger); }
+.hmodel { margin-top: 6px; font-size: .85rem; color: var(--td-muted); }
+.hmodel summary { cursor: pointer; }
+@media (max-width: 480px) { .hgrid { grid-template-columns: minmax(0, 1fr); } .hshelf { grid-template-columns: 1fr; } }
+`;
+
+/* ------------------------------------------------------------------ */
 /* Styles                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -1305,7 +1451,9 @@ class TaskDragonCard extends HTMLElement {
       // Anything changed server-side: refresh the open maintenance view too.
       const tab = this._currentTab();
       if (this._idx.plans.get(tab)?.archetype === "home_maintenance" && this._maintData(tab)) this._queueMaintLoad(tab);
+      if (this._idx.plans.get(tab)?.archetype === "wishlist_hoard" && this._hData(tab)) this._queueHoardLoad(tab);
       this._mDeepLink();
+      this._hDeepLink();
     });
   }
 
@@ -1510,7 +1658,7 @@ class TaskDragonCard extends HTMLElement {
     const root = this.shadowRoot;
     if (this._scan) this._scanStop(); // the camera overlay lives in the shell being replaced
     const style = document.createElement("style");
-    style.textContent = STYLES + MAINT_STYLES + RECIPE_STYLES + SCAN_STYLES + COOK_STYLES + SETTINGS_STYLES;
+    style.textContent = STYLES + MAINT_STYLES + RECIPE_STYLES + SCAN_STYLES + COOK_STYLES + SETTINGS_STYLES + HOARD_STYLES;
     const container = document.createElement("div");
     setHTML(
       container,
@@ -1591,6 +1739,7 @@ class TaskDragonCard extends HTMLElement {
     const open = (planId) => (this._idx.byPlan.get(planId) || []).filter((t) => t.status !== "completed" && t.status !== "snoozed").length;
     if (tab.plan) {
       if (tab.plan.archetype === "home_maintenance") return this._maintCount(tab.key);
+      if (tab.plan.archetype === "wishlist_hoard") return this._hData(tab.key) ? this._hAttention(this._hData(tab.key)) || null : null;
       if (tab.plan.archetype === "pantry_spices" || tab.plan.archetype === "packing_trips") return null;
       return open(tab.key);
     }
@@ -1699,6 +1848,7 @@ class TaskDragonCard extends HTMLElement {
     setHTML(body, content);
     this._hydrateMarkdown(body);
     this._hydrateRecipeImages(body);
+    this._hHydrate(body);
     this._placeMenus(body);
     this._restoreFocus(focus);
   }
@@ -2069,6 +2219,8 @@ class TaskDragonCard extends HTMLElement {
         return this._packingHtml(plan, tasks);
       case "pantry_spices":
         return this._pantryHtml(plan);
+      case "wishlist_hoard":
+        return this._hoardHtml(plan);
       default:
         return this._section(plan.name, "mdi:format-list-checks", tasks.filter((t) => this._visible(t)));
     }
@@ -2433,7 +2585,7 @@ class TaskDragonCard extends HTMLElement {
         <select data-bulk="assign" ${off} aria-label="Assign"><option value="">Assign…</option><option value="pool">Household pool</option>
           ${people.map((p) => html`<option value="${p.entity_id}">${p.name}</option>`)}</select>
         <select data-bulk="move" ${off} aria-label="Move"><option value="">Move to…</option>
-          ${this._activePlans().filter((p) => p.archetype !== "pantry_spices").map((p) => html`<option value="${p.id}">${p.name}</option>`)}</select>
+          ${this._activePlans().filter((p) => p.archetype !== "pantry_spices" && p.archetype !== "wishlist_hoard").map((p) => html`<option value="${p.id}">${p.name}</option>`)}</select>
         <select data-bulk="priority" ${off} aria-label="Priority"><option value="">Priority…</option>${PRIORITIES.map((p) => html`<option>${p}</option>`)}</select>
         <button class="btn small danger" data-action="bulk-do" data-id="delete" ${off}>Delete</button>
         <span class="grow" style="flex:1"></span>
@@ -3546,10 +3698,10 @@ class TaskDragonCard extends HTMLElement {
 
   /* ---------------- Barcode scanner ---------------- */
 
-  /** Open the camera viewfinder. ``context``: pantry | maintenance | auto (header button). */
+  /** Open the camera viewfinder. ``context``: pantry | maintenance | hoard (price check) | auto (header button). */
   async _scanOpen(context, extra = {}) {
     if (this._scan) return;
-    const scan = { context, objectId: extra.objectId || null, planId: extra.planId || null, status: "Starting the camera…", warn: false, torch: false, devices: [], deviceId: null, stream: null, track: null, engine: null, busy: false, last: null, done: false, timer: null, video: null };
+    const scan = { context, objectId: extra.objectId || null, planId: extra.planId || null, itemId: extra.itemId || null, status: "Starting the camera…", warn: false, torch: false, devices: [], deviceId: null, stream: null, track: null, engine: null, busy: false, last: null, done: false, timer: null, video: null };
     this._scan = scan;
     if (!this._onScanHidden) {
       // A phone that locks or switches apps must give the camera back.
@@ -3570,7 +3722,7 @@ class TaskDragonCard extends HTMLElement {
       setHTML(host, html``);
       return;
     }
-    const where = scan.context === "pantry" ? "Scan a pantry item" : scan.context === "maintenance" ? "Scan a part or consumable" : "Scan a barcode";
+    const where = scan.context === "pantry" ? "Scan a pantry item" : scan.context === "maintenance" ? "Scan a part or consumable" : scan.context === "hoard" ? "Scan to compare prices" : "Scan a barcode";
     setHTML(
       host,
       html`<div class="td-scan" role="dialog" aria-modal="true" aria-label="${where}">
@@ -3762,7 +3914,7 @@ class TaskDragonCard extends HTMLElement {
     } catch (_err) {
       /* no vibration motor */
     }
-    const context = { context: scan.context, objectId: scan.objectId, planId: scan.planId };
+    const context = { context: scan.context, objectId: scan.objectId, planId: scan.planId, itemId: scan.itemId };
     this._scanStop();
     await this._scanLookup(hit.text, hit.format, context);
   }
@@ -3824,6 +3976,8 @@ class TaskDragonCard extends HTMLElement {
 
   /** What the code is linked to; pantry staples are marked In Stock right away. */
   async _scanLookup(code, format, ctx) {
+    // On a wishlist (or from its scan button) a barcode is an in-store price check.
+    if (ctx.context === "hoard" || (ctx.context === "auto" && this._hPlanId())) return this._hScanLookup(code, format, { ...ctx, planId: ctx.planId || this._hPlanId() });
     let res;
     try {
       const message = { type: "taskdragon/barcode_lookup", barcode: code, context: ctx.context, apply_default: true };
@@ -4715,6 +4869,1159 @@ class TaskDragonCard extends HTMLElement {
     return false;
   }
 
+  /* ---------------- Wishlist, gifts & price tracker: data ---------------- */
+
+  _hUi() {
+    if (!this._ui.hoard) this._ui.hoard = { section: "all", revealAll: false, revealed: new Set() };
+    return this._ui.hoard;
+  }
+
+  _hPlanId() {
+    const tab = this._currentTab();
+    return this._idx.plans.get(tab)?.archetype === "wishlist_hoard" ? tab : null;
+  }
+
+  _hData(planId) {
+    return (this._hoardBoards || {})[planId];
+  }
+
+  _hBoard() {
+    const planId = this._hPlanId();
+    return planId ? this._hData(planId) : null;
+  }
+
+  _queueHoardLoad(planId) {
+    clearTimeout(this._hoardTimer);
+    this._hoardTimer = setTimeout(() => this._loadHoard(planId), 120);
+  }
+
+  async _loadHoard(planId) {
+    if (!planId || !this._store) return null;
+    try {
+      const board = await this._store.call({ type: "taskdragon/hoard_board", plan_id: planId });
+      this._hoardBoards = { ...(this._hoardBoards || {}), [planId]: board };
+      this._hoardError = null;
+    } catch (err) {
+      this._hoardError = err.message || String(err);
+    }
+    if (this._hoardPending === planId) this._hoardPending = null;
+    if (this._currentTab() === planId) this._renderBody();
+    this._hSyncDialog(planId);
+    return this._hData(planId);
+  }
+
+  /** Keep an open item sheet showing the latest data after a reload. */
+  _hSyncDialog(planId) {
+    const d = this._dialog;
+    if (!d || d.kind !== "hoard-detail" || d.planId !== planId) return;
+    const fresh = this._hItem(planId, d.item.id);
+    if (!fresh) return this._closeDialog();
+    d.item = fresh;
+    this._renderDialog();
+  }
+
+  _hItem(planId, itemId) {
+    return (this._hData(planId)?.items || []).find((i) => i.id === itemId) || null;
+  }
+
+  /** Put a changed item (as returned by the server) into the cached board right away. */
+  _hPut(item) {
+    const hb = this._hData(item.plan_id);
+    if (!hb) return;
+    const index = hb.items.findIndex((i) => i.id === item.id);
+    if (index >= 0) hb.items[index] = item;
+    else hb.items.push(item);
+    if (this._currentTab() === item.plan_id) this._renderBody();
+    if (this._dialog?.kind === "hoard-detail" && this._dialog.item.id === item.id) {
+      this._dialog.item = item;
+      this._renderDialog();
+    }
+  }
+
+  _hCurrency(hb) {
+    return hb?.plan?.settings?.currency || "$";
+  }
+
+  _hMoney(value, hb = this._hBoard()) {
+    if (value === null || value === undefined || value === "") return "";
+    const currency = this._hCurrency(hb);
+    const text = Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return currency.length === 1 ? `${currency}${text}` : `${text} ${currency}`;
+  }
+
+  _hAgo(iso) {
+    if (!iso) return "never";
+    const seconds = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (!Number.isFinite(seconds) || seconds < 90) return "just now";
+    if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
+    if (seconds < 86400 * 2) return `${Math.round(seconds / 3600)} h ago`;
+    return `${Math.round(seconds / 86400)} days ago`;
+  }
+
+  _hSection(hb, id) {
+    return (hb?.sections || []).find((s) => s.id === id) || null;
+  }
+
+  _hKiosk() {
+    return this._mode() === "kiosk_split";
+  }
+
+  /** Secret gifts stay covered on a shared wall tablet until someone reveals them. */
+  _hMasked(item) {
+    const ui = this._hUi();
+    return item.secret && this._hKiosk() && !ui.revealAll && !ui.revealed.has(item.id);
+  }
+
+  _hStatus(status) {
+    return HOARD_STATUSES.find(([key]) => key === status) || HOARD_STATUSES[0];
+  }
+
+  _hStatusesFor(hb, item) {
+    const section = this._hSection(hb, item.section_id);
+    const giftish = section?.is_gift || item.gift_for_person_id || item.recipient_name;
+    return giftish ? HOARD_STATUSES : HOARD_STATUSES.filter(([key]) => HOARD_WANT_STATUSES.includes(key));
+  }
+
+  _hNextStatus(hb, item) {
+    const list = this._hStatusesFor(hb, item).map(([key]) => key);
+    const index = list.indexOf(item.status);
+    return index >= 0 && index < list.length - 1 ? list[index + 1] : null;
+  }
+
+  /** Items at their target, claimable price drops and fresh deals (the category's badge). */
+  _hAttention(hb) {
+    return (hb?.items || []).filter((i) => i.meets_target || i.protection?.claim || i.deals.length).length;
+  }
+
+  _hFilteredItems(hb) {
+    const q = (this._ui.search || "").trim().toLowerCase();
+    let items = hb.items;
+    const ui = this._hUi();
+    if (ui.section !== "all") items = items.filter((i) => (ui.section === "unsorted" ? !i.section_id : i.section_id === ui.section));
+    if (q) items = items.filter((i) => [i.title, i.spec_notes, i.brand, i.model, i.recipient_name].some((v) => String(v || "").toLowerCase().includes(q)));
+    const order = Object.fromEntries(HOARD_STATUSES.map(([key], index) => [key, index]));
+    return [...items].sort((a, b) => (a.status === "gifted") - (b.status === "gifted") || PRIORITY_RANK[b.priority] - PRIORITY_RANK[a.priority] || order[a.status] - order[b.status] || a.position - b.position);
+  }
+
+  /* ---------------- Wishlist: main view ---------------- */
+
+  _hoardHtml(plan) {
+    const hb = this._hData(plan.id);
+    if (!hb) {
+      if (this._hoardError) {
+        return html`<div class="empty">The wishlist is unavailable: ${this._hoardError} <button class="link" data-action="h-retry" data-id="${plan.id}">Retry</button></div>`;
+      }
+      if (this._hoardPending !== plan.id) {
+        this._hoardPending = plan.id;
+        this._queueHoardLoad(plan.id);
+      }
+      return html`<div class="empty">Loading the wishlist…</div>`;
+    }
+    const ui = this._hUi();
+    if (ui.section !== "all" && ui.section !== "unsorted" && !this._hSection(hb, ui.section)) ui.section = "all";
+    const items = this._hFilteredItems(hb);
+    const section = this._hSection(hb, ui.section);
+    let body;
+    if (ui.section === "all") {
+      const groups = [...hb.sections.map((s) => ({ section: s, items: items.filter((i) => i.section_id === s.id) })), { section: null, items: items.filter((i) => !i.section_id) }];
+      const shown = groups.filter((g) => g.items.length || (g.section && hb.hidden.some((h) => h.section_id === g.section.id)));
+      body = shown.length
+        ? shown.map((g) => html`<div class="hgroup-head"><ha-icon icon="${g.section?.icon || "mdi:tray"}"></ha-icon><span>${g.section ? g.section.name : "Unsorted"}</span>${g.section?.days_left !== null && g.section?.days_left !== undefined ? html`<span class="badge">${this._hCountdown(g.section)}</span>` : ""}<span class="grow"></span></div>
+            ${this._hHiddenHtml(hb, g.section ? g.section.id : null)}
+            <div class="hgrid">${g.items.map((item) => this._hCardHtml(hb, item))}</div>`)
+        : html`<div class="empty">${this._ui.search ? "Nothing matches your search." : "Nothing here yet — add an idea like “4k monitor”, or scan a barcode in a store."}</div>`;
+    } else {
+      body = html`${section ? this._hBudgetHtml(hb, section) : ""}${this._hHiddenHtml(hb, ui.section === "unsorted" ? null : ui.section)}
+        ${items.length ? html`<div class="hgrid">${items.map((item) => this._hCardHtml(hb, item))}</div>` : html`<div class="empty">${this._ui.search ? "Nothing matches your search." : "No items in this section yet."}</div>`}`;
+    }
+    return html`<div class="hoard">${this._hToolbarHtml(hb, plan)}${this._hPillsHtml(hb)}${ui.section === "all" ? this._hHiddenHtml(hb, null, true) : ""}${body}</div>`;
+  }
+
+  _hToolbarHtml(hb, plan) {
+    const ui = this._hUi();
+    const kiosk = this._hKiosk();
+    return html`<div class="htools">
+      <button class="hscan" data-action="h-scan" data-plan="${plan.id}"><ha-icon icon="mdi:barcode-scan"></ha-icon>In-store scan & price check</button>
+      <div class="hadd"><input data-hoard-input="${plan.id}" data-focus="hoard-add-${plan.id}" maxlength="200" placeholder="+ Add an idea, e.g. 4k monitor" enterkeyhint="done" aria-label="Add an idea">
+        <button class="icon-btn" data-action="h-add" data-plan="${plan.id}" title="Add with details" aria-label="Add with details"><ha-icon icon="mdi:plus"></ha-icon></button></div>
+      ${kiosk ? html`<button class="chip ${ui.revealAll ? "on" : ""}" data-action="h-reveal-all"><ha-icon icon="${ui.revealAll ? "mdi:lock-open-variant-outline" : "mdi:lock-outline"}"></ha-icon>${ui.revealAll ? "Hide secret gifts" : "Show secret gifts"}</button>` : ""}
+      <button class="icon-btn" data-action="h-settings" title="Price tracker settings" aria-label="Price tracker settings"><ha-icon icon="mdi:cog-outline"></ha-icon></button>
+    </div>`;
+  }
+
+  _hPillsHtml(hb) {
+    const ui = this._hUi();
+    const count = (id) => hb.items.filter((i) => i.section_id === id && i.status !== "gifted").length;
+    const unsorted = hb.items.filter((i) => !i.section_id).length;
+    return html`<div class="hpills" role="tablist" aria-label="Sections">
+      <button class="chip ${ui.section === "all" ? "on" : ""}" data-action="h-section" data-id="all" role="tab" aria-selected="${ui.section === "all" ? "true" : "false"}">All <span class="n">${hb.items.length}</span></button>
+      ${hb.sections.map(
+        (s) => html`<button class="chip ${ui.section === s.id ? "on" : ""}" data-action="h-section" data-id="${s.id}" role="tab" aria-selected="${ui.section === s.id ? "true" : "false"}"><ha-icon icon="${s.icon || "mdi:tag-outline"}"></ha-icon>${s.name}${s.stealth_mode ? html` <ha-icon icon="mdi:incognito"></ha-icon>` : ""} <span class="n">${count(s.id)}</span></button>`,
+      )}
+      ${unsorted ? html`<button class="chip ${ui.section === "unsorted" ? "on" : ""}" data-action="h-section" data-id="unsorted">Unsorted <span class="n">${unsorted}</span></button>` : ""}
+      <button class="chip ghost" data-action="h-new-section"><ha-icon icon="mdi:plus"></ha-icon>New occasion section</button>
+    </div>`;
+  }
+
+  _hCountdown(section) {
+    const days = section.days_left;
+    if (days === null || days === undefined) return "";
+    if (days < 0) return `${-days} days ago`;
+    if (days === 0) return "Today!";
+    if (days === 1) return "Tomorrow";
+    return `${days} days to go`;
+  }
+
+  _hBudgetHtml(hb, section) {
+    const s = section.summary;
+    const budget = section.budget;
+    const pct = budget ? Math.min(100, Math.round((s.spent / budget) * 100)) : 0;
+    const level = budget && s.spent > budget ? "over" : budget && pct >= 85 ? "near" : "";
+    const who = section.gift_for_person_id ? this._person(section.gift_for_person_id).name : section.recipient_name;
+    return html`<div class="hbudget">
+      <div class="hrow">
+        <span class="spent">Spent: ${this._hMoney(s.spent, hb)}${budget ? html` / ${this._hMoney(budget, hb)} budget` : ""}</span>
+        <span>${s.bought} bought · ${s.watching} watching · ${s.wrapped} wrapped${s.ideas ? ` · ${s.ideas} ideas` : ""}</span>
+        <span class="grow"></span>
+        ${section.days_left !== null && section.days_left !== undefined ? html`<span class="hcount"><ha-icon icon="mdi:calendar-clock"></ha-icon>${this._hCountdown(section)}</span>` : ""}
+      </div>
+      ${budget ? html`<div class="hbar ${level}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="Budget used"><span style="width:${pct}%"></span></div>` : ""}
+      <div class="hrow">
+        ${who ? html`<span class="badge"><ha-icon icon="mdi:account-heart-outline"></ha-icon>For ${who}</span>` : ""}
+        ${section.stealth_mode ? html`<span class="badge"><ha-icon icon="mdi:incognito"></ha-icon>Secret section (only you can see it)</span>` : ""}
+        ${budget && s.spent > budget ? html`<span class="badge overdue">${this._hMoney(s.spent - budget, hb)} over budget</span>` : budget ? html`<span class="badge ok">${this._hMoney(budget - s.spent, hb)} left</span>` : ""}
+        ${s.hidden ? html`<span class="badge">+ ${s.hidden} secret</span>` : ""}
+        <span class="grow"></span>
+        <button class="link" data-action="h-edit-section" data-id="${section.id}">Edit section</button>
+      </div>
+    </div>`;
+  }
+
+  /** "🐉 2 secret gifts hidden by Sam" — what the server reports instead of items this user may not see. */
+  _hHiddenHtml(hb, sectionId, wholeSections = false) {
+    const rows = hb.hidden.filter((h) => (wholeSections ? h.section_id === null : sectionId !== null && h.section_id === sectionId));
+    if (!rows.length) return "";
+    return html`<div class="hhidden">${rows.map(
+      (h) => html`<span class="badge">🐉 ${h.count} secret ${h.count === 1 ? "gift" : "gifts"} hidden by ${h.buyer}</span>`,
+    )}</div>`;
+  }
+
+  _hThumb(item, large = false) {
+    const image = safeImageUrl(item.image_url);
+    if (image) return html`<span class="hthumb ${large ? "lg" : ""}" style="background-image:url('${image}')" role="img" aria-label="${item.title}"></span>`;
+    return html`<span class="hthumb ${large ? "lg" : ""}"><ha-icon icon="${item.tier === "concept" ? "mdi:tag-outline" : "mdi:storefront-outline"}"></ha-icon></span>`;
+  }
+
+  _hBadges(hb, item) {
+    const who = item.gift_for_person_id ? this._person(item.gift_for_person_id).name : item.recipient_name;
+    const status = this._hStatus(item.status);
+    return html`${item.tier === "concept" && !HOARD_OWNED.has(item.status) ? html`<span class="badge"><ha-icon icon="mdi:tag-outline"></ha-icon>Concept tag</span>` : ""}
+      <span class="badge ${item.status === "watching" ? "today" : HOARD_OWNED.has(item.status) ? "ok" : ""}"><ha-icon icon="${status[2]}"></ha-icon>${status[1]}</span>
+      ${item.priority && item.priority !== "none" ? html`<span class="badge ${item.priority === "urgent" ? "urgent" : item.priority === "high" ? "high" : ""}">${item.priority}</span>` : ""}
+      ${[item.brand, item.model].filter(Boolean).length ? html`<span class="badge plan">${[item.brand, item.model].filter(Boolean).join(" · ")}</span>` : ""}
+      ${who ? html`<span class="badge"><ha-icon icon="mdi:gift-outline"></ha-icon>For ${who}</span>` : ""}
+      ${item.stealth_mode ? html`<span class="badge"><ha-icon icon="mdi:incognito"></ha-icon>Only you</span>` : ""}`;
+  }
+
+  _hCardHtml(hb, item) {
+    if (this._hMasked(item)) {
+      return html`<div class="hcard masked secret" data-action="h-reveal" data-id="${item.id}" role="button" tabindex="0" aria-label="Secret gift, tap to reveal">
+        <span class="dragon">🐉</span><strong>Secret gift</strong><span class="lastdone">Tap to reveal</span></div>`;
+    }
+    const best = item.best;
+    const others = item.urls.filter((u) => u.last_price !== null && u.id !== best?.url_id).sort((a, b) => a.last_price - b.last_price).slice(0, 2);
+    const next = this._hNextStatus(hb, item);
+    const statuses = this._hStatusesFor(hb, item);
+    const reached = statuses.findIndex(([key]) => key === item.status);
+    const p = item.protection;
+    return html`<div class="hcard ${item.secret ? "secret" : ""} ${item.status}" data-action="h-open" data-id="${item.id}">
+      <div class="htop">${this._hThumb(item)}
+        <div class="grow" style="min-width:0"><div class="htitle">${item.title}</div><div class="hsub">${this._hBadges(hb, item)}</div></div></div>
+      ${item.tier === "tracked"
+        ? html`<div class="hprices">
+            ${best
+              ? html`<a class="hbest ${best.in_stock === false ? "oos" : ""}" href="${best.url}" title="Open ${best.retailer}">${this._hMoney(best.price, hb)} @ ${best.retailer}</a>`
+              : html`<span class="lastdone">Checking prices…</span>`}
+            ${others.map((u) => html`<a class="hother" href="${u.url}">${this._hMoney(u.last_price, hb)} @ ${u.retailer_name}</a>`)}
+          </div>
+          <span class="hspark" data-spark="${JSON.stringify(item.sparkline)}" data-target="${item.target_price ?? ""}" aria-label="Price trend, last 30 days"></span>
+          <div class="hfacts">
+            ${item.target_price !== null ? html`<span class="${item.meets_target ? "good" : ""}">Target ${this._hMoney(item.target_price, hb)}${item.meets_target ? " ✓" : ""}</span>` : ""}
+            ${item.below_average_pct > 0 ? html`<span class="good">${item.below_average_pct}% below average</span>` : ""}
+            ${item.all_time_low !== null ? html`<span>Lowest ${this._hMoney(item.all_time_low, hb)}</span>` : ""}
+          </div>`
+        : HOARD_OWNED.has(item.status)
+          ? html`${item.spec_notes ? html`<div class="hnotes">${item.spec_notes}</div>` : ""}
+            ${item.paid_price !== null || item.purchase_store ? html`<div class="hfacts"><span>Paid${item.paid_price !== null ? ` ${this._hMoney(item.paid_price, hb)}` : ""}${item.purchase_store ? ` at ${item.purchase_store}` : ""}${item.purchase_date ? ` · ${item.purchase_date}` : ""}</span></div>` : ""}`
+          : html`${item.spec_notes ? html`<div class="hnotes">${item.spec_notes}</div>` : ""}
+            ${item.target_price !== null ? html`<div class="hfacts"><span>Target: &lt; ${this._hMoney(item.target_price, hb)}</span></div>` : ""}
+            <div><button class="btn small flat" data-action="h-open" data-id="${item.id}" data-focus-link="1"><ha-icon icon="mdi:link-variant"></ha-icon>Link store URL or scan barcode</button></div>`}
+      ${item.deals.length
+        ? html`<details class="hdeals" data-action="noop"><summary>🔥 ${item.deals.length} live deal ${item.deals.length === 1 ? "match" : "matches"} found</summary>
+            ${item.deals.slice(0, 5).map((d) => this._hDealHtml(hb, d))}</details>`
+        : ""}
+      ${p?.claim ? html`<div class="hnote-box claim"><ha-icon icon="mdi:cash-check"></ha-icon><span class="grow">Now ${this._hMoney(p.claim.price, hb)} at ${p.claim.retailer} — claim ${this._hMoney(p.claim.savings, hb)} back (${p.days_left} days left)</span></div>` : ""}
+      ${p && p.active && !p.claim ? html`<div class="hnote-box guard"><ha-icon icon="mdi:shield-check-outline"></ha-icon><span class="grow">Refund guard · ${p.days_left} ${p.days_left === 1 ? "day" : "days"} left${item.paid_price !== null ? ` · paid ${this._hMoney(item.paid_price, hb)}` : ""}${item.purchase_store ? ` @ ${item.purchase_store}` : ""}</span></div>` : ""}
+      ${item.cooldown?.active ? html`<div class="hnote-box cool"><ha-icon icon="mdi:timer-sand-full"></ha-icon><span class="grow">${item.cooldown.days_left}-day impulse cooldown — let the tracker hunt for a sale</span></div>` : ""}
+      ${item.hiding_spot && ["stashed", "wrapped"].includes(item.status) ? html`<div class="hnote-box"><ha-icon icon="mdi:archive-lock-outline"></ha-icon><span class="grow">Hidden: ${item.hiding_spot}</span></div>` : ""}
+      ${statuses.length > 3 ? html`<div class="hpipe" aria-label="${this._hStatus(item.status)[1]}">${statuses.map((_s, index) => html`<span class="step ${index <= reached ? "done" : ""}"></span>`)}</div>` : ""}
+      <div class="hactions">
+        ${next ? html`<button class="btn small" data-action="${next === "purchased" ? "h-purchase" : "h-next"}" data-id="${item.id}"><ha-icon icon="${this._hStatus(next)[2]}"></ha-icon>${next === "purchased" ? "Bought it" : this._hStatus(next)[1]}</button>` : ""}
+        <span class="grow"></span>
+        ${item.urls.length ? html`<button class="icon-btn sm" data-action="h-check" data-id="${item.id}" title="Check prices now" aria-label="Check prices now"><ha-icon icon="mdi:refresh"></ha-icon></button>` : ""}
+      </div>
+    </div>`;
+  }
+
+  _hDealHtml(hb, d) {
+    return html`<div class="hdeal">
+      <span class="t"><a href="${d.url}" title="${d.title}">${d.title}</a><div class="lastdone">${d.source === "reddit" ? "Reddit" : "Slickdeals"}${d.posted_at ? ` · ${this._hAgo(d.posted_at)}` : ""}${d.discussion_url && d.discussion_url !== d.url ? html` · <a href="${d.discussion_url}">discussion</a>` : ""}</div></span>
+      ${d.price !== null ? html`<span class="p">${this._hMoney(d.price, hb)}</span>` : ""}
+      <button class="btn small flat" data-action="h-deal-promote" data-id="${d.id}" title="Track this product's price">Track this</button>
+      <button class="icon-btn sm" data-action="h-deal-dismiss" data-id="${d.id}" title="Dismiss" aria-label="Dismiss"><ha-icon icon="mdi:close"></ha-icon></button>
+    </div>`;
+  }
+
+  /** Draw the price sparklines (built with DOM calls, never markup). */
+  _hHydrate(root) {
+    for (const el of root.querySelectorAll(".hspark[data-spark]")) {
+      let points = [];
+      try {
+        points = JSON.parse(el.dataset.spark || "[]").filter((p) => Array.isArray(p) && Number.isFinite(Number(p[1])));
+      } catch (_err) {
+        points = [];
+      }
+      el.removeAttribute("data-spark");
+      if (points.length < 2) {
+        const note = document.createElement("span");
+        note.className = "none";
+        note.textContent = points.length ? "One price check so far — the trend appears after the next one" : "No price history yet";
+        el.replaceChildren(note);
+        continue;
+      }
+      const target = Number(el.dataset.target);
+      const prices = points.map((p) => Number(p[1]));
+      let low = Math.min(...prices);
+      let high = Math.max(...prices);
+      if (Number.isFinite(target) && el.dataset.target !== "" && target >= low * 0.8 && target <= high * 1.2) {
+        low = Math.min(low, target);
+        high = Math.max(high, target);
+      }
+      const span = high - low || 1;
+      const width = 200;
+      const height = 40;
+      const x = (i) => (i / (points.length - 1)) * width;
+      const y = (v) => height - 3 - ((v - low) / span) * (height - 6);
+      const ns = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(ns, "svg");
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.setAttribute("preserveAspectRatio", "none");
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", `From ${prices[0]} to ${prices[prices.length - 1]}, low ${Math.min(...prices)}`);
+      const coords = prices.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+      const area = document.createElementNS(ns, "polygon");
+      area.setAttribute("points", `0,${height} ${coords.join(" ")} ${width},${height}`);
+      area.setAttribute("fill", "currentColor");
+      area.setAttribute("fill-opacity", "0.12");
+      svg.appendChild(area);
+      if (Number.isFinite(target) && el.dataset.target !== "" && target >= low && target <= high) {
+        const line = document.createElementNS(ns, "line");
+        line.setAttribute("x1", "0");
+        line.setAttribute("x2", String(width));
+        line.setAttribute("y1", y(target).toFixed(1));
+        line.setAttribute("y2", y(target).toFixed(1));
+        line.setAttribute("stroke", "var(--td-ok)");
+        line.setAttribute("stroke-dasharray", "4 3");
+        line.setAttribute("vector-effect", "non-scaling-stroke");
+        svg.appendChild(line);
+      }
+      const path = document.createElementNS(ns, "polyline");
+      path.setAttribute("points", coords.join(" "));
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", "currentColor");
+      path.setAttribute("stroke-width", "2");
+      path.setAttribute("stroke-linejoin", "round");
+      path.setAttribute("vector-effect", "non-scaling-stroke");
+      svg.appendChild(path);
+      el.replaceChildren(svg);
+    }
+  }
+
+  /* ---------------- Wishlist: item sheet ---------------- */
+
+  async _hOpenDetail(planId, itemId, focusLink = false) {
+    const item = this._hItem(planId, itemId);
+    if (!item) return;
+    const d = { kind: "hoard-detail", planId, item, history: null, focusLink };
+    this._openDialog(d);
+    try {
+      const res = await this._store.call({ type: "taskdragon/hoard_history", item_id: itemId, days: 365 });
+      if (this._dialog === d) {
+        d.history = res.points;
+        this._renderDialog();
+      }
+    } catch (_err) {
+      /* the sheet works without the history table */
+    }
+    if (focusLink) setTimeout(() => this.shadowRoot.querySelector("[data-hurl]")?.focus(), 60);
+  }
+
+  _hDetailHtml(d) {
+    const hb = this._hData(d.planId);
+    const item = d.item;
+    const section = this._hSection(hb, item.section_id);
+    const statuses = this._hStatusesFor(hb, item);
+    const reached = statuses.findIndex(([key]) => key === item.status);
+    const p = item.protection;
+    const sorted = [...item.urls].sort((a, b) => (a.last_price ?? Infinity) - (b.last_price ?? Infinity));
+    const sightings = (d.history || []).filter((h) => h.source !== "online").slice(-8).reverse();
+    return html`<div class="ssheet-head">${this._hThumb(item, true)}
+        <div class="grow" style="min-width:0"><h2>${item.title}</h2><div class="hsub">${this._hBadges(hb, item)}${section ? html`<span class="badge plan"><ha-icon icon="${section.icon || "mdi:tag-outline"}"></ha-icon>${section.name}</span>` : ""}</div>
+          ${item.added_by && !item.mine ? html`<div class="lastdone">Added by ${item.added_by}</div>` : ""}</div>
+        <button class="icon-btn" data-action="h-edit" data-id="${item.id}" title="Edit" aria-label="Edit"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>${this._closeButton()}</div>
+      <div class="hblock"><h3>Status</h3><div class="hpipe-full" role="group" aria-label="Status">
+        ${statuses.map(([key, label, icon], index) => html`<button class="${index < reached ? "done" : index === reached ? "on" : ""}" data-action="h-status" data-id="${item.id}" data-status="${key}" aria-pressed="${index === reached ? "true" : "false"}"><ha-icon icon="${icon}"></ha-icon>${label}</button>`)}
+      </div></div>
+      ${p ? html`<div class="hblock"><h3><ha-icon icon="mdi:shield-check-outline"></ha-icon>Price protection</h3>
+          ${p.claim ? html`<div class="hnote-box claim"><ha-icon icon="mdi:cash-check"></ha-icon><span class="grow">💰 ${this._hMoney(p.claim.price, hb)} at ${p.claim.retailer} — ${this._hMoney(p.claim.savings, hb)} less than you paid ${p.days_since_purchase === 0 ? "today" : `${p.days_since_purchase} days ago`}. Claim your price adjustment!</span><a class="btn small" href="${p.claim.url}">Open</a></div>` : ""}
+          <div class="hfacts"><span>Paid ${item.paid_price !== null ? this._hMoney(item.paid_price, hb) : "—"}${item.purchase_store ? ` at ${item.purchase_store}` : ""} on ${item.purchase_date}</span>
+            <span class="${p.active ? "good" : ""}">${p.active ? `${p.days_left} of ${p.days} days left (until ${p.ends})` : `Window ended ${p.ends}`}</span></div></div>`
+        : ""}
+      <div class="hblock"><h3><ha-icon icon="mdi:storefront-outline"></ha-icon>Stores<span class="grow"></span>
+          ${item.urls.length ? html`<button class="btn small flat" data-action="h-check" data-id="${item.id}"><ha-icon icon="mdi:refresh"></ha-icon>Check now</button>` : ""}</h3>
+        ${item.urls.length ? html`<span class="hspark lg" data-spark="${JSON.stringify(item.sparkline)}" data-target="${item.target_price ?? ""}" aria-label="Price trend, last 30 days"></span>
+          <div class="hfacts" style="margin:4px 0 6px">${item.target_price !== null ? html`<span class="${item.meets_target ? "good" : ""}">Target ${this._hMoney(item.target_price, hb)}</span>` : ""}
+            ${item.average_price !== null ? html`<span>30-day average ${this._hMoney(item.average_price, hb)}</span>` : ""}
+            ${item.below_average_pct > 0 ? html`<span class="good">Best is ${item.below_average_pct}% below average</span>` : ""}
+            ${item.all_time_low !== null ? html`<span>Lowest seen ${this._hMoney(item.all_time_low, hb)}</span>` : ""}</div>` : html`<p class="hint">Paste a product page from any store to track its price. Big retailers sometimes block automatic checks; the card says so when that happens.</p>`}
+        ${sorted.map((u) => this._hStoreRowHtml(hb, item, u))}
+        <div class="hinline" style="margin-top:8px"><input data-hurl="${item.id}" type="url" inputmode="url" maxlength="2048" placeholder="https://store.example/product…" aria-label="Product page URL">
+          <button class="btn small" data-action="h-url-add" data-id="${item.id}"><ha-icon icon="mdi:plus"></ha-icon>Add store</button>
+          <button class="btn small flat" data-action="h-scan" data-plan="${d.planId}" data-item="${item.id}"><ha-icon icon="mdi:barcode-scan"></ha-icon>Scan</button></div>
+      </div>
+      ${item.watch_keyword_deals || item.deals.length
+        ? html`<div class="hblock"><h3><ha-icon icon="mdi:fire"></ha-icon>Deal radar<span class="grow"></span>
+            ${item.watch_keyword_deals ? html`<button class="btn small flat" data-action="h-deals-now" data-id="${item.id}">Search now</button>` : ""}</h3>
+            <div class="lastdone">Searching Slickdeals and Reddit for “${item.deal_query || item.title}”${item.deal_max_price !== null ? ` up to ${this._hMoney(item.deal_max_price, hb)}` : item.target_price !== null ? ` up to ${this._hMoney(item.target_price, hb)}` : ""} · last searched ${this._hAgo(item.deals_checked_at)}</div>
+            ${item.deals.length ? item.deals.map((deal) => this._hDealHtml(hb, deal)) : html`<div class="empty sm">No matching deals yet.</div>`}</div>`
+        : ""}
+      <div class="hblock"><h3><ha-icon icon="mdi:store"></ha-icon>Saw it in a store?</h3>
+        <div class="hinline"><input data-hrecord="${item.id}" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="Shelf price" aria-label="Shelf price">
+          <input data-hrecord-store list="hoard-stores" maxlength="120" placeholder="Store" aria-label="Store">
+          <button class="btn small flat" data-action="h-record" data-id="${item.id}">Save price</button></div>
+        ${sightings.length ? html`<table class="hhist"><tbody>${sightings.map((h) => html`<tr><td>${String(h.checked_at).slice(0, 10)}</td><td>${h.source === "purchase" ? "Bought" : h.source === "in_store" ? "In store" : "Noted"}${h.store ? ` · ${h.store}` : ""}</td><td class="r">${this._hMoney(h.price, hb)}</td></tr>`)}</tbody></table>` : ""}
+        <datalist id="hoard-stores">${(hb?.stores || []).map((s) => html`<option value="${s}"></option>`)}</datalist>
+      </div>
+      ${item.spec_notes ? html`<div class="hblock"><h3>Notes</h3><div style="white-space:pre-wrap">${item.spec_notes}</div></div>` : ""}
+      ${item.hiding_spot || item.hiding_spot_locked ? html`<div class="hblock"><h3><ha-icon icon="mdi:archive-lock-outline"></ha-icon>Hiding spot</h3>
+          ${item.hiding_spot_locked ? html`<div class="hint">This hiding spot was saved on another installation and can't be read here — edit the item to enter it again.</div>` : html`<div>${item.hiding_spot}</div>`}</div>` : ""}
+      <div class="dialog-actions">
+        <button class="btn flat danger-text" data-action="h-delete" data-id="${item.id}"><ha-icon icon="mdi:delete-outline"></ha-icon>Delete</button>
+        <span class="grow"></span>
+        ${HOARD_OWNED.has(item.status) ? "" : html`<button class="btn flat" data-action="h-purchase" data-id="${item.id}"><ha-icon icon="mdi:cart-check"></ha-icon>Bought it</button>`}
+        <button class="btn" data-action="h-edit" data-id="${item.id}"><ha-icon icon="mdi:pencil-outline"></ha-icon>Edit</button>
+      </div>`;
+  }
+
+  _hStoreRowHtml(hb, item, u) {
+    const isBest = item.best && item.best.url_id === u.id;
+    return html`<div class="hstore-row">
+      <span class="name"><a href="${u.url}">${u.retailer_name}</a></span>
+      <span class="price ${isBest ? "best" : ""}">${u.last_price !== null ? this._hMoney(u.last_price, hb) : "—"}</span>
+      <button class="icon-btn sm" data-action="h-url-del" data-id="${u.id}" title="Stop tracking this store" aria-label="Stop tracking ${u.retailer_name}"><ha-icon icon="mdi:delete-outline"></ha-icon></button>
+      <span class="sub"><span class="dot ${u.in_stock === true ? "in" : u.in_stock === false ? "out" : ""}"></span>${u.in_stock === true ? "In stock" : u.in_stock === false ? "Out of stock" : "Stock unknown"}
+        · checked ${this._hAgo(u.last_checked_at)}
+        ${u.lowest_price !== null ? html` · low ${this._hMoney(u.lowest_price, hb)} / high ${this._hMoney(u.highest_price, hb)}` : ""}
+        ${u.method ? html` · via ${{ jsonld: "product data", meta: "page tags", retailer: "store layout", custom: "your selector" }[u.method] || u.method}` : ""}
+        ${u.last_error ? html`<span class="err">${u.last_error}</span>` : ""}</span>
+      <details ${u.css_selector ? html`open` : ""}><summary>Custom price selector (advanced)</summary>
+        <div class="hsel"><input data-hsel="${u.id}" value="${u.css_selector || ""}" maxlength="300" placeholder="e.g. .price-now or #price@data-value" aria-label="CSS selector for the price">
+          <button class="btn small flat" data-action="h-url-sel" data-id="${u.id}">Save</button></div>
+        <div class="lastdone">A CSS selector for the element holding the price; add @attribute to read an attribute instead of the text.</div></details>
+    </div>`;
+  }
+
+  /* ---------------- Wishlist: add / edit ---------------- */
+
+  _hNewItem(planId, extra = {}) {
+    const hb = this._hData(planId);
+    const ui = this._hUi();
+    const section = ui.section !== "all" && ui.section !== "unsorted" ? ui.section : (hb?.sections.find((s) => s.kind === "want") || hb?.sections[0])?.id || "";
+    return { id: null, plan_id: planId, title: "", section_id: section, priority: "none", status: "idea", target_price: null, spec_notes: "", gift_for_person_id: null, recipient_name: "", stealth_mode: false, hiding_spot: "", watch_keyword_deals: false, deal_query: "", deal_max_price: null, impulse_cooldown: false, barcode: "", brand: "", model: "", image_url: "", ...extra };
+  }
+
+  _hEditHtml(d) {
+    const hb = this._hData(d.planId);
+    const it = d.item;
+    const people = hb?.people || this._board.people || [];
+    const settings = hb?.settings || {};
+    const section = this._hSection(hb, it.section_id);
+    const giftish = section?.is_gift;
+    const statuses = giftish || it.gift_for_person_id ? HOARD_STATUSES : HOARD_STATUSES.filter(([k]) => HOARD_WANT_STATUSES.includes(k));
+    const cooldownAllowed = !giftish && (it.cooldown_eligible !== false || it.impulse_cooldown);
+    const num = (v) => (v === null || v === undefined ? "" : v);
+    return html`<h2><span class="grow">${it.id ? "Edit item" : "Add to the wishlist"}</span>${this._closeButton()}</h2>
+      <div class="form hform">
+        <label class="full">Name<input name="title" value="${it.title}" maxlength="200" placeholder="4k monitor, cordless router, toddler rain boots…" autofocus></label>
+        <label>Section<select name="section_id"><option value="">Unsorted</option>${(hb?.sections || []).map((s) => html`<option value="${s.id}" ${s.id === it.section_id ? html`selected` : ""}>${s.name}</option>`)}</select></label>
+        <label>Status<select name="status">${statuses.map(([k, l]) => html`<option value="${k}" ${k === it.status ? html`selected` : ""}>${l}</option>`)}</select></label>
+        <label>Target price<input name="target_price" type="number" min="0" step="0.01" inputmode="decimal" value="${num(it.target_price)}" placeholder="e.g. 300"></label>
+        <label>Priority<select name="priority">${PRIORITIES.map((p) => html`<option value="${p}" ${p === it.priority ? html`selected` : ""}>${p}</option>`)}</select></label>
+        <label class="full">Spec notes<textarea name="spec_notes" maxlength="2000" placeholder="27-inch+, IPS or OLED, USB-C PD…">${it.spec_notes || ""}</textarea></label>
+        ${it.id ? "" : html`<label class="full">Store link (optional)<input name="first_url" type="url" inputmode="url" maxlength="2048" placeholder="Paste a product page to track its price now"></label>`}
+      </div>
+      <div class="hblock"><h3><ha-icon icon="mdi:gift-outline"></ha-icon>Gift & privacy</h3>
+        <div class="form">
+          <label>Gift for<select name="gift_for_person_id"><option value="">Nobody in particular</option>${people.map((p) => html`<option value="${p.entity_id}" ${p.entity_id === it.gift_for_person_id ? html`selected` : ""}>${p.name}</option>`)}</select></label>
+          <label>…or someone else<input name="recipient_name" value="${it.recipient_name || ""}" maxlength="120" placeholder="Grandma, teacher…"></label>
+          <label class="inline full"><input type="checkbox" name="stealth_mode" ${it.stealth_mode ? html`checked` : ""}> <ha-icon icon="mdi:incognito"></ha-icon>Keep it secret: only I can see this item</label>
+          <label class="full">Hiding spot (encrypted, only shown to people who can see this item)<input name="hiding_spot" value="${it.hiding_spot || ""}" maxlength="500" placeholder="Top shelf of the pole barn, tote #4"></label>
+        </div>
+        <p class="hint" style="margin-top:8px">The person a gift is for never sees it — on their own login it shows as “🐉 secret gift”. Wall tablets in kiosk mode cover secret gifts until someone taps Show.</p>
+      </div>
+      <div class="hblock"><h3><ha-icon icon="mdi:fire"></ha-icon>Deal radar</h3>
+        <div class="form">
+          <label class="inline full"><input type="checkbox" name="watch_keyword_deals" ${it.watch_keyword_deals ? html`checked` : ""}> Watch public deal posts (Slickdeals, Reddit) for this</label>
+          <label>Search words<input name="deal_query" value="${it.deal_query || ""}" maxlength="120" placeholder="${it.title || "4k monitor"}"></label>
+          <label>Max price<input name="deal_max_price" type="number" min="0" step="0.01" inputmode="decimal" value="${num(it.deal_max_price)}" placeholder="target price"></label>
+        </div>
+      </div>
+      ${cooldownAllowed ? html`<div class="hblock"><label class="inline"><input type="checkbox" name="impulse_cooldown" ${it.impulse_cooldown ? html`checked` : ""}> <ha-icon icon="mdi:timer-sand-full"></ha-icon>${settings.impulse_days || 7}-day impulse cooldown${settings.impulse_threshold ? ` (for things over ${this._hMoney(settings.impulse_threshold, hb)})` : ""}</label></div>` : ""}
+      <details class="hblock"><summary>Product details</summary>
+        <div class="form" style="margin-top:8px">
+          <label>Brand<input name="brand" value="${it.brand || ""}" maxlength="120"></label>
+          <label>Model<input name="model" value="${it.model || ""}" maxlength="120"></label>
+          <label>Barcode (UPC/EAN)<input name="barcode" value="${it.barcode_display || it.barcode || ""}" maxlength="64" inputmode="numeric"></label>
+          <label>Photo URL (https)<input name="image_url" value="${it.image_url || ""}" maxlength="2048" inputmode="url"></label>
+        </div></details>
+      <div class="dialog-actions"><span class="grow"></span>
+        <button class="btn flat" data-action="dialog-close">Cancel</button>
+        <button class="btn" data-action="h-save" ${d.busy ? html`disabled` : ""}>${it.id ? "Save" : "Add"}</button></div>`;
+  }
+
+  _hFormValues(root = this.shadowRoot.querySelector(".dialog")) {
+    const out = {};
+    for (const el of root?.querySelectorAll("[name]") || []) {
+      if (el.type === "checkbox") out[el.name] = el.checked;
+      else out[el.name] = el.value;
+    }
+    return out;
+  }
+
+  async _hSave() {
+    const d = this._dialog;
+    if (d?.kind !== "hoard-edit" || d.busy) return;
+    const v = this._hFormValues();
+    const title = (v.title || "").trim();
+    if (!title) return this._showToast("Give it a name, like 4k monitor");
+    const numOrNull = (x) => (x === "" || x === undefined ? null : Number(x));
+    const item = {
+      title,
+      section_id: v.section_id || null,
+      status: v.status,
+      priority: v.priority,
+      target_price: numOrNull(v.target_price),
+      spec_notes: v.spec_notes || null,
+      gift_for_person_id: v.gift_for_person_id || null,
+      recipient_name: v.recipient_name || null,
+      stealth_mode: !!v.stealth_mode,
+      hiding_spot: v.hiding_spot || null,
+      watch_keyword_deals: !!v.watch_keyword_deals,
+      deal_query: v.deal_query || null,
+      deal_max_price: numOrNull(v.deal_max_price),
+      brand: v.brand || null,
+      model: v.model || null,
+      barcode: v.barcode || null,
+      image_url: v.image_url || null,
+    };
+    if (v.impulse_cooldown !== undefined) item.impulse_cooldown = !!v.impulse_cooldown;
+    if (d.item.id) item.id = d.item.id;
+    else item.plan_id = d.planId;
+    d.busy = true;
+    let saved;
+    try {
+      saved = await this._call({ type: "taskdragon/hoard_save_item", item });
+      if (!d.item.id && (v.first_url || "").trim()) saved = await this._call({ type: "taskdragon/hoard_add_url", item_id: saved.id, url: v.first_url.trim() });
+    } catch (_err) {
+      d.busy = false;
+      if (this._dialog === d) this._renderDialog();
+      return;
+    }
+    this._hPut(saved);
+    if (d.item.id) this._hOpenDetail(d.planId, saved.id);
+    else {
+      this._closeDialog();
+      this._showToast(`Added ${saved.title}`);
+    }
+  }
+
+  async _hQuickAdd(planId) {
+    const input = this.shadowRoot.querySelector(`[data-hoard-input="${CSS.escape(planId)}"]`);
+    const title = input?.value.trim();
+    if (!title) return;
+    const item = this._hNewItem(planId);
+    try {
+      const saved = await this._call({ type: "taskdragon/hoard_save_item", item: { plan_id: planId, title, section_id: item.section_id || null } });
+      input.value = "";
+      this._hPut(saved);
+      this._showToast(`Added ${saved.title} as a concept tag — link a store or turn on the deal radar any time`);
+    } catch (_err) {
+      /* reported by _call */
+    }
+  }
+
+  /* ---------------- Wishlist: purchase ---------------- */
+
+  _hPurchaseHtml(d) {
+    const hb = this._hData(d.planId);
+    const it = d.item;
+    const days = hb?.settings?.protection_days || 30;
+    const choices = HOARD_PROTECTION.some(([n]) => n === days) ? HOARD_PROTECTION : [[days, `${days} days`], ...HOARD_PROTECTION];
+    return html`<h2><span class="grow">Bought “${it.title}”</span>${this._closeButton()}</h2>
+      <p class="hint">TaskDragon keeps checking the stores during the return window and alerts you if the price drops below what you paid.</p>
+      <div class="form">
+        <label>Price paid<input name="paid_price" type="number" min="0" step="0.01" inputmode="decimal" value="${it.best?.price ?? ""}" autofocus></label>
+        <label>Date<input name="purchase_date" type="date" value="${this._today()}"></label>
+        <label>Store<input name="store" list="hoard-stores-p" value="${it.best?.retailer || ""}" maxlength="120"></label>
+        <label>Price protection<select name="protection_days">${choices.map(([n, l]) => html`<option value="${n}" ${n === days ? html`selected` : ""}>${l}</option>`)}</select></label>
+      </div>
+      <datalist id="hoard-stores-p">${(hb?.stores || []).map((s) => html`<option value="${s}"></option>`)}</datalist>
+      <div class="dialog-actions"><span class="grow"></span>
+        <button class="btn flat" data-action="dialog-close">Cancel</button>
+        <button class="btn" data-action="h-purchase-save"><ha-icon icon="mdi:cart-check"></ha-icon>Mark purchased</button></div>`;
+  }
+
+  async _hPurchaseSave() {
+    const d = this._dialog;
+    if (d?.kind !== "hoard-purchase") return;
+    const v = this._hFormValues();
+    const res = await this._call({
+      type: "taskdragon/hoard_mark_purchased",
+      item_id: d.item.id,
+      paid_price: v.paid_price === "" ? null : Number(v.paid_price),
+      purchase_date: v.purchase_date || null,
+      store: v.store || null,
+      protection_days: Number(v.protection_days),
+    });
+    this._closeDialog();
+    this._hPut(res);
+    this._showToast(res.protection?.active ? `Marked purchased — watching for price drops for ${res.protection.days_left} days` : "Marked purchased");
+  }
+
+  /* ---------------- Wishlist: sections ---------------- */
+
+  _hSectionHtml(d) {
+    const hb = this._hData(d.planId);
+    const s = d.section;
+    const people = hb?.people || this._board.people || [];
+    const gift = s.kind !== "want";
+    return html`<h2><span class="grow">${s.id ? "Edit section" : "New occasion section"}</span>${this._closeButton()}</h2>
+      <div class="form">
+        <label class="full">Name<input name="name" value="${s.name || ""}" maxlength="120" placeholder="Christmas, Alex's birthday, Black Friday…" autofocus></label>
+        <label>Type<select name="kind">${HOARD_KINDS.map(([k, l]) => html`<option value="${k}" ${k === s.kind ? html`selected` : ""}>${l}</option>`)}</select></label>
+        <label>Icon<select name="icon">${HOARD_SECTION_ICONS.map((icon) => html`<option value="${icon}" ${icon === s.icon ? html`selected` : ""}>${icon.replace("mdi:", "").replace(/-/g, " ")}</option>`)}</select></label>
+        <label>Budget<input name="budget" type="number" min="0" step="1" inputmode="decimal" value="${s.budget ?? ""}" placeholder="e.g. 1000"></label>
+        <label>Date<input name="event_date" type="date" value="${s.event_date || ""}"></label>
+        <label class="inline full"><input type="checkbox" name="repeats_yearly" ${s.repeats_yearly ? html`checked` : ""}> Every year (count down to the next one)</label>
+        ${gift ? html`<label>For<select name="gift_for_person_id"><option value="">Several people</option>${people.map((p) => html`<option value="${p.entity_id}" ${p.entity_id === s.gift_for_person_id ? html`selected` : ""}>${p.name}</option>`)}</select></label>
+          <label>…or someone else<input name="recipient_name" value="${s.recipient_name || ""}" maxlength="120"></label>` : ""}
+        <label class="inline full"><input type="checkbox" name="stealth_mode" ${s.stealth_mode ? html`checked` : ""}> <ha-icon icon="mdi:incognito"></ha-icon>Secret section: only I can see it and what's in it</label>
+      </div>
+      ${gift ? html`<p class="hint" style="margin-top:8px">A section for one person is hidden from that person entirely.</p>` : ""}
+      <div class="dialog-actions">
+        ${s.id ? html`<button class="btn flat" data-action="h-section-delete" data-id="${s.id}"><ha-icon icon="mdi:delete-outline"></ha-icon>Delete</button>` : ""}
+        <span class="grow"></span>
+        <button class="btn flat" data-action="dialog-close">Cancel</button>
+        <button class="btn" data-action="h-section-save">${s.id ? "Save" : "Create"}</button></div>`;
+  }
+
+  async _hSectionSave() {
+    const d = this._dialog;
+    if (d?.kind !== "hoard-section") return;
+    const v = this._hFormValues();
+    const name = (v.name || "").trim();
+    if (!name) return this._showToast("Give the section a name");
+    const section = {
+      name,
+      kind: v.kind,
+      icon: v.icon || null,
+      budget: v.budget === "" ? null : Number(v.budget),
+      event_date: v.event_date || null,
+      repeats_yearly: !!v.repeats_yearly,
+      stealth_mode: !!v.stealth_mode,
+      gift_for_person_id: v.gift_for_person_id || null,
+      recipient_name: v.recipient_name || null,
+    };
+    if (d.section.id) section.id = d.section.id;
+    else section.plan_id = d.planId;
+    const saved = await this._call({ type: "taskdragon/hoard_save_section", section });
+    this._closeDialog();
+    this._hUi().section = saved.id;
+    await this._loadHoard(d.planId);
+  }
+
+  /* ---------------- Wishlist: in-store scan & price check ---------------- */
+
+  async _hScanLookup(code, format, ctx) {
+    let res;
+    try {
+      const message = { type: "taskdragon/scan_price_check", barcode: code };
+      if (format && SCAN_FORMATS.includes(format)) message.format = format;
+      if (ctx.planId) message.plan_id = ctx.planId;
+      res = await this._store.call(message);
+    } catch (err) {
+      return this._fail(err);
+    }
+    const local = ctx.itemId ? res.local.find((i) => i.id === ctx.itemId) || null : res.local[0] || null;
+    const want = res.sections.find((s) => s.kind === "want");
+    const giftSection = res.sections.find((s) => s.kind !== "want");
+    this._openDialog({
+      kind: "hoard-scan",
+      res,
+      itemId: ctx.itemId || local?.id || null,
+      local,
+      shelf: "",
+      store: "",
+      title: res.product?.title || local?.title || "",
+      gift: false,
+      giftSection: giftSection?.id || "",
+      wantSection: want?.id || "",
+      giftFor: "",
+      recipient: "",
+      secret: true,
+      busy: false,
+    });
+  }
+
+  _hVerdict(d) {
+    const best = d.res.best_online;
+    const shelf = Number(d.shelf);
+    const hb = this._hData(d.res.plan_id);
+    if (!(shelf > 0)) return { cls: "idle", text: best ? `Lowest online: ${this._hMoney(best.price, hb)} at ${best.retailer}. Type the shelf price to compare.` : "Type the shelf price you see to keep a record of it." };
+    if (!best) return { cls: "idle", text: "No online price recorded for this product — use the search links below to compare." };
+    const diff = Math.round((best.price - shelf) * 100) / 100;
+    if (diff >= 0) return { cls: "buy", text: diff === 0 ? "✅ BUY HERE — Same as the lowest online price" : `✅ BUY HERE — Beats lowest online price by ${this._hMoney(diff, hb)}` };
+    return { cls: "online", text: `⚠️ CHEAPER ONLINE — Save ${this._hMoney(-diff, hb)} at ${best.retailer}` };
+  }
+
+  _hVerdictHtml(d) {
+    const v = this._hVerdict(d);
+    return html`<div class="hverdict ${v.cls}" aria-live="polite">${v.text}</div>`;
+  }
+
+  _hScanHtml(d) {
+    const res = d.res;
+    const product = res.product;
+    const hb = this._hData(res.plan_id);
+    const people = res.people || [];
+    const note = {
+      not_found: "No product database knows this code yet — give it a name below.",
+      limit: "The free UPC lookup allowance is used up for today; the search links still work.",
+      error: "The product database couldn't be reached.",
+      disabled: "Product lookups are off in the price tracker settings.",
+      not_retail: "This isn't a retail product code.",
+    }[res.lookup];
+    const image = product?.image ? { image_url: product.image, title: product.title, tier: "tracked" } : { tier: "tracked", title: d.title };
+    const stores = [...new Set([...(res.stores || []), ...(hb?.stores || [])])];
+    const giftSections = res.sections.filter((s) => s.kind !== "want");
+    return html`<div class="ssheet-head">${this._hThumb(image, true)}
+        <div class="grow" style="min-width:0">
+          ${product ? html`<h2>${product.title}</h2><div class="lastdone">${[product.brand, product.model, product.source ? `via ${product.source}` : ""].filter(Boolean).join(" · ")}</div>` : html`<h2>Unknown product</h2>`}
+          <div class="scode" style="margin-top:6px"><ha-icon icon="mdi:barcode"></ha-icon><code>${res.display}</code>${d.local ? html`<span class="badge ok">On your list: ${d.local.title}</span>` : ""}</div>
+        </div>${this._closeButton()}</div>
+      ${note && !product ? html`<div class="hint" style="margin-top:8px">${note}</div>` : note && res.lookup === "limit" ? html`<div class="hint" style="margin-top:8px">${note}</div>` : ""}
+      ${!product && !d.local ? html`<label style="display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--td-muted);margin-top:10px">Name<input data-hscan-title value="${d.title}" maxlength="200" placeholder="What is it?"></label>` : ""}
+      <div class="hshelf">
+        <label>Shelf price you see right now<input class="big" data-hshelf type="number" min="0" step="0.01" inputmode="decimal" value="${d.shelf}" placeholder="0.00" autofocus></label>
+        <label>Store you're in<input data-hstore list="hoard-scan-stores" value="${d.store}" maxlength="120" placeholder="Target, Costco…"></label>
+      </div>
+      <datalist id="hoard-scan-stores">${stores.map((s) => html`<option value="${s}"></option>`)}</datalist>
+      <div class="hverdict-host">${this._hVerdictHtml(d)}</div>
+      <div class="honline">
+        ${res.online.length
+          ? res.online.slice(0, 8).map(
+              (o) => html`<div class="hstore-row"><span class="name"><a href="${o.url}">${o.retailer}</a></span><span class="price ${res.best_online && o.url === res.best_online.url && o.price === res.best_online.price ? "best" : ""}">${this._hMoney(o.price, hb)}</span><span></span>
+                <span class="sub"><span class="dot ${o.in_stock === true ? "in" : o.in_stock === false ? "out" : ""}"></span>${o.source === "tracked" ? "Tracked by you" : "Recorded online offer"}${o.updated_at ? ` · ${this._hAgo(o.updated_at)}` : ""}</span></div>`,
+            )
+          : html`<div class="empty sm">No online prices recorded for this code.</div>`}
+      </div>
+      <div class="hlinks">${res.search_links.map((l) => html`<a class="chip" href="${l.url}"><ha-icon icon="mdi:open-in-new"></ha-icon>${l.name}</a>`)}</div>
+      ${(res.model_links || []).length
+        ? html`<details class="hmodel"><summary>Search by model number (${product.model})</summary>
+            <div class="hlinks">${res.model_links.map((l) => html`<a class="chip" href="${l.url}"><ha-icon icon="mdi:open-in-new"></ha-icon>${l.name}</a>`)}</div></details>`
+        : ""}
+      <div class="sactions" style="margin-top:14px">
+        <button class="btn sbig" data-action="h-scan-add" ${d.busy ? html`disabled` : ""}><ha-icon icon="mdi:plus"></ha-icon>${d.local ? "Update & track price" : "Add to Want to Buy & track"}</button>
+        <button class="btn flat" data-action="h-scan-gift" aria-expanded="${d.gift ? "true" : "false"}" ${giftSections.length ? "" : html`disabled`}><ha-icon icon="mdi:gift-outline"></ha-icon>Add to a gift list</button>
+        <button class="btn flat" data-action="h-scan-bought" ${d.busy ? html`disabled` : ""} style="grid-column:1 / -1"><ha-icon icon="mdi:check"></ha-icon>Bought it here</button>
+      </div>
+      ${d.gift
+        ? html`<div class="hgift"><div class="form">
+            <label>Gift list<select data-hscan-gsec>${giftSections.map((s) => html`<option value="${s.id}" ${s.id === d.giftSection ? html`selected` : ""}>${s.name}</option>`)}</select></label>
+            <label>For<select data-hscan-gfor><option value="">—</option>${people.map((p) => html`<option value="${p.entity_id}" ${p.entity_id === d.giftFor ? html`selected` : ""}>${p.name}</option>`)}</select></label>
+            <label class="full">…or someone else<input data-hscan-grec value="${d.recipient}" maxlength="120"></label>
+            <label class="inline full"><input type="checkbox" data-hscan-gsecret ${d.secret ? html`checked` : ""}> <ha-icon icon="mdi:incognito"></ha-icon>Stealth: only I can see it</label>
+          </div>
+          <div class="dialog-actions" style="margin-top:10px"><span class="grow"></span><button class="btn" data-action="h-scan-gift-save" ${d.busy ? html`disabled` : ""}><ha-icon icon="mdi:gift-outline"></ha-icon>Add gift</button></div></div>`
+        : ""}`;
+  }
+
+  _hScanSync() {
+    const d = this._dialog;
+    if (d?.kind !== "hoard-scan") return;
+    const q = (sel) => this.shadowRoot.querySelector(`.dialog ${sel}`);
+    if (q("[data-hshelf]")) d.shelf = q("[data-hshelf]").value;
+    if (q("[data-hstore]")) d.store = q("[data-hstore]").value;
+    if (q("[data-hscan-title]")) d.title = q("[data-hscan-title]").value;
+    if (q("[data-hscan-gsec]")) d.giftSection = q("[data-hscan-gsec]").value;
+    if (q("[data-hscan-gfor]")) d.giftFor = q("[data-hscan-gfor]").value;
+    if (q("[data-hscan-grec]")) d.recipient = q("[data-hscan-grec]").value;
+    if (q("[data-hscan-gsecret]")) d.secret = q("[data-hscan-gsecret]").checked;
+  }
+
+  async _hScanSave(mode) {
+    this._hScanSync();
+    const d = this._dialog;
+    if (d?.kind !== "hoard-scan" || d.busy) return;
+    const res = d.res;
+    const title = (res.product?.title || d.local?.title || d.title || "").trim();
+    if (!d.itemId && !title) return this._showToast("Give the product a name first");
+    const shelf = Number(d.shelf);
+    if (mode === "bought" && !(shelf > 0)) return this._showToast("Enter the shelf price you paid");
+    const message = { type: "taskdragon/hoard_add_from_scan", plan_id: res.plan_id, barcode: res.barcode, store: d.store.trim() || null };
+    if (shelf > 0) message.shelf_price = shelf;
+    if (d.itemId) message.item_id = d.itemId;
+    else message.title = title;
+    // For an item already on the list these only fill in what it's missing.
+    if (res.product?.brand) message.brand = res.product.brand;
+    if (res.product?.model) message.model = res.product.model;
+    if (res.product?.image) message.image_url = res.product.image;
+    const offers = res.online.filter((o) => o.source === "upcitemdb").slice(0, 6).map((o) => ({ url: o.url, retailer_name: o.retailer }));
+    if (offers.length) message.offers = offers;
+    if (mode === "gift") {
+      message.section_id = d.giftSection || null;
+      if (d.giftFor) message.gift_for_person_id = d.giftFor;
+      if (d.recipient.trim()) message.recipient_name = d.recipient.trim();
+      message.stealth_mode = !!d.secret;
+    } else if (!d.itemId && d.wantSection) message.section_id = d.wantSection;
+    if (mode === "bought") message.bought = true;
+    d.busy = true;
+    this._renderDialog();
+    let saved;
+    try {
+      saved = await this._call(message);
+    } catch (_err) {
+      d.busy = false;
+      if (this._dialog === d) this._renderDialog();
+      return;
+    }
+    this._closeDialog();
+    this._hPut(saved);
+    if (mode === "bought") this._showToast(saved.protection?.active ? `Bought ${saved.title} — price protection on for ${saved.protection.days_left} days` : `Bought ${saved.title}`);
+    else if (mode === "gift") this._showToast(`Added ${saved.title} to the gift list${saved.stealth_mode ? " (secret)" : ""}`);
+    else this._showToast(`Tracking ${saved.title}${saved.urls.length ? ` at ${saved.urls.length} ${saved.urls.length === 1 ? "store" : "stores"}` : ""}`);
+    this._loadHoard(saved.plan_id);
+  }
+
+  /* ---------------- Wishlist: tracker settings ---------------- */
+
+  async _hSettingsOpen() {
+    const planId = this._hPlanId();
+    let settings;
+    try {
+      settings = await this._store.call({ type: "taskdragon/hoard_settings" });
+    } catch (err) {
+      return this._fail(err);
+    }
+    this._openDialog({ kind: "hoard-settings", planId, settings });
+  }
+
+  _hSettingsHtml(d) {
+    const s = d.settings;
+    const admin = this._isAdmin();
+    const off = admin ? "" : html`disabled`;
+    return html`<h2><span class="grow">Price tracker</span>${this._closeButton()}</h2>
+      ${admin ? "" : html`<div class="hint">Only administrators can change these.</div>`}
+      <div class="form">
+        <label class="inline full"><input type="checkbox" name="tracking" ${s.tracking ? html`checked` : ""} ${off}> Check store prices automatically</label>
+        <label>Every (hours)<input name="check_hours" type="number" min="1" max="168" value="${s.check_hours}" ${off}></label>
+        <label>Price protection (days)<input name="protection_days" type="number" min="1" max="180" value="${s.protection_days}" ${off}></label>
+        <label class="inline full"><input type="checkbox" name="deal_radar" ${s.deal_radar ? html`checked` : ""} ${off}> Deal radar (Slickdeals and Reddit searches for concept tags)</label>
+        <label>Search every (hours)<input name="deal_hours" type="number" min="1" max="168" value="${s.deal_hours}" ${off}></label>
+        <label class="inline full"><input type="checkbox" name="upc_lookup" ${s.upc_lookup ? html`checked` : ""} ${off}> Look up scanned barcodes on UPCitemdb (about 100 free lookups a day)</label>
+        <label>Impulse cooldown from<input name="impulse_threshold" type="number" min="0" step="1" value="${s.impulse_threshold}" ${off}></label>
+        <label>Cooldown length (days)<input name="impulse_days" type="number" min="1" max="60" value="${s.impulse_days}" ${off}></label>
+      </div>
+      <p class="hint" style="margin-top:10px">Only product page addresses, deal search words and barcode digits leave Home Assistant. Addresses on your own network are never fetched.</p>
+      <div class="dialog-actions"><span class="grow"></span><button class="btn flat" data-action="dialog-close">Close</button>
+        ${admin ? html`<button class="btn" data-action="h-settings-save">Save</button>` : ""}</div>`;
+  }
+
+  async _hSettingsSave() {
+    const d = this._dialog;
+    if (d?.kind !== "hoard-settings") return;
+    const v = this._hFormValues();
+    const settings = {
+      tracking: !!v.tracking,
+      check_hours: Number(v.check_hours),
+      deal_radar: !!v.deal_radar,
+      deal_hours: Number(v.deal_hours),
+      upc_lookup: !!v.upc_lookup,
+      impulse_threshold: Number(v.impulse_threshold),
+      impulse_days: Number(v.impulse_days),
+      protection_days: Number(v.protection_days),
+    };
+    await this._call({ type: "taskdragon/hoard_settings", settings });
+    this._closeDialog();
+    this._showToast("Price tracker settings saved");
+    if (d.planId) this._loadHoard(d.planId);
+  }
+
+  /* ---------------- Wishlist: actions ---------------- */
+
+  async _hoardAction(action, el) {
+    const id = el.dataset.id;
+    const planId = this._hPlanId() || this._dialog?.planId || this._dialog?.res?.plan_id;
+    const ui = this._hUi();
+    switch (action) {
+      case "h-retry":
+        this._hoardError = null;
+        return this._loadHoard(id);
+      case "h-section":
+        ui.section = id;
+        return this._renderBody();
+      case "h-new-section":
+        return this._openDialog({ kind: "hoard-section", planId, section: { kind: "holiday", icon: "mdi:calendar-star", repeats_yearly: true } });
+      case "h-edit-section": {
+        const section = this._hSection(this._hData(planId), id);
+        if (section) this._openDialog({ kind: "hoard-section", planId, section: { ...section } });
+        return;
+      }
+      case "h-section-save":
+        return this._hSectionSave();
+      case "h-section-delete": {
+        if (!confirm("Delete this section? Its items move to Unsorted.")) return;
+        await this._call({ type: "taskdragon/hoard_delete_section", section_id: id });
+        this._closeDialog();
+        ui.section = "all";
+        return this._loadHoard(planId);
+      }
+      case "h-open":
+        return this._hOpenDetail(planId, id, !!el.dataset.focusLink);
+      case "h-add":
+        return this._openDialog({ kind: "hoard-edit", planId: el.dataset.plan || planId, item: this._hNewItem(el.dataset.plan || planId) });
+      case "h-edit": {
+        const item = this._hItem(planId, id);
+        if (item) this._openDialog({ kind: "hoard-edit", planId, item: { ...item } });
+        return;
+      }
+      case "h-save":
+        return this._hSave();
+      case "h-next": {
+        const item = this._hItem(planId, id);
+        const next = item && this._hNextStatus(this._hData(planId), item);
+        if (!next) return;
+        const res = await this._call({ type: "taskdragon/hoard_set_status", item_id: id, status: next });
+        this._hPut(res);
+        return this._showToast(`${res.title}: ${this._hStatus(next)[1]}${next === "stashed" && !res.hiding_spot ? " — add the hiding spot so you don't forget" : ""}`, null, next === "stashed" && !res.hiding_spot ? [{ label: "Add hiding spot", run: () => this._openDialog({ kind: "hoard-edit", planId, item: { ...res } }) }] : []);
+      }
+      case "h-status": {
+        const status = el.dataset.status;
+        const item = this._hItem(planId, id);
+        if (!item || item.status === status) return;
+        if (status === "purchased" && !HOARD_OWNED.has(item.status)) return this._openDialog({ kind: "hoard-purchase", planId, item });
+        return this._hPut(await this._call({ type: "taskdragon/hoard_set_status", item_id: id, status }));
+      }
+      case "h-purchase": {
+        const item = this._hItem(planId, id);
+        if (item) this._openDialog({ kind: "hoard-purchase", planId, item });
+        return;
+      }
+      case "h-purchase-save":
+        return this._hPurchaseSave();
+      case "h-check": {
+        el.disabled = true;
+        try {
+          const res = await this._call({ type: "taskdragon/hoard_check_now", item_id: id });
+          this._hPut(res);
+          const errors = res.urls.filter((u) => u.last_error).length;
+          this._showToast(res.best ? `Best now: ${this._hMoney(res.best.price)} at ${res.best.retailer}${errors ? ` (${errors} store${errors === 1 ? "" : "s"} couldn't be read)` : ""}` : "No price found yet — open the item to see why");
+        } finally {
+          el.disabled = false;
+        }
+        return;
+      }
+      case "h-delete": {
+        const res = await this._call({ type: "taskdragon/hoard_delete_item", item_id: id });
+        this._closeDialog();
+        const hb = this._hData(planId);
+        if (hb) hb.items = hb.items.filter((i) => i.id !== id);
+        this._renderBody();
+        return this._showToast("Item deleted", this._undoWith(res.undo));
+      }
+      case "h-url-add": {
+        const input = this.shadowRoot.querySelector(`[data-hurl="${CSS.escape(id)}"]`);
+        const url = input?.value.trim();
+        if (!url) return this._showToast("Paste a product page address first");
+        const res = await this._call({ type: "taskdragon/hoard_add_url", item_id: id, url });
+        this._hPut(res);
+        this._showToast("Store added — checking its price…");
+        setTimeout(() => this._loadHoard(res.plan_id), 12000);
+        return;
+      }
+      case "h-url-del": {
+        if (!confirm("Stop tracking this store?")) return;
+        return this._hPut(await this._call({ type: "taskdragon/hoard_delete_url", url_id: id }));
+      }
+      case "h-url-sel": {
+        const value = this.shadowRoot.querySelector(`[data-hsel="${CSS.escape(id)}"]`)?.value.trim() || null;
+        const res = await this._call({ type: "taskdragon/hoard_update_url", url_id: id, css_selector: value });
+        this._hPut(res);
+        this._showToast(value ? "Selector saved — checking the page again…" : "Selector removed");
+        setTimeout(() => this._loadHoard(res.plan_id), 12000);
+        return;
+      }
+      case "h-record": {
+        const price = Number(this.shadowRoot.querySelector(`[data-hrecord="${CSS.escape(id)}"]`)?.value);
+        const store = this.shadowRoot.querySelector("[data-hrecord-store]")?.value.trim() || null;
+        if (!(price > 0)) return this._showToast("Enter the price you saw");
+        const res = await this._call({ type: "taskdragon/hoard_record_price", item_id: id, price, store, source: "in_store" });
+        this._hPut(res);
+        return this._hOpenDetail(res.plan_id, res.id);
+      }
+      case "h-deal-promote": {
+        const res = await this._call({ type: "taskdragon/hoard_deal_action", deal_id: id, action: "promote" });
+        this._hPut(res);
+        return this._showToast("Tracking that deal's price");
+      }
+      case "h-deal-dismiss":
+        return this._hPut(await this._call({ type: "taskdragon/hoard_deal_action", deal_id: id, action: "dismiss" }));
+      case "h-deals-now": {
+        el.disabled = true;
+        try {
+          const res = await this._call({ type: "taskdragon/hoard_check_deals", item_id: id });
+          this._hPut(res);
+          this._showToast(res.deals.length ? `${res.deals.length} matching deals` : "No matching deals right now");
+        } finally {
+          el.disabled = false;
+        }
+        return;
+      }
+      case "h-scan":
+        if (this._dialog?.kind === "hoard-detail") this._closeDialog();
+        return this._scanOpen("hoard", { planId: el.dataset.plan || planId, itemId: el.dataset.item || null });
+      case "h-scan-add":
+        return this._hScanSave("want");
+      case "h-scan-bought":
+        return this._hScanSave("bought");
+      case "h-scan-gift":
+        this._hScanSync();
+        this._dialog.gift = !this._dialog.gift;
+        return this._renderDialog();
+      case "h-scan-gift-save":
+        return this._hScanSave("gift");
+      case "h-reveal": {
+        ui.revealed.add(id);
+        clearTimeout(this._hRevealTimer);
+        this._hRevealTimer = setTimeout(() => {
+          ui.revealed.clear();
+          ui.revealAll = false;
+          if (this._hPlanId()) this._renderBody();
+        }, HOARD_REVEAL_MS);
+        return this._renderBody();
+      }
+      case "h-reveal-all":
+        ui.revealAll = !ui.revealAll;
+        if (!ui.revealAll) ui.revealed.clear();
+        clearTimeout(this._hRevealTimer);
+        if (ui.revealAll) {
+          this._hRevealTimer = setTimeout(() => {
+            ui.revealAll = false;
+            ui.revealed.clear();
+            if (this._hPlanId()) this._renderBody();
+          }, HOARD_REVEAL_MS);
+        }
+        return this._renderBody();
+      case "h-settings":
+        return this._hSettingsOpen();
+      case "h-settings-save":
+        return this._hSettingsSave();
+      default:
+        return;
+    }
+  }
+
+  /** Enter in the wishlist's inputs. */
+  _hoardKey(el) {
+    const data = el.dataset;
+    const run = (promise) => promise.catch((err) => console.debug("TaskDragon action failed", err));
+    if (data.hoardInput) run(this._hQuickAdd(data.hoardInput));
+    else if (data.hurl) run(this._hoardAction("h-url-add", { dataset: { id: data.hurl } }));
+    else if (data.hrecord) run(this._hoardAction("h-record", { dataset: { id: data.hrecord } }));
+    else if (data.hsel) run(this._hoardAction("h-url-sel", { dataset: { id: data.hsel } }));
+  }
+
+  /** A form choice that changes which fields make sense (section type, or a gift section). */
+  _hoardChange(el) {
+    const d = this._dialog;
+    if (d?.kind === "hoard-section" && el.name === "kind") {
+      const v = this._hFormValues();
+      d.section = { ...d.section, ...v, budget: v.budget === "" ? null : Number(v.budget) };
+      this._renderDialog();
+      return true;
+    }
+    if (d?.kind === "hoard-edit" && (el.name === "section_id" || el.name === "gift_for_person_id")) {
+      const v = this._hFormValues();
+      const keep = { ...v, target_price: v.target_price === "" ? null : Number(v.target_price), deal_max_price: v.deal_max_price === "" ? null : Number(v.deal_max_price) };
+      delete keep.first_url;
+      d.item = { ...d.item, ...keep };
+      this._renderDialog();
+      return true;
+    }
+    return false;
+  }
+
+  /** Typing the shelf price updates the verdict without re-rendering (and losing focus). */
+  _hoardInput(el) {
+    if (el.dataset?.hshelf === undefined && el.dataset?.hstore === undefined) return false;
+    const d = this._dialog;
+    if (d?.kind !== "hoard-scan") return true;
+    this._hScanSync();
+    const host = this.shadowRoot.querySelector(".hverdict-host");
+    if (host) setHTML(host, this._hVerdictHtml(d));
+    return true;
+  }
+
+  /* ---------------- Wishlist: deep links from price alerts ---------------- */
+
+  async _hDeepLink() {
+    if (this._hLinked) return;
+    const params = new URLSearchParams(window.location.search);
+    const planId = params.get("hoard_plan");
+    const itemId = params.get("hoard_item");
+    if (!planId && !itemId) {
+      this._hLinked = true;
+      return;
+    }
+    if (!this._board) return;
+    this._hLinked = true;
+    for (const key of ["hoard_plan", "hoard_item"]) params.delete(key);
+    const query = params.toString();
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+    const plans = this._activePlans().filter((p) => p.archetype === "wishlist_hoard" && (!planId || p.id === planId));
+    for (const plan of plans) {
+      const hb = await this._loadHoard(plan.id);
+      if (!hb) continue;
+      if (itemId && !hb.items.some((i) => i.id === itemId)) continue;
+      this._ui.tab = plan.id;
+      this._hUi().section = "all";
+      this._render();
+      if (itemId) this._hOpenDetail(plan.id, itemId);
+      return;
+    }
+    this._showToast("That wishlist item isn't available — it was deleted or isn't shared with you");
+  }
+
   /* ---------------- Dialogs ---------------- */
 
   _openDialog(dialog) {
@@ -4760,11 +6067,17 @@ class TaskDragonCard extends HTMLElement {
       "recipe-plan": () => this._recipePlanHtml(d),
       "scan-part": () => this._scanPartHtml(d),
       "scan-link": () => this._scanLinkHtml(d),
+      "hoard-detail": () => this._hDetailHtml(d),
+      "hoard-edit": () => this._hEditHtml(d),
+      "hoard-purchase": () => this._hPurchaseHtml(d),
+      "hoard-section": () => this._hSectionHtml(d),
+      "hoard-scan": () => this._hScanHtml(d),
+      "hoard-settings": () => this._hSettingsHtml(d),
       cook: () => this._cookHtml(d),
       settings: () => this._settingsHtml(d),
     };
     const inner = renderers[d.kind] ? renderers[d.kind]() : html``;
-    const frame = { "scan-part": ["sheet-wrap", "sheet"], cook: ["cook-wrap", "cook"], settings: ["", "settings"] }[d.kind] || ["", ""];
+    const frame = { "scan-part": ["sheet-wrap", "sheet"], "hoard-scan": ["sheet-wrap", "sheet"], cook: ["cook-wrap", "cook"], settings: ["", "settings"] }[d.kind] || ["", ""];
     setHTML(
       host,
       html`<div class="backdrop ${frame[0]}" data-action="${d.kind === "cook" ? "noop" : "dialog-backdrop"}"><div class="dialog ${frame[1]}" role="dialog" aria-modal="true" aria-label="${d.kind === "cook" ? d.name : ""}">${inner}</div></div>`,
@@ -4772,6 +6085,7 @@ class TaskDragonCard extends HTMLElement {
     if (d.kind === "plan") this._mountIconPicker();
     if (d.kind === "maint-qr") this._mMountQr();
     if (d.kind === "cook") this._cookMounted(d);
+    if (d.kind === "hoard-detail") this._hHydrate(host);
     const first = host.querySelector("[autofocus]");
     if (first) setTimeout(() => first.focus(), 30);
   }
@@ -4782,7 +6096,7 @@ class TaskDragonCard extends HTMLElement {
 
   _taskDialogHtml(d) {
     const t = d.task;
-    const plans = this._activePlans().filter((p) => p.archetype !== "pantry_spices");
+    const plans = this._activePlans().filter((p) => p.archetype !== "pantry_spices" && p.archetype !== "wishlist_hoard");
     const plan = this._idx.plans.get(t.plan_id) || plans[0];
     const people = this._board.people || [];
     const assigned = new Set(t.assigned_to || []);
@@ -5097,7 +6411,7 @@ class TaskDragonCard extends HTMLElement {
 
   _promoteHtml(d) {
     const task = d.task;
-    const targets = this._activePlans().filter((p) => p.id !== task.plan_id && p.archetype !== "pantry_spices" && !this._idx.quickIds.has(p.id));
+    const targets = this._activePlans().filter((p) => p.id !== task.plan_id && p.archetype !== "pantry_spices" && p.archetype !== "wishlist_hoard" && !this._idx.quickIds.has(p.id));
     const order = (p) => (p.archetype === "quick_list" ? 1 : 0) + (p.is_private ? 2 : 0);
     targets.sort((a, b) => order(a) - order(b));
     return html`<h2><span class="grow">Move “${task.summary}” to…</span>${this._closeButton()}</h2>
@@ -6450,6 +7764,10 @@ class TaskDragonCard extends HTMLElement {
         ui.selected.clear();
         ui.renaming = null;
         if (this._idx.plans.get(id)?.archetype === "shopping_errands" && ui.showHistory) this._loadHistory(id);
+        if (this._idx.plans.get(id)?.archetype === "wishlist_hoard") {
+          this._hoardError = null;
+          if (this._hData(id)) this._queueHoardLoad(id);
+        }
         if (this._idx.plans.get(id)?.archetype === "home_maintenance") {
           Object.assign(ui.maint, { taskId: null, objectId: null, search: false, addMenu: false, headMenu: false, area: null });
           this._maintError = null;
@@ -6763,6 +8081,7 @@ class TaskDragonCard extends HTMLElement {
         if (action.startsWith("s-")) return this._scanAction(action, el, event);
         if (action.startsWith("c-")) return this._cookAction(action, el, event);
         if (action.startsWith("b-")) return this._settingsAction(action, el, event);
+        if (action.startsWith("h-")) return this._hoardAction(action, el, event);
         return;
     }
   }
@@ -6818,6 +8137,7 @@ class TaskDragonCard extends HTMLElement {
       [data.pantryInput, () => this._pantryAdd(data.pantryInput)],
       [data.seasoningInput !== undefined, () => this._seasoningAdd(el)],
       [data.scanManual !== undefined, () => this._scanManual()],
+      [data.hoardInput || data.hurl || data.hrecord || data.hsel, () => this._hoardKey(el)],
       [data.scanQty !== undefined, () => this._scanAction("s-restock-custom", el)],
       [data.quickInput, () => this._quickAdd(data.quickInput)],
       [data.sectionInput !== undefined && data.plan, () => this._sectionTaskAdd(el)],
@@ -6834,6 +8154,7 @@ class TaskDragonCard extends HTMLElement {
   _onInput(event) {
     const el = event.composedPath()[0];
     if (this._extrasInput(el)) return;
+    if (this._hoardInput(el)) return;
     if (el.classList?.contains("td-search")) {
       this._ui.search = el.value;
       clearTimeout(this._searchTimer);
@@ -6856,6 +8177,7 @@ class TaskDragonCard extends HTMLElement {
     if (this._maintChange(el)) return;
     if (this._recipeChange(el)) return;
     if (this._extrasChange(el)) return;
+    if (this._hoardChange(el)) return;
     if (el.dataset?.bulk && el.value) {
       const value = el.value;
       el.value = "";

@@ -8,7 +8,7 @@ can be unit tested without a Home Assistant installation.
 from __future__ import annotations
 
 DOMAIN = "taskdragon"
-VERSION = "1.3.4"
+VERSION = "1.4.0"
 
 DB_FILENAME = "taskdragon.db"
 
@@ -27,6 +27,7 @@ EVENT_TASK_COMPLETED = "taskdragon_task_completed"
 EVENT_TASK_UNSNOOZED = "taskdragon_task_unsnoozed"
 EVENT_PANTRY_LOW = "taskdragon_pantry_low"
 EVENT_BARCODE_ACTION = "taskdragon_barcode_action"
+EVENT_PRICE_ALERT = "taskdragon_price_alert"
 SIGNAL_UPDATED = "taskdragon_updated_signal"
 SIGNAL_PLAN_ADDED = "taskdragon_plan_added"
 SIGNAL_PLAN_REMOVED = "taskdragon_plan_removed"
@@ -122,6 +123,7 @@ ARCHETYPE_PROJECTS = "projects_diy"
 ARCHETYPE_MAINTENANCE = "home_maintenance"
 ARCHETYPE_PACKING = "packing_trips"
 ARCHETYPE_PANTRY = "pantry_spices"
+ARCHETYPE_HOARD = "wishlist_hoard"
 ARCHETYPES = (
     ARCHETYPE_QUICK,
     ARCHETYPE_DAILY,
@@ -130,6 +132,7 @@ ARCHETYPES = (
     ARCHETYPE_MAINTENANCE,
     ARCHETYPE_PACKING,
     ARCHETYPE_PANTRY,
+    ARCHETYPE_HOARD,
 )
 # Archetypes whose items are "tasks" (as opposed to shopping/pantry/packing items)
 ACTIONABLE_ARCHETYPES = (ARCHETYPE_QUICK, ARCHETYPE_DAILY, ARCHETYPE_PROJECTS, ARCHETYPE_MAINTENANCE)
@@ -322,3 +325,42 @@ OPENFOODFACTS_TIMEOUT_SECONDS = 4
 BACKUP_DIRNAME = "taskdragon"  # under <config>/backups/
 BACKUP_DEFAULT_RETENTION = 14
 BACKUP_DEFAULT_TIME = "03:15"
+
+# ---------------------------------------------------------------------------
+# Wishlist, gift & price tracker ("Hoard")
+# ---------------------------------------------------------------------------
+HOARD_KIND_WANT = "want"
+HOARD_KIND_HOLIDAY = "holiday"
+HOARD_KIND_BIRTHDAY = "birthday"
+HOARD_KIND_OCCASION = "occasion"
+HOARD_SECTION_KINDS = (HOARD_KIND_WANT, HOARD_KIND_HOLIDAY, HOARD_KIND_BIRTHDAY, HOARD_KIND_OCCASION)
+HOARD_GIFT_KINDS = (HOARD_KIND_HOLIDAY, HOARD_KIND_BIRTHDAY, HOARD_KIND_OCCASION)
+HOARD_IDEA = "idea"
+HOARD_WATCHING = "watching"
+HOARD_PURCHASED = "purchased"
+HOARD_SHIPPED = "shipped"
+HOARD_STASHED = "stashed"
+HOARD_WRAPPED = "wrapped"
+HOARD_GIFTED = "gifted"
+HOARD_STATUSES = (HOARD_IDEA, HOARD_WATCHING, HOARD_PURCHASED, HOARD_SHIPPED, HOARD_STASHED, HOARD_WRAPPED, HOARD_GIFTED)
+HOARD_SHOPPING_STATUSES = (HOARD_IDEA, HOARD_WATCHING)  # still deciding what (and where) to buy
+HOARD_OWNED_STATUSES = (HOARD_PURCHASED, HOARD_SHIPPED, HOARD_STASHED, HOARD_WRAPPED, HOARD_GIFTED)
+HOARD_PRICE_SOURCES = ("online", "in_store", "manual", "purchase")
+HOARD_DEFAULT_SECTIONS = (
+    {"kind": HOARD_KIND_WANT, "name": "Want to Buy", "icon": "mdi:cart-heart"},
+    {"kind": HOARD_KIND_HOLIDAY, "name": "Christmas", "icon": "mdi:pine-tree", "event_date": "2026-12-25", "repeats_yearly": True},
+    {"kind": HOARD_KIND_BIRTHDAY, "name": "Birthdays", "icon": "mdi:cake-variant-outline"},
+)
+HOARD_KEY_FILENAME = "taskdragon_hoard.key"  # under <config>/.storage/
+HOARD_DEFAULT_CHECK_HOURS = 6
+HOARD_DEFAULT_DEAL_HOURS = 3
+HOARD_DEFAULT_PROTECTION_DAYS = 30
+HOARD_DEFAULT_IMPULSE_THRESHOLD = 100
+HOARD_DEFAULT_IMPULSE_DAYS = 7
+HOARD_MAX_URLS_PER_ITEM = 12
+HOARD_MAX_DEALS_PER_ITEM = 20
+HOARD_HISTORY_DAYS = 400  # price checks older than this are pruned
+UPCITEMDB_URL = "https://api.upcitemdb.com/prod/trial/lookup"
+SLICKDEALS_RSS_URL = "https://slickdeals.net/newsearch.php"
+REDDIT_SEARCH_URL = "https://www.reddit.com/r/{subs}/search.json"
+REDDIT_DEAL_SUBS = ("buildapcsales", "deals")

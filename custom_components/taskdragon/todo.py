@@ -36,6 +36,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    ARCHETYPE_HOARD,
     ARCHETYPE_MAINTENANCE,
     ARCHETYPE_PACKING,
     ARCHETYPE_PANTRY,
@@ -90,12 +91,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         entities[plan["id"]] = entity
         return entity
 
-    plans = [plan for plan in await coordinator.db.list_plans() if not plan["is_private"]]
+    # Wishlists have no to-do entity: entity state is readable by everyone, and gift lists are secret.
+    plans = [plan for plan in await coordinator.db.list_plans() if not plan["is_private"] and plan["archetype"] != ARCHETYPE_HOARD]
     async_add_entities([build(plan) for plan in plans], update_before_add=True)
 
     @callback
     def plan_added(plan: dict[str, Any]) -> None:
-        if plan["id"] not in entities and not plan.get("archived") and not plan.get("is_private"):
+        if plan["id"] not in entities and not plan.get("archived") and not plan.get("is_private") and plan.get("archetype") != ARCHETYPE_HOARD:
             async_add_entities([build(plan)], update_before_add=True)
 
     @callback

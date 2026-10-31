@@ -60,6 +60,7 @@ automation:
 | `taskdragon_maintenance_due` | `task_id`, `object_id`, `plan_id`, `code`, `name`, `object_name`, `status` (`due_soon`, `overdue` or `triggered`), `countdown`, `assigned_to` |
 | `taskdragon_maintenance_completed` | `uid` (the task id), `name`, `object`, `code`, `method` (`manual`, `nfc`, `qr`, `todo`, `service`, `auto_recovery`), `person`, `user_name`, `next_due`, `plan_id` |
 | `taskdragon_barcode_action` | `barcode`, `target_type` (`pantry_item` or `maintenance_part`), `target_id`, `name`, `action` (`use_one`, `restock_qty`, `set_pantry_status`), `quantity` or `status`, `user_id` |
+| `taskdragon_price_alert` | `kind` (`target`, `all_time_low` or `protection`), `item_id`, `plan_id`, `title`, `price`, `retailer`, `url`, `target_price`, `paid_price`, `savings`, `days_left` (for secret gifts everything but the ids and `kind` is `null` and `secret` is `true`) |
 | `taskdragon_updated` | `plan_ids` |
 
 For private lists, the name fields are `null` and `private` is `true`. For example, to notify the assignee when a "next time I'm home" task wakes up, trigger on `taskdragon_task_unsnoozed`. For maintenance, pick a `notify.*` service in the plan's **Settings** (administrators), or build your own automation on `taskdragon_maintenance_due`.
@@ -75,6 +76,8 @@ For private lists, the name fields are `null` and `private` is `true`. For examp
 - **Undo** data stays on the server behind single-use tokens tied to your user, so a client can never "restore" records into someone else's list.
 - **Barcodes**: lookups, links and scan actions go through the same per-plan checks. A barcode linked to something in a list you can't see behaves like an unknown code, the pickers only list what you can see, and you can't re-link someone else's private item. The camera feed never leaves the phone; only the decoded number goes to Home Assistant. For unknown retail codes Home Assistant asks Open Food Facts about that number only (no account, no household data, 4-second timeout, no redirects, 512 KB cap, answers cached). An administrator can switch that lookup off in Settings.
 - **Backups**: listing, creating, downloading, deleting and restoring backups is administrator-only, over WebSocket (`require_admin`) and HTTP (`/api/taskdragon/backup/…`, which also accepts short-lived signed paths so downloads save natively in the Companion apps). Uploads stream to disk with a 1 GB cap. Zip members are read by exact name with size limits, so nothing is ever extracted to a path taken from the archive. Restored table and column names are checked against the live schema before they reach SQL, and values must be plain scalars. A backup holds the whole household's data, including private lists and people's names, so keep the file somewhere safe.
+- **Wishlist and gifts**: anti-spoiler rules are applied on the server for every read and write. A gift for a household member is left out of everything sent to the Home Assistant user linked to that person (the board, scans, item sheets, history), unless that user added it. Stealth items and sections go only to the user who added them, and only that user can change their stealth setting. Hidden items come back as anonymous counts per buyer, and any command naming one answers `not_found`. Kiosk masking is an extra, client-side cover on shared screens. Hiding-spot notes are encrypted at rest with Fernet (`cryptography`, part of Home Assistant). The key is `.storage/taskdragon_hoard.key` (owner-only permissions), portable backups carry it as `secrets/hoard.key` with a checksum, and a restore re-encrypts notes under the local key. Wishlists get no `todo.*` entity, and price-alert notifications and events for secret gifts carry no title, price or store. Tracker settings can be changed by administrators only.
+- **Price tracker network access**: store pages, deal feeds and UPC lookups go through one guarded client. It allows only `http`/`https` on ports 80 and 443 and no credentials in URLs, and refuses names like `localhost` or `*.local` and literal private, loopback, link-local and CGNAT addresses. A DNS resolver inside the connection drops non-public answers, so DNS rebinding can't reach the LAN either. Redirects are followed manually (at most five), each one re-checked. Requests time out after 10 seconds, read at most 4 MB of pages (1 MB of feeds and JSON), keep no cookies and wait 3 seconds between requests to the same host. Pages are parsed with BeautifulSoup's pure-Python parser in the executor, and scripts never run. RSS with a DTD or entities is refused. Custom price selectors are validated CSS (soupsieve) of at most 300 characters; free-form regular expressions aren't accepted, because a slow pattern could stall the parser. Sent out: only the page address, the deal search words and the barcode digits.
 - **Maintenance**: objects, tasks, parts and documents go through the same per-plan access checks as everything else, including the upload, download and PDF endpoints (`/api/taskdragon/…`, Home Assistant authentication required). The card opens files through short-lived signed URLs. Uploads are accepted by their content (magic bytes), not their name or claimed type. Anything outside the allowed types is refused, filenames are sanitized, and files are served with `nosniff` and a sandboxing CSP. Only administrators can set a task's on-complete service call or a plan's notify service, because both run with Home Assistant's privileges. Reorder and document links must be `http(s)`.
 
 ## How it fits together
@@ -87,7 +90,8 @@ custom_components/taskdragon/
 ├── planner.py         all task rules: completion + audit log, recurrence, dependencies, snoozes, pantry, BOM,
 │                      quick-list sections, trips, access control, undo tokens, per-user preferences
 ├── database.py        aiosqlite schema + migrations (plans, tasks, sections, trips, task_dependencies,
-│                      completion_logs, pantry_items, snooze_rules, bom_items, item_history, user_prefs, barcode_mappings, …)
+│                      completion_logs, pantry_items, snooze_rules, bom_items, item_history, user_prefs, barcode_mappings,
+│                      hoard_sections, hoard_items, tracked_item_urls, price_history, hoard_deals, …)
 ├── todo.py            one native TodoListEntity per household plan
 ├── websocket_api.py   taskdragon/* commands (each with an access guard) + per-user taskdragon/subscribe
 ├── diagnostics.py     redacted diagnostics download
@@ -114,6 +118,11 @@ custom_components/taskdragon/
 ├── openfoodfacts.py   cached, size-capped Open Food Facts product lookups
 ├── backup_manager.py  portable zip export, users / hardware bridge maps, verified replace / merge restore, snapshots
 ├── backup_ws.py       taskdragon/backup_* WebSocket commands (administrators)
+├── hoard.py           wishlist sections and items, anti-spoiler masking, store links, price checks, alerts,
+│                      price protection, deal radar, in-store scans, encrypted hiding spots
+├── hoard_ws.py        taskdragon/hoard_* and taskdragon/scan_price_check WebSocket commands
+├── price_tracker.py   guarded HTTP client (public addresses only), JSON-LD / meta / retailer / custom-selector
+│                      price extraction, Slickdeals + Reddit deal feeds, UPCitemdb lookups
 ├── migration.py       carries an installation over from the integration's former name (OmniPlan)
 ├── qr.py              QR-code encoder (Reed–Solomon, byte mode)
 ├── pdf.py             minimal PDF table writer
@@ -122,7 +131,7 @@ custom_components/taskdragon/
     └── vendor/            ZXing barcode reader (Apache-2.0), loaded only where the browser has no BarcodeDetector
 ```
 
-The modules that hold the logic (`planner`, `database`, `units`, `dependencies`, `recurrence`, `shift_balance`, `snooze`, `kitchen`, `brain_dump`, `maintenance`, `maintenance_manager`, `qr`, `pdf`, `recipes`, `recipe_browser`, `barcodes`, `barcode_manager`, `backup_manager`, `migration`) don't import Home Assistant, which is why most of the behaviour can be unit-tested without it.
+The modules that hold the logic (`planner`, `database`, `units`, `dependencies`, `recurrence`, `shift_balance`, `snooze`, `kitchen`, `brain_dump`, `maintenance`, `maintenance_manager`, `qr`, `pdf`, `recipes`, `recipe_browser`, `barcodes`, `barcode_manager`, `backup_manager`, `migration`, `hoard`, `price_tracker`) don't import Home Assistant, which is why most of the behaviour can be unit-tested without it.
 
 The database file and the `taskdragon_docs` folder are included in Home Assistant backups because they live in `.storage`, and so are the portable snapshots in `backups/taskdragon/`. Deleting the integration leaves them all in place.
 
