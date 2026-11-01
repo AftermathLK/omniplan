@@ -111,6 +111,7 @@ from .mealie_client import InvalidMealieUrl, MealieAuthError, MealieClient, Meal
 from .openfoodfacts import OpenFoodFactsClient
 from .planner import SYSTEM, Actor, Planner
 from .price_tracker import GuardedFetcher, ProductLookup
+from .ratelimit import RateLimiter
 from .recipe_browser import RecipeBrowser
 from .shift_balance import Chore, PersonAvailability, balance_chores, parse_keywords, shifts_for_day
 from .snooze import (
@@ -132,6 +133,8 @@ MEALIE_PUSH_DELAY = 3.0
 HOARD_TICK = timedelta(minutes=10)
 HOARD_FIRST_TICK_SECONDS = 120
 HOARD_SECRETS_FILE = "hoard.key"  # name inside portable backups (secrets/hoard.key)
+BRAIN_DUMP_LIMIT = 30  # per user ...
+BRAIN_DUMP_WINDOW = 600  # ... per ten minutes
 
 
 class TaskDragonCoordinator:
@@ -198,6 +201,7 @@ class TaskDragonCoordinator:
             secrets_provider=self._backup_secrets,
             restore_secrets=self._restore_secrets,
         )
+        self.brain_limiter = RateLimiter(BRAIN_DUMP_LIMIT, BRAIN_DUMP_WINDOW)
         self._unsubs: list[CALLBACK_TYPE] = []
         self._state_unsub: CALLBACK_TYPE | None = None
         self._pending_plans: set[str] = set()
@@ -217,6 +221,7 @@ class TaskDragonCoordinator:
         await self.planner.seed_defaults()
         await self.planner.ensure_defaults()
         await self.maintenance.async_start()
+        await self.maintenance.manager.trust_existing_actions()
         await self.hass.async_add_executor_job(self.hoard.box.load)
         await self._ensure_hoard_plan()
         self._known_plans = await self._entity_plan_ids()
@@ -332,6 +337,13 @@ class TaskDragonCoordinator:
                 }
             )
         return people
+
+    def people_for(self, actor: Actor) -> list[dict[str, Any]]:
+        """People for the card: work calendars only for administrators (user ids are needed to share lists)."""
+        people = self.people_info()
+        if actor.user_id is None or actor.is_admin:
+            return people
+        return [{k: v for k, v in p.items() if k != "calendar"} for p in people]
 
     def person_for_user(self, user_id: str | None) -> str | None:
         if not user_id:
@@ -451,12 +463,20 @@ class TaskDragonCoordinator:
             if rotated:
                 _LOGGER.info("Re-encrypted %s restored hiding-spot notes", rotated)
 
-    async def async_after_restore(self) -> None:
+    async def async_after_restore(self) -> list[str]:
         """Reload everything that caches database state, then tell every open card to refresh."""
+        warnings: list[str] = []
+        paused = await self.maintenance.manager.pause_restored_actions()
+        if paused:
+            warnings.append(
+                f"{paused} on-complete device action{'s are' if paused != 1 else ' is'} paused until an administrator opens "
+                "the task and saves it again (actions in a backup file aren't trusted automatically)"
+            )
         self.planner.clear_undo()
         await self.maintenance.manager.async_load()
         plan_ids = {plan["id"] for plan in await self.db.list_plans(include_archived=True)} | set(self._known_plans)
         self._notify(plan_ids)
+        return warnings
 
     def conversation_agent(self) -> str | None:
         return self.options.get(CONF_CONVERSATION_AGENT) or None

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
@@ -158,6 +158,19 @@ def _code(obj: Mapping[str, Any] | None, task: Mapping[str, Any] | None = None, 
     return code
 
 
+ACTION_CONFIGURED_BY = "configured_by"
+ACTION_BY_SYSTEM = "system"
+ACTION_BY_UPGRADE = "upgrade"
+ACTIONS_STAMPED_META = "maint_actions_stamped"
+
+
+def _same_action(a: Mapping[str, Any] | None, b: Mapping[str, Any] | None) -> bool:
+    def bare(x: Mapping[str, Any] | None) -> dict[str, Any] | None:
+        return {k: v for k, v in x.items() if k != ACTION_CONFIGURED_BY} if x else None
+
+    return bare(a) == bare(b)
+
+
 class MaintenanceManager:
     """Assets → tasks → parts & documents, with sensor triggers and learning."""
 
@@ -171,6 +184,8 @@ class MaintenanceManager:
     ) -> None:
         self.db = db
         self.planner = planner
+        # Whether whoever configured an on-complete action may still run it (set by the HA runtime).
+        self.action_trusted: Callable[[Mapping[str, Any]], Awaitable[bool]] | None = None
         self.tz = planner.tz
         self._state_reader = state_reader
         self._area_names = area_names
@@ -253,6 +268,39 @@ class MaintenanceManager:
     # ------------------------------------------------------------------
     # Load, flush and the entity watch list
     # ------------------------------------------------------------------
+    async def is_action_trusted(self, action: Mapping[str, Any]) -> bool:
+        if not action.get(ACTION_CONFIGURED_BY):
+            return False
+        if self.action_trusted is None:
+            return True
+        return await self.action_trusted(action)
+
+    async def trust_existing_actions(self) -> int:
+        """Upgrade step (once): actions saved before 1.4.1 went through the admin check, so they stay trusted."""
+        if await self.db.get_meta(ACTIONS_STAMPED_META):
+            return 0
+        stamped = 0
+        for task in await self.db.rows(MTASKS):
+            action = task.get("on_complete_action")
+            if action and not action.get(ACTION_CONFIGURED_BY):
+                await self.db.update_row(MTASKS, task["id"], {"on_complete_action": {**action, ACTION_CONFIGURED_BY: ACTION_BY_UPGRADE}}, touch=False)
+                stamped += 1
+        await self.db.set_meta(ACTIONS_STAMPED_META, True)
+        return stamped
+
+    async def pause_restored_actions(self) -> int:
+        """After a restore: on-complete actions come from a file, not from an administrator, so they wait for one."""
+        paused = 0
+        for task in await self.db.rows(MTASKS):
+            action = task.get("on_complete_action")
+            if action and action.get(ACTION_CONFIGURED_BY):
+                await self.db.update_row(MTASKS, task["id"], {"on_complete_action": {k: v for k, v in action.items() if k != ACTION_CONFIGURED_BY}}, touch=False)
+                paused += 1
+            elif action:
+                paused += 1
+        await self.db.set_meta(ACTIONS_STAMPED_META, True)
+        return paused
+
     async def async_load(self) -> None:
         now = self.now()
         for task in await self.db.rows(MTASKS):
@@ -601,7 +649,17 @@ class MaintenanceManager:
             fields["require_nfc"] = bool(data["require_nfc"])
         if "on_complete_action" in data:
             action = self._clean_action(data["on_complete_action"])
-            if action != (existing or {}).get("on_complete_action") and actor.user_id is not None and not actor.is_admin:
+            previous = (existing or {}).get("on_complete_action")
+            privileged = actor.user_id is None or actor.is_admin
+            if action is not None:
+                if privileged:
+                    # Stamped with who configured it; run time checks they are still an administrator.
+                    action[ACTION_CONFIGURED_BY] = actor.user_id or ACTION_BY_SYSTEM
+                elif _same_action(action, previous):
+                    action[ACTION_CONFIGURED_BY] = (previous or {}).get(ACTION_CONFIGURED_BY)
+                else:
+                    raise PlannerError("unauthorized", "Only administrators can set an on-complete device action")
+            elif previous is not None and not privileged:
                 raise PlannerError("unauthorized", "Only administrators can set an on-complete device action")
             fields["on_complete_action"] = action
         if "manual_doc_id" in data:
@@ -668,7 +726,10 @@ class MaintenanceManager:
         await self.db.update_row(MTASKS, task["id"], {"trigger_state": fresh}, touch=False)
         await self.rebuild_watch()
         self.planner.notify([plan["id"]])
-        return await self._task(task["id"])
+        saved = await self._task(task["id"])
+        action = saved.get("on_complete_action")
+        # Who configured the action stays on the server.
+        return {**saved, "on_complete_action": {k: v for k, v in action.items() if k != ACTION_CONFIGURED_BY} if action else None, "action_paused": bool(action) and not action.get(ACTION_CONFIGURED_BY)}
 
     async def delete_task(self, task_id: str) -> dict[str, Any]:
         task = await self._task(task_id)
@@ -876,11 +937,16 @@ class MaintenanceManager:
         task_id = data.get("task_id") or None
         if task_id and (await self._task(task_id))["object_id"] != obj["id"]:
             raise PlannerError("invalid", "The task must belong to this object")
+        event_id = data.get("event_id") or None
+        if event_id:
+            event = await self.db.row(MEVENTS, event_id)
+            if event is None or event["object_id"] != obj["id"]:
+                raise PlannerError("invalid", "The service record must belong to this object")
         record: dict[str, Any] = {
             "plan_id": obj["plan_id"],
             "object_id": obj["id"],
             "task_id": task_id,
-            "event_id": data.get("event_id") or None,
+            "event_id": event_id,
             "category": category,
             "created_by": actor.label,
         }
@@ -1066,13 +1132,17 @@ class MaintenanceManager:
         payload = {"uid": task_id, "name": task["name"], "object": obj["name"], "code": _code(obj, task, number), "method": method, "person": person, "user_name": actor.user_name, "next_due": changes["next_due"], "plan_id": task["plan_id"]}
         self.planner.fire(EVENT_MAINT_COMPLETED, self.planner.event_payload(plan, payload, "name", "object"))
         action_result = None
-        if task.get("on_complete_action") and self.run_action is not None:
-            try:
-                action_result = self.run_action(task["on_complete_action"], actor)
-                if hasattr(action_result, "__await__"):
-                    action_result = await action_result
-            except Exception as err:  # noqa: BLE001 - a failing device reset must not undo the completion
-                _LOGGER.warning("On-complete action for %s failed: %s", _code(obj, task), err)
+        action = task.get("on_complete_action")
+        if action and self.run_action is not None:
+            if not await self.is_action_trusted(action):
+                _LOGGER.warning("The on-complete action for %s is paused until an administrator saves the task again", _code(obj, task))
+            else:
+                try:
+                    action_result = self.run_action({k: v for k, v in action.items() if k != ACTION_CONFIGURED_BY}, actor)
+                    if hasattr(action_result, "__await__"):
+                        action_result = await action_result
+                except Exception as err:  # noqa: BLE001 - a failing device reset must not undo the completion
+                    _LOGGER.warning("On-complete action for %s failed: %s", _code(obj, task), err)
         self.planner.notify([task["plan_id"]])
         updated = await self._task(task_id)
         undo = {"task": task, "stocks": stocks_before, "event_id": event["id"], "trigger_state": states_before, "salt_observation": salt_obs, "pending": None}
@@ -1655,8 +1725,10 @@ class MaintenanceManager:
                 "id", "plan_id", "object_id", "number", "name", "category", "priority", "notes", "spec_note", "schedule_mode",
                 "interval_value", "interval_unit", "anchor_date", "next_due", "last_done", "warning_days", "warning_percent",
                 "schedule_time", "active_months", "trigger_logic", "assigned_to", "rotation", "nfc_tag_id", "require_nfc",
-                "on_complete_action", "manual_doc_id", "manual_page", "archived", "event_seq",
+                "manual_doc_id", "manual_page", "archived", "event_seq",
             )},
+            "on_complete_action": {k: v for k, v in task["on_complete_action"].items() if k != ACTION_CONFIGURED_BY} if task.get("on_complete_action") else None,
+            "action_paused": bool(task.get("on_complete_action")) and not (task["on_complete_action"] or {}).get(ACTION_CONFIGURED_BY),
             "code": _code(obj, task),
             "object_name": obj["name"],
             "object_number": obj["number"],

@@ -192,7 +192,7 @@ class BackupManager:
         local_now: Callable[[], datetime],
         run_blocking: Callable[..., Awaitable[Any]] | None = None,
         before_restore: Callable[[], Awaitable[None]] | None = None,
-        on_restored: Callable[[], Awaitable[None]] | None = None,
+        on_restored: Callable[[], Awaitable[list[str] | None]] | None = None,
         secrets_provider: Callable[[], Awaitable[Mapping[str, bytes]]] | None = None,
         restore_secrets: Callable[[Mapping[str, bytes]], Awaitable[None]] | None = None,
     ) -> None:
@@ -611,8 +611,9 @@ class BackupManager:
                     raise BackupError(str(err)) from err
                 if parsed.get("secrets") and self._restore_secrets is not None:
                     await self._restore_secrets(parsed["secrets"])
+                after: list[str] = []
                 if self._on_restored is not None:
-                    await self._on_restored()
+                    after = list(await self._on_restored() or [])
             finally:
                 self.restoring = False
         totals = {key: sum(t[key] for t in db_report["tables"].values()) for key in ("inserted", "skipped", "deleted", "removed")}
@@ -624,7 +625,7 @@ class BackupManager:
             "tables": db_report["tables"],
             "totals": totals,
             "documents": {**docs, "missing": len(parsed["manifest"].get("missing_documents") or [])},
-            "warnings": parsed["warnings"] + db_report["warnings"],
+            "warnings": parsed["warnings"] + db_report["warnings"] + after,
             "safety_snapshot": safety["name"],
         }
 

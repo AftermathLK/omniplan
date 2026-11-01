@@ -162,9 +162,12 @@ def async_register_services(hass: HomeAssistant) -> None:
     async def parse_brain_dump(call: ServiceCall) -> ServiceResponse:
         coordinator = _coordinator(hass)
         actor = await coordinator.actor_for_user_id(call.context.user_id)
-        return await run_brain_dump(
-            coordinator, call.data["text"], actor, dry_run=call.data["dry_run"], agent_id=call.data.get("agent_id")
-        )
+        agent = call.data.get("agent_id")
+        if agent and agent != coordinator.conversation_agent() and actor.user_id is not None and not actor.is_admin:
+            raise Unauthorized(context=call.context)
+        return await _run(run_brain_dump(
+            coordinator, call.data["text"], actor, dry_run=call.data["dry_run"], agent_id=agent
+        ))
 
     async def add_task(call: ServiceCall) -> ServiceResponse:
         coordinator = _coordinator(hass)
@@ -245,6 +248,7 @@ def async_register_services(hass: HomeAssistant) -> None:
         return {"action_needed": result["action_needed"], "action": result["action"], "created": result["created"]}
 
     async def run_shift_balance(call: ServiceCall) -> ServiceResponse:
+        await _require_admin(hass, call)
         return await _coordinator(hass).async_run_shift_balance()
 
     async def sync_mealie(call: ServiceCall) -> ServiceResponse:
@@ -329,12 +333,7 @@ def async_register_services(hass: HomeAssistant) -> None:
         Like an admin service: users must be administrators, automations (no user) may call it.
         (``async_register_admin_service`` cannot return a response on every supported core.)
         """
-        if call.context.user_id:
-            user = await hass.auth.async_get_user(call.context.user_id)
-            if user is None:
-                raise UnknownUser(context=call.context)
-            if not user.is_admin:
-                raise Unauthorized(context=call.context)
+        await _require_admin(hass, call)
         coordinator = _coordinator(hass)
         try:
             return await coordinator.backups.create_snapshot("snapshot")
@@ -342,6 +341,16 @@ def async_register_services(hass: HomeAssistant) -> None:
             raise HomeAssistantError(str(err)) from err
 
     hass.services.async_register(DOMAIN, SERVICE_CREATE_BACKUP, create_backup, vol.Schema({}), SupportsResponse.OPTIONAL)
+
+
+async def _require_admin(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Administrators only; calls without a user (automations, scripts run by the system) are allowed."""
+    if call.context.user_id:
+        user = await hass.auth.async_get_user(call.context.user_id)
+        if user is None:
+            raise UnknownUser(context=call.context)
+        if not user.is_admin:
+            raise Unauthorized(context=call.context)
 
 
 async def _maintenance_rows(coordinator: TaskDragonCoordinator, actor: Actor) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:

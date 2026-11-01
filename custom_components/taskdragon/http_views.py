@@ -46,6 +46,8 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
 }
 INLINE_TYPES = ("application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp")
+MAX_FIELD_BYTES = 1024
+MAX_PARTS = 12
 MAX_RESTORE_BYTES = 1024 * 1024 * 1024
 STREAM_CHUNK = 1024 * 1024
 
@@ -57,6 +59,7 @@ def async_register_views(hass: HomeAssistant) -> None:
     hass.http.register_view(DocumentView())
     hass.http.register_view(ServiceRecordView())
     hass.http.register_view(MealieImageView())
+    hass.http.register_view(HoardImageView())
     hass.http.register_view(BackupDownloadView())
     hass.http.register_view(BackupRestoreView())
 
@@ -73,8 +76,35 @@ async def _context(request: web.Request) -> tuple[Any, Any]:
     return coordinator, actor
 
 
+async def _read_field(part: Any, limit: int = MAX_FIELD_BYTES) -> str:
+    """A small multipart text field, read in chunks and refused once it passes ``limit`` bytes.
+
+    ``part.text()`` would buffer the whole field first, however large the client makes it.
+    """
+    data = bytearray()
+    while chunk := await part.read_chunk(1024):
+        data.extend(chunk)
+        if len(data) > limit:
+            raise web.HTTPRequestEntityTooLarge(max_size=limit, actual_size=len(data))
+    return data.decode("utf-8", "replace")
+
+
+async def _drain(part: Any) -> None:
+    """Skip a part nobody asked for without keeping its bytes."""
+    while await part.read_chunk(65536):
+        pass
+
+
 def _error(err: PlannerError) -> web.Response:
-    status = HTTPStatus.NOT_FOUND if err.code == "not_found" else HTTPStatus.FORBIDDEN if err.code == "unauthorized" else HTTPStatus.BAD_REQUEST
+    status = (
+        HTTPStatus.NOT_FOUND
+        if err.code == "not_found"
+        else HTTPStatus.FORBIDDEN
+        if err.code == "unauthorized"
+        else HTTPStatus.TOO_MANY_REQUESTS
+        if err.code == "rate_limited"
+        else HTTPStatus.BAD_REQUEST
+    )
     return web.json_response({"code": err.code, "message": err.message}, status=status)
 
 
@@ -89,15 +119,21 @@ class DocumentUploadView(HomeAssistantView):
         payload = bytearray()
         filename: str | None = None
         reader = await request.multipart()
+        parts = 0
         while (part := await reader.next()) is not None:
+            parts += 1
+            if parts > MAX_PARTS:
+                return web.json_response({"code": "invalid", "message": "Too many form fields"}, status=HTTPStatus.BAD_REQUEST)
             if part.name == "file":
-                filename = unquote(part.filename or "")  # some clients percent-encode; it's sanitized below
+                filename = unquote(part.filename or "")[:255]  # some clients percent-encode; it's sanitized below
                 while chunk := await part.read_chunk(65536):
                     payload.extend(chunk)
                     if len(payload) > MAX_UPLOAD_BYTES:
                         return web.json_response({"code": "too_large", "message": "Files can be at most 15 MB"}, status=HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
             elif part.name in ("object_id", "task_id", "event_id", "category", "title"):
-                fields[part.name] = (await part.text())[:200]
+                fields[part.name] = (await _read_field(part))[:200]
+            else:
+                await _drain(part)
         if not payload:
             return web.json_response({"code": "invalid", "message": "No file was uploaded"}, status=HTTPStatus.BAD_REQUEST)
         content_type = sniff_document_type(bytes(payload), filename)
@@ -198,6 +234,27 @@ class MealieImageView(HomeAssistantView):
         return web.Response(body=data, content_type=content_type, headers=headers)
 
 
+class HoardImageView(HomeAssistantView):
+    """A wishlist item's product photo, proxied so browsers never contact the store (and gifts stay hidden)."""
+
+    url = "/api/taskdragon/hoard_image/{item_id}"
+    name = "api:taskdragon:hoard_image"
+    requires_auth = True
+
+    async def get(self, request: web.Request, item_id: str) -> web.StreamResponse:
+        coordinator, actor = await _context(request)
+        if not 0 < len(item_id) <= 64:
+            raise web.HTTPNotFound()
+        try:
+            data, content_type = await coordinator.hoard.image(item_id, actor)
+        except PlannerError as err:
+            if err.code == "rate_limited":
+                return _error(err)
+            raise web.HTTPNotFound() from err
+        headers = {**SECURITY_HEADERS, "Cache-Control": "private, max-age=86400"}
+        return web.Response(body=data, content_type=content_type, headers=headers)
+
+
 def _admin_only(actor: Any) -> web.Response | None:
     if actor.is_admin:
         return None
@@ -289,7 +346,9 @@ class BackupRestoreView(HomeAssistantView):
                                 )
                             await hass.async_add_executor_job(handle.write, chunk)
                     elif part.name == "mode":
-                        mode = (await part.text()).strip()[:20]
+                        mode = (await _read_field(part, 64)).strip()[:20]
+                    else:
+                        await _drain(part)
             finally:
                 await hass.async_add_executor_job(handle.close)
             if not received:

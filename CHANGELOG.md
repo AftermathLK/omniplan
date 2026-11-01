@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.1 (2026-10-31)
+
+Fixes from a security review. Nothing was exploitable without being signed in to Home Assistant, and none of it was Critical or High.
+
+- **On-complete device actions** are stamped with the administrator who saved them and only run while that person is still an active administrator. Actions that come back through a backup restore are paused until an administrator saves the task again; the restore report and the task say so. Actions saved before this version keep working.
+- **Uploads** read their form fields with a size limit, so a huge field can't exhaust Home Assistant's memory, and a document can only be attached to a service record of the same object.
+- **Price tracker**: IPv6 addresses that carry an IPv4 address (NAT64, 6to4, IPv4-mapped) are judged by that address, so they can't reach your network; Teredo is refused.
+- **Wishlist photos** are fetched by Home Assistant and shown through an authenticated endpoint, so viewers' browsers never contact a store (and a gift's photo stays hidden from its recipient). A product page's photo on a private or plain-http address is ignored.
+- **Per-user limits**: 120 store checks, deal searches and photo downloads and 40 UPC lookups an hour, 30 Brain Dumps per ten minutes, and at most 2,000 items per wishlist.
+- **Administrator-only**: the `taskdragon.run_shift_balance` service (as over WebSocket), the household recipe-import filter, and picking another conversation agent in `taskdragon.parse_brain_dump`.
+- **Fixed**: person pictures and product photos never appeared. The card's style check removed every quoted `url('…')`. It now allows `http(s)` and same-origin images again and still refuses everything else, including protocol-relative `//host` addresses.
+- Signed download links live 60 seconds (30 for backups) instead of 5 minutes; non-administrators no longer receive people's work-calendar entities; a malformed time in a Brain Dump action fails only that action; a deal search or feed with an unknown character set no longer stops the rest of the round; two dashboards opening a new wishlist at once, or two tabs creating a personal Quick List, no longer create duplicates; an alert can't be sent twice when "Check now" overlaps the scheduled check.
+- The docs now say plainly that gift privacy doesn't extend to Home Assistant administrators, who can read backups and files.
+
 ## 1.4.0 (2026-10-31)
 
 **Wishlist, gifts & price tracker.** A new category type (`wishlist_hoard`) for everything that isn't groceries; existing installations get a **Wishlist & Gifts** category.

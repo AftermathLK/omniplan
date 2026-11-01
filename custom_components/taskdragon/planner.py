@@ -18,6 +18,7 @@ id and full access.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -209,6 +210,8 @@ class Planner:
         self.undo_handlers: dict[str, Callable[[Any, Actor], Any]] = {}
         self.maintenance: Any = None
         self.hoard: Any = None  # the wishlist & price tracker (hoard.py)
+        # Find-or-create of the personal quick list runs one at a time (two tabs open at once).
+        self._quick_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Small helpers
@@ -408,35 +411,36 @@ class Planner:
 
     async def quick_lists(self, actor: Actor) -> dict[str, str | None]:
         """The household quick list and the actor's private one (created on first use)."""
-        plans = await self.db.list_plans(include_archived=True)
-        shared = next(
-            (p for p in plans if not p["is_private"] and (p.get("settings") or {}).get("role") == ROLE_QUICK), None
-        )
-        private = None
-        if actor.user_id:
-            private = next(
-                (
-                    p
-                    for p in plans
-                    if p["is_private"]
-                    and p.get("owner_user_id") == actor.user_id
-                    and (p.get("settings") or {}).get(PERSONAL_QUICK_KEY)
-                ),
-                None,
+        async with self._quick_lock:
+            plans = await self.db.list_plans(include_archived=True)
+            shared = next(
+                (p for p in plans if not p["is_private"] and (p.get("settings") or {}).get("role") == ROLE_QUICK), None
             )
-            if private is None:
-                private = await self.db.create_plan(
-                    {
-                        "name": "My Quick List",
-                        "archetype": ARCHETYPE_QUICK,
-                        "icon": "mdi:lock-outline",
-                        "is_private": True,
-                        "owner_user_id": actor.user_id,
-                        "settings": {PERSONAL_QUICK_KEY: True},
-                    }
+            private = None
+            if actor.user_id:
+                private = next(
+                    (
+                        p
+                        for p in plans
+                        if p["is_private"]
+                        and p.get("owner_user_id") == actor.user_id
+                        and (p.get("settings") or {}).get(PERSONAL_QUICK_KEY)
+                    ),
+                    None,
                 )
-                self._notify([private["id"]])
-        return {"shared": shared["id"] if shared else None, "private": private["id"] if private else None}
+                if private is None:
+                    private = await self.db.create_plan(
+                        {
+                            "name": "My Quick List",
+                            "archetype": ARCHETYPE_QUICK,
+                            "icon": "mdi:lock-outline",
+                            "is_private": True,
+                            "owner_user_id": actor.user_id,
+                            "settings": {PERSONAL_QUICK_KEY: True},
+                        }
+                    )
+                    self._notify([private["id"]])
+            return {"shared": shared["id"] if shared else None, "private": private["id"] if private else None}
 
     def _clean_plan_settings(
         self, incoming: Mapping[str, Any], current: Mapping[str, Any] | None, actor: Actor, is_private: bool
@@ -2084,7 +2088,10 @@ class Planner:
                     }
                     due_date = parse_date(action.get("due_date"))
                     if action.get("due_time"):
-                        hour, minute = (int(part) for part in str(action["due_time"]).split(":")[:2])
+                        clock = re.match(r"^\s*(\d{1,2}):(\d{2})", str(action["due_time"]))
+                        if clock is None or int(clock.group(1)) > 23 or int(clock.group(2)) > 59:
+                            raise PlannerError("invalid", "Times look like 14:30")
+                        hour, minute = int(clock.group(1)), int(clock.group(2))
                         payload["due_datetime"] = datetime.combine(due_date or self.today(), time(hour, minute), self.tz).isoformat()
                     elif due_date:
                         payload["due_date"] = due_date.isoformat()

@@ -254,7 +254,7 @@ def async_register(hass: HomeAssistant) -> None:
 @_command({vol.Required("type"): "taskdragon/get_board", vol.Optional("plan_id"): ID}, guard=lambda m: {"plans": [m.get("plan_id")]})
 async def ws_get_board(hass, connection, msg, coordinator, actor):
     board = await coordinator.planner.get_board(msg.get("plan_id"), actor)
-    board["people"] = coordinator.people_info()
+    board["people"] = coordinator.people_for(actor)
     board["me"] = coordinator.person_for_user(actor.user_id)
     # Status only: the Mealie URL and token never leave the server.
     board["mealie"] = {k: coordinator.mealie_status.get(k) for k in ("enabled", "ok", "last_sync", "error")}
@@ -480,7 +480,10 @@ async def run_brain_dump(
     """Shared by the WebSocket command and the ``taskdragon.parse_brain_dump`` service.
 
     The parser (and any LLM prompt) only ever sees plans the actor may access.
+    Each user gets a limited number per ten minutes, because every one may call an LLM.
     """
+    if not coordinator.brain_limiter.allow(actor.user_id):
+        raise PlannerError("rate_limited", f"That's a lot of brain dumps — try again in {coordinator.brain_limiter.retry_after(actor.user_id)} seconds")
     ctx = BrainDumpContext(
         now=coordinator.planner.now_local(),
         plans=await coordinator.planner.accessible_plans(actor),
@@ -892,8 +895,10 @@ async def ws_mealie_plan_meal(hass, connection, msg, coordinator, actor):
     }
 )
 async def ws_mealie_import_settings(hass, connection, msg, coordinator, actor):
-    """Read (or, with ``settings``, change) the household's recipe import filter."""
+    """Read (or, as an administrator, change) the household's recipe import filter."""
     if "settings" in msg:
+        if not actor.is_admin:
+            raise PlannerError("unauthorized", "Only administrators can change the household's recipe import filter")
         return await coordinator.recipes.save_settings(msg["settings"])
     return await coordinator.recipes.settings()
 

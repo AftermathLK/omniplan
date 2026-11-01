@@ -30,10 +30,12 @@ The hiding-spot note is encrypted at rest with a per-installation key
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import logging
 import os
 import re
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -71,6 +73,7 @@ from .const import (
 from .database import HDEALS, HITEMS, HSECTIONS, HURLS, TaskDragonDB
 from .planner import Actor, Planner, PlannerError
 from .price_tracker import (
+    API_USER_AGENT,
     BROWSER_HEADERS,
     MAX_PAGE_BYTES,
     Deal,
@@ -90,6 +93,7 @@ from .price_tracker import (
     search_links,
     slickdeals_url,
 )
+from .ratelimit import RateLimiter
 from .timeutil import parse_date, parse_datetime, to_utc_iso
 
 _LOGGER = logging.getLogger(__name__)
@@ -113,6 +117,15 @@ MANUAL_CHECK_SECONDS = 60
 MAX_TEXT_NOTES = 2000
 MAX_HIDING_SPOT = 500
 NEW_LOW_FRACTION = 0.01  # a new all-time low must beat the previous one by at least 1 %
+MAX_ITEMS_PER_PLAN = 2000
+FETCH_LIMIT = 120  # store-page, deal and image fetches one user can start ...
+LOOKUP_LIMIT = 40  # ... and UPC lookups (the free allowance is shared by the household) ...
+LIMIT_WINDOW = 3600  # ... per hour
+IMAGE_TYPES = ("image/webp", "image/jpeg", "image/png", "image/gif")
+MAX_IMAGE_BYTES = 3 * 1024 * 1024
+IMAGE_CACHE_ENTRIES = 120
+IMAGE_CACHE_BYTES = 24 * 1024 * 1024
+_IMAGE_MAGIC = ((b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jpeg"), (b"GIF87a", "image/gif"), (b"GIF89a", "image/gif"))
 _PERSON_RE = re.compile(r"^person\.[a-z0-9_]{1,250}$")
 _ICON_RE = re.compile(ICON_PATTERN)
 _EDITABLE_ITEM = (
@@ -349,6 +362,10 @@ class HoardManager:
         self._spawn = spawn
         self._manual_checks: dict[str, datetime] = {}
         self._ticking = False
+        self._alert_lock = asyncio.Lock()
+        self._fetch_limit = RateLimiter(FETCH_LIMIT, LIMIT_WINDOW)
+        self._lookup_limit = RateLimiter(LOOKUP_LIMIT, LIMIT_WINDOW)
+        self._images: OrderedDict[str, tuple[bytes, str]] = OrderedDict()
 
     # ------------------------------------------------------------------
     # Small helpers
@@ -366,6 +383,12 @@ class HoardManager:
 
     def _notify(self, plan_ids: Iterable[str | None]) -> None:
         self.planner.notify(plan_ids)
+
+    def _spend(self, limiter: RateLimiter, actor: Actor, cost: int = 1, what: str = "store checks") -> None:
+        """Count outbound work a user starts; refuse once their hourly allowance is used up."""
+        if not limiter.allow(actor.user_id, cost):
+            minutes = max(1, round(limiter.retry_after(actor.user_id) / 60))
+            raise PlannerError("rate_limited", f"Too many {what} in the last hour — try again in about {minutes} min")
 
     async def settings(self) -> dict[str, Any]:
         stored = await self.db.get_meta(SETTINGS_META, {}) or {}
@@ -459,10 +482,12 @@ class HoardManager:
         seeded = list(await self.db.get_meta(SEEDED_META, []) or [])
         if plan_id in seeded:
             return
-        existing = await self.db.rows(HSECTIONS, {"plan_id": plan_id}, limit=1)
-        if not existing:
-            today = self._today()
-            async with self.db.transaction():
+        today = self._today()
+        async with self.db.transaction():
+            # Checked inside the transaction (it holds the writer lock), so two dashboards
+            # opening a new wishlist at the same moment can't both seed it.
+            existing = await self.db.rows(HSECTIONS, {"plan_id": plan_id}, limit=1)
+            if not existing:
                 for position, template in enumerate(HOARD_DEFAULT_SECTIONS, start=1):
                     record = {k: v for k, v in template.items() if k != "event_date"}
                     if template.get("event_date"):
@@ -746,6 +771,8 @@ class HoardManager:
             "brand": item.get("brand"),
             "model": item.get("model"),
             "image_url": item.get("image_url"),
+            # Photos come through Home Assistant, so viewers' browsers never contact the store.
+            "image_path": f"/api/taskdragon/hoard_image/{item['id']}?v={_digest(item['image_url'])}" if item.get("image_url") else None,
             "recipient_name": item.get("recipient_name"),
             "gift_for_person_id": item.get("gift_for_person_id"),
             "stealth_mode": bool(item.get("stealth_mode")),
@@ -874,6 +901,8 @@ class HoardManager:
         changes = await self._clean_item(data, None, plan["id"], actor)
         if not changes.get("title"):
             raise PlannerError("invalid", "Give it a name, like 4k monitor")
+        if len(await self.db.rows(HITEMS, {"plan_id": plan["id"]})) >= MAX_ITEMS_PER_PLAN:
+            raise PlannerError("invalid", f"A wishlist can hold at most {MAX_ITEMS_PER_PLAN} items")
         if "section_id" not in changes:
             changes["section_id"] = await self._default_section_id(plan["id"], actor)
         existing = await self.db.rows(HITEMS, {"plan_id": plan["id"]})
@@ -990,6 +1019,8 @@ class HoardManager:
             raise PlannerError("invalid", "That link is already on this item")
         if len(existing) >= HOARD_MAX_URLS_PER_ITEM:
             raise PlannerError("invalid", f"An item can track at most {HOARD_MAX_URLS_PER_ITEM} stores")
+        if check:
+            self._spend(self._fetch_limit, actor)
         row = await self.db.insert_row(
             HURLS,
             {"item_id": item_id, "url": clean_url, "retailer_name": _text(retailer, 60) or retailer_name(clean_url), "css_selector": selector, "failures": 0},
@@ -1012,6 +1043,7 @@ class HoardManager:
             except ValueError as err:
                 raise PlannerError("invalid", str(err)) from err
             clean["failures"] = 0
+            self._spend(self._fetch_limit, actor)
         if clean:
             await self.db.update_row(HURLS, url_id, clean)
         self._notify([item["plan_id"]])
@@ -1044,6 +1076,7 @@ class HoardManager:
         last = self._manual_checks.get(item_id)
         if last is not None and (now - last).total_seconds() < MANUAL_CHECK_SECONDS:
             raise PlannerError("rate_limited", "Checked less than a minute ago — give the stores a moment")
+        self._spend(self._fetch_limit, actor, len(urls))
         self._manual_checks[item_id] = now
         if len(self._manual_checks) > 500:
             for key in sorted(self._manual_checks, key=self._manual_checks.__getitem__)[:250]:
@@ -1159,10 +1192,23 @@ class HoardManager:
             [{"item_id": item["id"], "url_id": row["id"], "source": "online", "store": row["retailer_name"], "price": found.price, "currency": found.currency, "in_stock": changes.get("in_stock"), "checked_at": now_iso}]
         )
         if not item.get("image_url") and found.image:
-            await self.db.update_row(HITEMS, item["id"], {"image_url": found.image}, touch=False)
+            try:
+                image = _https(found.image)
+            except PlannerError:
+                image = None  # a product photo on a private or plain-http address is ignored
+            if image:
+                await self.db.update_row(HITEMS, item["id"], {"image_url": image}, touch=False)
 
     async def evaluate_alerts(self, item_id: str) -> list[dict[str, Any]]:
-        """Fire target / all-time-low / price-protection alerts for one item (each price once)."""
+        """Fire target / all-time-low / price-protection alerts for one item (each price once).
+
+        One evaluation at a time, so "Check now" overlapping the scheduled round can't
+        announce the same drop twice.
+        """
+        async with self._alert_lock:
+            return await self._evaluate_alerts(item_id)
+
+    async def _evaluate_alerts(self, item_id: str) -> list[dict[str, Any]]:
         item = await self.db.row(HITEMS, item_id)
         if item is None:
             return []
@@ -1265,13 +1311,17 @@ class HoardManager:
             if not force and checked is not None and (now - checked).total_seconds() < hours * 3600 - 60:
                 continue
             query = (item.get("deal_query") or item["title"]).strip()
-            if query not in cache:
-                cache[query] = await self._search_deals(query)
-            limit = item.get("deal_max_price") if item.get("deal_max_price") is not None else item.get("target_price")
-            matches = filter_deals(cache[query], query, float(limit) if limit is not None else None)
-            dismissed = {row["url"] for row in await self.db.rows(HDEALS, {"item_id": item["id"], "dismissed": 1})}
-            fresh = [d.as_row() for d in matches if d.url not in dismissed]
-            added += await self.db.save_deals(item["id"], fresh, HOARD_MAX_DEALS_PER_ITEM)
+            try:
+                if query not in cache:
+                    cache[query] = await self._search_deals(query)
+                limit = item.get("deal_max_price") if item.get("deal_max_price") is not None else item.get("target_price")
+                matches = filter_deals(cache[query], query, float(limit) if limit is not None else None)
+                dismissed = {row["url"] for row in await self.db.rows(HDEALS, {"item_id": item["id"], "dismissed": 1})}
+                fresh = [d.as_row() for d in matches if d.url not in dismissed]
+                added += await self.db.save_deals(item["id"], fresh, HOARD_MAX_DEALS_PER_ITEM)
+            except Exception:  # noqa: BLE001 - one item's search must not stop the others
+                _LOGGER.exception("Deal radar search failed")
+                cache.setdefault(query, [])
             await self.db.update_row(HITEMS, item["id"], {"deals_checked_at": self._now_iso()}, touch=False)
             touched.add(item["plan_id"])
         if touched:
@@ -1283,7 +1333,7 @@ class HoardManager:
         try:
             page = await self.fetcher.get(slickdeals_url(query), headers={"User-Agent": BROWSER_HEADERS["User-Agent"], "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.5"}, max_bytes=1024 * 1024)
             deals.extend(await self._blocking(parse_rss_deals, page.body, "slickdeals"))
-        except (FetchError, ValueError, SyntaxError) as err:  # ET.ParseError is a SyntaxError
+        except (FetchError, ValueError, SyntaxError, LookupError) as err:  # ET.ParseError is a SyntaxError
             _LOGGER.debug("Slickdeals search failed: %s", err)
         try:
             deals.extend(parse_reddit_deals(await self.fetcher.get_json(reddit_url(query))))
@@ -1301,6 +1351,7 @@ class HoardManager:
         item, _section, _plan = await self._require_item(item_id, actor)
         if not item.get("watch_keyword_deals"):
             raise PlannerError("invalid", "Turn on the deal radar for this item first")
+        self._spend(self._fetch_limit, actor, 2, "deal searches")
         await self.refresh_deals([item_id], force=True)
         return await self.item_view(item_id, actor)
 
@@ -1351,6 +1402,8 @@ class HoardManager:
         status = "disabled"
         if not lookup_gtin(code):
             status = "not_retail"
+        elif settings["upc_lookup"] and not self._lookup_limit.allow(actor.user_id):
+            status = "limit"
         elif settings["upc_lookup"]:
             try:
                 product = await self.products.lookup(code)
@@ -1458,6 +1511,32 @@ class HoardManager:
         return await self.item_view(item_id, actor)
 
     # ------------------------------------------------------------------
+    # Product photos
+    # ------------------------------------------------------------------
+    async def image(self, item_id: str, actor: Actor) -> tuple[bytes, str]:
+        """An item's photo, fetched through the guarded client and cached (only real image types, 3 MB at most)."""
+        item, _section, _plan = await self._require_item(item_id, actor)
+        url = item.get("image_url")
+        if not url:
+            raise _not_found()
+        cached = self._images.get(url)
+        if cached is not None:
+            self._images.move_to_end(url)
+            return cached
+        self._spend(self._fetch_limit, actor, 1, "photo downloads")
+        try:
+            page = await self.fetcher.get(url, headers={"User-Agent": API_USER_AGENT, "Accept": ", ".join(IMAGE_TYPES)}, max_bytes=MAX_IMAGE_BYTES)
+        except FetchError as err:
+            raise PlannerError("not_found", "The photo couldn't be loaded") from err
+        kind = _image_type(page.body, page.content_type)
+        if kind is None:
+            raise PlannerError("not_found", "That address isn't a supported image")
+        self._images[url] = (page.body, kind)
+        while len(self._images) > IMAGE_CACHE_ENTRIES or sum(len(v[0]) for v in self._images.values()) > IMAGE_CACHE_BYTES:
+            self._images.popitem(last=False)
+        return page.body, kind
+
+    # ------------------------------------------------------------------
     # Backups
     # ------------------------------------------------------------------
     async def rekey(self, old_keys: Sequence[bytes]) -> int:
@@ -1494,3 +1573,19 @@ def _best_url(urls: Sequence[Mapping[str, Any]]) -> Mapping[str, Any] | None:
         return None
     buyable = [u for u in priced if u.get("in_stock") is not False]
     return min(buyable or priced, key=lambda u: float(u["last_price"]))
+
+
+def _digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+def _image_type(body: bytes, claimed: str | None) -> str | None:
+    """The image type from the file's first bytes; the server's claimed type only has to agree it's an image."""
+    if not body or (claimed and claimed.split(";")[0].strip().lower() not in (*IMAGE_TYPES, "application/octet-stream", "binary/octet-stream")):
+        return None
+    for magic, kind in _IMAGE_MAGIC:
+        if body.startswith(magic):
+            return kind
+    if body[:4] == b"RIFF" and body[8:12] == b"WEBP":
+        return "image/webp"
+    return None

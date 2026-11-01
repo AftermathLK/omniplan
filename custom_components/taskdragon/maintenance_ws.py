@@ -148,7 +148,7 @@ def _undo(coordinator: Any, kind: str, payload: Any, actor: Any) -> str:
 @_command({vol.Required("type"): "taskdragon/maint_board", vol.Required("plan_id"): ID}, guard=lambda m: {"plans": [m["plan_id"]]})
 async def ws_board(hass, connection, msg, coordinator, actor):
     board = await _manager(coordinator).board(msg["plan_id"], actor)
-    board["people"] = coordinator.people_info()
+    board["people"] = coordinator.people_for(actor)
     board["me"] = coordinator.person_for_user(actor.user_id)
     return board
 

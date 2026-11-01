@@ -103,13 +103,15 @@ TaskDragon is a Home Assistant custom integration plus a dashboard card and side
 
 ### Wishlist, gifts & price tracker
 
+<p align="center"><img src="https://raw.githubusercontent.com/AftermathLK/taskdragon/main/docs/images/wishlist.webp" alt="Wishlist with a concept tag and its deal matches, a product tracked at three stores with a price trend, and the in-store price check saying buy here on a phone" width="100%"></p>
+
 A **Wishlist & Gifts** category for everything that isn't groceries: a personal or household **Want to Buy** list, holidays (Christmas comes ready, with a **$ budget** and a countdown) and **birthdays and events** for a person.
 
 - **Start vague, get specific.** Type "4k monitor" with notes ("27-inch+, IPS or OLED, USB-C PD") and a target price; no link needed. Turn on the **deal radar** and TaskDragon searches Slickdeals and Reddit's deal subreddits for matching posts ("🔥 3 live deal matches found"), each one a tap away from being tracked.
 - **Track one item at many stores.** Paste product pages from Amazon, Best Buy, Walmart, Target, Home Depot, Menards, B&H, Newegg or any shop. Prices and stock are checked every few hours; the card shows the **best current price** in green, the other stores, a **30-day sparkline**, how far below average it is, and the lowest price seen. You get a notification at your **target price** or a **new all-time low**.
 - **Refund guard.** Mark it bought with the price you paid and TaskDragon keeps watching during the 14- or 30-day return window: *"💰 Price Drop Alert! … $20 less than you paid 9 days ago — Claim your price adjustment!"*
 - **In-store scan & price check.** Scan the barcode in the aisle: you get the product, recorded online prices and one-tap searches (Amazon, Walmart, Best Buy, Target, Google Shopping, CamelCamelCamel). Type the shelf price for an instant **✅ Buy here** or **⚠️ Cheaper online** verdict, then add it to the list, add it as a gift, or mark it **bought here** to start the refund guard.
-- **No spoilers.** A gift for someone is hidden from that person on their own login ("🐉 1 secret gift hidden by Sam"); the server never sends it to them. **Stealth** items and sections are visible only to whoever added them, and wall tablets in kiosk mode cover secret gifts until someone taps **Show**.
+- **No spoilers.** A gift for someone is hidden from that person on their own login ("🐉 1 secret gift hidden by Sam"); the server never sends it to them. **Stealth** items and sections are visible only to whoever added them, and wall tablets in kiosk mode cover secret gifts until someone taps **Show**. (An administrator who downloads a backup or opens Home Assistant's files can still see everything.)
 - **Gift pipeline** from Idea to Watching, Purchased, Shipped, Stashed, Wrapped and Gifted, with an encrypted **hiding spot** note ("top shelf of the pole barn, tote #4") so early purchases don't get lost.
 - **7-day impulse cooldown** for bigger Want to Buy items, so the tracker can hunt for a sale first.
 
@@ -251,7 +253,7 @@ plan: Groceries        # plan name or id
 ## Privacy and security
 
 - **Local-first.** Data stays in Home Assistant. The only outside calls are the ones you set up: your Mealie server, Open Food Facts for unknown barcodes, and for the wishlist the store pages you add, the deal radar's searches (Slickdeals, Reddit) and UPCitemdb for scanned products. Only the page address, search words or barcode number are sent, and an administrator can turn each one off.
-- **Gifts stay secret on the server.** A gift is never sent to the person it's for, stealth items only to whoever added them, and alerts about secret gifts leave out the name and price. Wishlists get no `todo.*` entity.
+- **Gifts stay secret on the server.** A gift is never sent to the person it's for, stealth items only to whoever added them, and alerts about secret gifts leave out the name and price. Wishlists get no `todo.*` entity. This protects gifts in the app, not from administrators: a portable backup holds every gift and the key to the hiding-spot notes, and an administrator can read Home Assistant's files.
 - **Store links can't reach your network.** The price tracker only fetches public `http(s)` addresses on the standard ports, re-checks every redirect, and refuses DNS answers that point inside your network, so a pasted link can't probe your router or Home Assistant.
 - **Private lists are filtered on the server.** Every command checks each id against the signed-in user, and other people's private items answer exactly like items that don't exist. Private lists get no `todo.*` entity.
 - **Secrets stay on the server.** The Mealie token never reaches the browser; recipe photos come through an authenticated proxy.

@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import time as time_module
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import Context, Event, HomeAssistant, callback
@@ -45,6 +46,7 @@ class MaintenanceRuntime:
         self.docs_dir = hass.config.path(".storage", DOCS_DIRNAME)
         self.manager = MaintenanceManager(coordinator.db, coordinator.planner, state_reader=self._read, area_names=self.area_names)
         self.manager.run_action = self.run_action
+        self.manager.action_trusted = self._action_trusted
         self._pending: list[dict[str, Any]] = []
         self._unsubs: list[Any] = []
 
@@ -162,6 +164,16 @@ class MaintenanceRuntime:
     # ------------------------------------------------------------------
     # Device actions & NFC
     # ------------------------------------------------------------------
+    async def _action_trusted(self, action: Mapping[str, Any]) -> bool:
+        """An on-complete action runs only while whoever configured it is still an active administrator."""
+        by = action.get("configured_by")
+        if by in ("system", "upgrade"):
+            return True
+        if not by:
+            return False
+        user = await self.hass.auth.async_get_user(str(by))
+        return bool(user and user.is_active and user.is_admin)
+
     async def run_action(self, action: dict[str, Any], actor: Actor) -> None:
         domain, _, service = str(action["service"]).partition(".")
         target = {"entity_id": list(action.get("entity_id") or [])} if action.get("entity_id") else None

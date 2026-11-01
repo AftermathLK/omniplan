@@ -118,6 +118,8 @@ Upgrading from 1.1 moves the old maintenance list into a "General" object. Rolli
 
 ## Wishlist, gifts & price tracker
 
+<p align="center"><img src="images/wishlist.webp" alt="Wishlist cards with deal matches and price trends, and the in-store price check" width="100%"></p>
+
 The **Wishlist & Gifts** category (new installations and upgrades get one; add more under **New category / plan → Wishlist, gifts & price tracker**) is for things you want or plan to give, not everyday consumables. It has no `todo.*` entity, because entity states are visible to everyone in the household.
 
 ### Sections, budgets and countdowns
@@ -166,6 +168,7 @@ Several people share the dashboard, so privacy is enforced by Home Assistant, no
 - **Stealth** (*Keep it secret: only I can see this*) hides an item or a whole section from everyone but the person who added it. Only that person can turn stealth on or off.
 - On a **wall tablet** (`view_mode: kiosk_split`), every gift is covered until someone taps it or **Show secret gifts**; they cover up again after two minutes.
 - The **hiding spot** note is stored encrypted, with a key kept next to the database in `.storage`. Portable backups carry the key so a restore on another Home Assistant can still read the notes.
+- **What this doesn't cover:** Home Assistant administrators. A portable backup contains every gift and the key that unlocks the hiding spots, and an administrator can open Home Assistant's files (Samba, SSH, the File editor). If the person you're buying for is an administrator, keep the gift in a stealth section and remember they could still find it in a backup.
 
 ### Impulse cooldown
 

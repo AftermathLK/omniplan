@@ -14,7 +14,7 @@
  * inject markup or script into the dashboard.
  */
 
-const TD_VERSION = "1.4.0";
+const TD_VERSION = "1.4.1";
 
 /* The TaskDragon emblem (an ouroboros dragon) as a Home Assistant icon set, so
  * `taskdragon:dragon` works in the sidebar, in <ha-icon> and in this card. */
@@ -135,6 +135,9 @@ const ALLOWED_ATTRS = new Set([
   "selected", "step", "style", "tabindex", "target", "title", "type", "value",
 ]);
 
+/** A style attribute that loads something other than an http(s) or same-origin ("/x", never "//host") URL. */
+const UNSAFE_STYLE = /expression\(|javascript:|url\(\s*(?!['"]?(?:https?:|\/(?!\/)))/i;
+
 /** Remove anything outside the allow-lists from an inert (template) fragment. */
 function sanitizeTree(root) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
@@ -149,7 +152,7 @@ function sanitizeTree(root) {
       const allowed = ALLOWED_ATTRS.has(name) || name.startsWith("data-") || name.startsWith("aria-");
       if (!allowed) node.removeAttribute(attr.name);
       else if (name === "href" && !safeUrl(attr.value) && attr.value !== "#") node.removeAttribute(attr.name);
-      else if (name === "style" && /expression\(|javascript:|url\(\s*['"]?(?!https?:|\/)/i.test(attr.value)) node.removeAttribute(attr.name);
+      else if (name === "style" && UNSAFE_STYLE.test(attr.value)) node.removeAttribute(attr.name);
     }
     if (node.tagName === "A") {
       node.setAttribute("rel", "noopener noreferrer");
@@ -3411,6 +3414,7 @@ class TaskDragonCard extends HTMLElement {
     }
     const pantryPlans = this._activePlans().filter((p) => p.archetype === "pantry_spices");
     const items = this._board.pantry || [];
+    const admin = this._isAdmin();
     return html`<div class="rsettings">
       ${pantryPlans.length
         ? html`<div class="mcard rscan"><h3><ha-icon icon="mdi:barcode-scan"></ha-icon>Putting groceries away?</h3>
@@ -3418,17 +3422,19 @@ class TaskDragonCard extends HTMLElement {
               <button class="btn" data-action="s-open" data-context="pantry" data-plan="${pantryPlans[0].id}"><ha-icon icon="mdi:barcode-scan"></ha-icon>Scan</button></div></div>`
         : ""}
       <div class="mcard"><h3><ha-icon icon="mdi:filter-outline"></ha-icon>When adding a recipe to ${plan.name}</h3>
-        <label class="inline rrow"><input type="checkbox" data-action="r-skip-toggle" ${settings.skip_seasonings ? html`checked` : ""}>
+        <label class="inline rrow"><input type="checkbox" data-action="r-skip-toggle" ${settings.skip_seasonings ? html`checked` : ""} ${admin ? "" : html`disabled`}>
           <span class="grow">Automatically ignore seasonings &amp; spices when adding recipes</span></label>
-        <div class="lastdone">Items the pantry has in stock are always skipped. In Review you can still re-check anything you're out of.</div>
+        <div class="lastdone">Items the pantry has in stock are always skipped. In Review you can still re-check anything you're out of.${admin ? "" : " Only administrators can change this household setting."}</div>
       </div>
       <div class="mcard"><h3><ha-icon icon="mdi:shaker-outline"></ha-icon>Ignored seasonings &amp; staples <span class="badge">${settings.seasonings.length}</span><span class="grow"></span>
-          <button class="link" data-action="r-seasoning-reset">Reset to defaults</button></h3>
+          ${admin ? html`<button class="link" data-action="r-seasoning-reset">Reset to defaults</button>` : ""}</h3>
         <div class="rchips">${settings.seasonings.map(
-          (s) => html`<span class="chip">${s}<button class="x" data-action="r-seasoning-remove" data-id="${s}" aria-label="Stop ignoring ${s}"><ha-icon icon="mdi:close"></ha-icon></button></span>`,
+          (s) => html`<span class="chip">${s}${admin ? html`<button class="x" data-action="r-seasoning-remove" data-id="${s}" aria-label="Stop ignoring ${s}"><ha-icon icon="mdi:close"></ha-icon></button>` : ""}</span>`,
         )}</div>
-        <div class="shop-add"><input data-seasoning-input maxlength="60" placeholder="Add a seasoning or staple… e.g. sesame oil" enterkeyhint="done" aria-label="Add an ignored seasoning">
-          <button class="btn" data-action="r-seasoning-add" aria-label="Add"><ha-icon icon="mdi:plus"></ha-icon></button></div>
+        ${admin
+          ? html`<div class="shop-add"><input data-seasoning-input maxlength="60" placeholder="Add a seasoning or staple… e.g. sesame oil" enterkeyhint="done" aria-label="Add an ignored seasoning">
+              <button class="btn" data-action="r-seasoning-add" aria-label="Add"><ha-icon icon="mdi:plus"></ha-icon></button></div>`
+          : ""}
         <div class="lastdone">Ingredients match by name, so "kosher salt" covers "1 tsp kosher salt, to taste". Mealie foods labelled as spices or seasonings are ignored too.</div>
       </div>
       ${pantryPlans.map((pp) => {
@@ -4759,9 +4765,9 @@ class TaskDragonCard extends HTMLElement {
       case "b-auto":
         return this._settingsSave(d, { enabled: el.checked });
       case "b-download":
-        return this._mOpenSigned("/api/taskdragon/backup/download");
+        return this._mOpenSigned("/api/taskdragon/backup/download", "", 30);
       case "b-snap-download":
-        return this._mOpenSigned(`/api/taskdragon/backup/download?snapshot=${encodeURIComponent(el.dataset.id)}`);
+        return this._mOpenSigned(`/api/taskdragon/backup/download?snapshot=${encodeURIComponent(el.dataset.id)}`, "", 30);
       case "b-snapshot": {
         d.busy = "snapshot";
         this._renderDialog();
@@ -5107,9 +5113,55 @@ class TaskDragonCard extends HTMLElement {
   }
 
   _hThumb(item, large = false) {
-    const image = safeImageUrl(item.image_url);
-    if (image) return html`<span class="hthumb ${large ? "lg" : ""}" style="background-image:url('${image}')" role="img" aria-label="${item.title}"></span>`;
-    return html`<span class="hthumb ${large ? "lg" : ""}"><ha-icon icon="${item.tier === "concept" ? "mdi:tag-outline" : "mdi:storefront-outline"}"></ha-icon></span>`;
+    const icon = html`<ha-icon icon="${item.tier === "concept" ? "mdi:tag-outline" : "mdi:storefront-outline"}"></ha-icon>`;
+    const path = /^\/api\/taskdragon\/hoard_image\/[^/?#]+\?v=[0-9a-f]+$/.test(item.image_path || "") ? item.image_path : null;
+    if (path) return html`<span class="hthumb ${large ? "lg" : ""}" data-himg="${path}" role="img" aria-label="${item.title}">${icon}</span>`;
+    return html`<span class="hthumb ${large ? "lg" : ""}">${icon}</span>`;
+  }
+
+  /** Fetch proxied product photos with the user's credentials and show them as object URLs. */
+  _hHydrateImages(root) {
+    if (!this._himg) this._himg = new Map();
+    for (const slot of root.querySelectorAll("[data-himg]")) {
+      const path = slot.dataset.himg;
+      if (this._himg.has(path)) this._hShowImage(slot, this._himg.get(path));
+      else this._hLoadImage(path);
+    }
+  }
+
+  async _hLoadImage(path) {
+    if (!this._himgPending) this._himgPending = new Map();
+    if (!this._himgPending.has(path)) {
+      this._himgPending.set(
+        path,
+        (async () => {
+          try {
+            const response = await this._hass.fetchWithAuth(path);
+            if (!response.ok) throw new Error(String(response.status));
+            const blob = await response.blob();
+            if (!/^image\/(webp|jpeg|png|gif)$/.test(blob.type)) throw new Error("not an image");
+            this._himg.set(path, URL.createObjectURL(blob));
+          } catch (_err) {
+            this._himg.set(path, null); // keep the placeholder icon
+          }
+          // Old versions of a photo (and anything past 200) give their memory back.
+          while (this._himg.size > 200) {
+            const [oldest, url] = this._himg.entries().next().value;
+            if (url) URL.revokeObjectURL(url);
+            this._himg.delete(oldest);
+          }
+        })(),
+      );
+    }
+    await this._himgPending.get(path);
+    this._himgPending.delete(path);
+    for (const slot of this.shadowRoot.querySelectorAll(`[data-himg="${CSS.escape(path)}"]`)) this._hShowImage(slot, this._himg.get(path));
+  }
+
+  _hShowImage(slot, url) {
+    if (!url) return;
+    slot.style.backgroundImage = `url("${url}")`;
+    slot.replaceChildren();
   }
 
   _hBadges(hb, item) {
@@ -5182,8 +5234,9 @@ class TaskDragonCard extends HTMLElement {
     </div>`;
   }
 
-  /** Draw the price sparklines (built with DOM calls, never markup). */
+  /** Draw the price sparklines (built with DOM calls, never markup) and load product photos. */
   _hHydrate(root) {
+    this._hHydrateImages(root);
     for (const el of root.querySelectorAll(".hspark[data-spark]")) {
       let points = [];
       try {
@@ -5377,7 +5430,7 @@ class TaskDragonCard extends HTMLElement {
           <label class="inline full"><input type="checkbox" name="stealth_mode" ${it.stealth_mode ? html`checked` : ""}> <ha-icon icon="mdi:incognito"></ha-icon>Keep it secret: only I can see this item</label>
           <label class="full">Hiding spot (encrypted, only shown to people who can see this item)<input name="hiding_spot" value="${it.hiding_spot || ""}" maxlength="500" placeholder="Top shelf of the pole barn, tote #4"></label>
         </div>
-        <p class="hint" style="margin-top:8px">The person a gift is for never sees it — on their own login it shows as “🐉 secret gift”. Wall tablets in kiosk mode cover secret gifts until someone taps Show.</p>
+        <p class="hint" style="margin-top:8px">The person a gift is for never sees it — on their own login it shows as “🐉 secret gift”. Wall tablets in kiosk mode cover secret gifts until someone taps Show. Administrators who download a TaskDragon backup or open Home Assistant's files can still see everything.</p>
       </div>
       <div class="hblock"><h3><ha-icon icon="mdi:fire"></ha-icon>Deal radar</h3>
         <div class="form">
@@ -5621,7 +5674,7 @@ class TaskDragonCard extends HTMLElement {
       disabled: "Product lookups are off in the price tracker settings.",
       not_retail: "This isn't a retail product code.",
     }[res.lookup];
-    const image = product?.image ? { image_url: product.image, title: product.title, tier: "tracked" } : { tier: "tracked", title: d.title };
+    const image = { tier: "tracked", title: product?.title || d.title };
     const stores = [...new Set([...(res.stores || []), ...(hb?.stores || [])])];
     const giftSections = res.sections.filter((s) => s.kind !== "want");
     return html`<div class="ssheet-head">${this._hThumb(image, true)}
@@ -6687,11 +6740,12 @@ class TaskDragonCard extends HTMLElement {
 
         ${admin
           ? html`<div class="full mgroup-head"><ha-icon icon="mdi:play-circle-outline"></ha-icon>When completed, run (administrators)</div>
+              ${t.action_paused ? html`<div class="full banner"><ha-icon icon="mdi:pause-circle-outline"></ha-icon>This action came from a restored backup and is paused. Check it, then Save to turn it back on.</div>` : ""}
               <label>Action<input name="action_service" value="${action.service || ""}" maxlength="100" placeholder="button.press"></label>
               <label>Target entity<input name="action_entity" value="${Array.isArray(action.entity_id) ? action.entity_id.join(", ") : action.entity_id || ""}" maxlength="500" placeholder="button.furnace_filter_reset" list="m-action-entities"></label>
               ${this._mEntityList("m-action-entities", ["button", "input_button", "script", "counter", "input_datetime", "switch"])}`
           : action.service
-            ? html`<div class="full lastdone">Runs ${action.service} when completed (only administrators can change this).</div>`
+            ? html`<div class="full lastdone">${t.action_paused ? `${action.service} is paused until an administrator saves this task.` : `Runs ${action.service} when completed (only administrators can change this).`}</div>`
             : ""}
         <label class="full">Notes (Markdown)<textarea name="notes" maxlength="20000" placeholder="Steps, torque specs, where the shut-off valve is…">${t.notes || ""}</textarea></label>
       </div>
@@ -7570,13 +7624,13 @@ class TaskDragonCard extends HTMLElement {
     return `/api/taskdragon/service_record/${encodeURIComponent(objectId)}${query ? `?${query}` : ""}`;
   }
 
-  /** Open an authenticated download in a new tab via a short-lived signed path. */
-  async _mOpenSigned(path, hash = "") {
+  /** Open an authenticated download in a new tab via a short-lived signed path (signed right before it opens). */
+  async _mOpenSigned(path, hash = "", expires = 60) {
     // Open the tab synchronously (inside the click) so pop-up blockers allow it.
     const win = window.open("", "_blank");
     if (win) win.opener = null;
     try {
-      const signed = await this._store.call({ type: "auth/sign_path", path, expires: 300 });
+      const signed = await this._store.call({ type: "auth/sign_path", path, expires });
       const url = `${signed.path}${hash}`;
       if (win) win.location.href = url;
       else window.location.assign(url);

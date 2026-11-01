@@ -8,7 +8,7 @@ can be unit tested without a Home Assistant installation.
 from __future__ import annotations
 
 DOMAIN = "taskdragon"
-VERSION = "1.4.0"
+VERSION = "1.4.1"
 
 DB_FILENAME = "taskdragon.db"
 

@@ -25,6 +25,7 @@ Only the search words or the barcode digits are sent.
 from __future__ import annotations
 
 import asyncio
+import codecs
 import ipaddress
 import json
 import logging
@@ -43,7 +44,6 @@ from urllib.parse import quote_plus, urlencode, urljoin, urlsplit
 import aiohttp
 from aiohttp.abc import AbstractResolver
 from bs4 import BeautifulSoup
-import soupsieve
 
 from .barcodes import BarcodeError, display_barcode, lookup_gtin, normalize_barcode
 from .const import REDDIT_DEAL_SUBS, REDDIT_SEARCH_URL, SLICKDEALS_RSS_URL, UPCITEMDB_URL, VERSION
@@ -71,6 +71,7 @@ API_USER_AGENT = f"TaskDragon/{VERSION} (Home Assistant integration; https://git
 # Names that only ever mean "somewhere on this network".
 PRIVATE_SUFFIXES = (".local", ".localhost", ".internal", ".lan", ".home", ".home.arpa", ".corp", ".intranet", ".localdomain")
 REDIRECT_STATUSES = (301, 302, 303, 307, 308)
+MAX_TRACKED_HOSTS = 512
 
 
 class UnsafeUrl(ValueError):
@@ -97,9 +98,22 @@ class LookupLimit(FetchError):
 # ---------------------------------------------------------------------------
 # URL safety
 # ---------------------------------------------------------------------------
+# IPv6 prefixes that carry an IPv4 address in their low 32 bits and are translated to it
+# by a NAT64 gateway (RFC 6052 well-known prefix and RFC 8215 local-use prefix).
+NAT64_NETWORKS = (ipaddress.ip_network("64:ff9b::/96"), ipaddress.ip_network("64:ff9b:1::/48"))
+
+
 def _public_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
+    """Public unicast only; IPv6 forms that embed an IPv4 address are judged by that address."""
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            ip = ip.ipv4_mapped
+        elif ip.sixtofour is not None:
+            ip = ip.sixtofour
+        elif ip.teredo is not None:
+            return False
+        elif any(ip in net for net in NAT64_NETWORKS):
+            ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
     return ip.is_global and not ip.is_multicast
 
 
@@ -157,8 +171,8 @@ def check_selector(selector: Any) -> str | None:
     if attr is not None and not re.match(r"^[A-Za-z_:][-A-Za-z0-9_:.]{0,63}$", attr):
         raise ValueError("The attribute after @ must be a plain attribute name, like content or data-price")
     try:
-        soupsieve.compile(css)
-    except Exception as err:  # noqa: BLE001 - soupsieve raises its own SelectorSyntaxError and ValueErrors
+        BeautifulSoup("<p></p>", "html.parser").select_one(css)
+    except Exception as err:  # noqa: BLE001 - the selector engine raises its own SelectorSyntaxError and ValueErrors
         raise ValueError("That isn't a valid CSS selector") from err
     return text
 
@@ -223,8 +237,8 @@ class GuardedFetcher:
         self._monotonic = monotonic
         self._sleep = sleep
         self._host_gap = host_gap
-        self._host_locks: dict[str, asyncio.Lock] = {}
-        self._host_last: dict[str, float] = {}
+        self._host_locks: OrderedDict[str, asyncio.Lock] = OrderedDict()
+        self._host_last: OrderedDict[str, float] = OrderedDict()
 
     def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -245,6 +259,18 @@ class GuardedFetcher:
             await self._session.close()
         self._session = None
 
+    def _host_lock(self, host: str) -> asyncio.Lock:
+        """The per-host lock; the least recently used idle hosts are forgotten past MAX_TRACKED_HOSTS."""
+        lock = self._host_locks.get(host)
+        if lock is None:
+            lock = self._host_locks[host] = asyncio.Lock()
+        self._host_locks.move_to_end(host)
+        if len(self._host_locks) > MAX_TRACKED_HOSTS:
+            for name in [n for n, held in self._host_locks.items() if not held.locked()][: len(self._host_locks) - MAX_TRACKED_HOSTS]:
+                self._host_locks.pop(name, None)
+                self._host_last.pop(name, None)
+        return lock
+
     async def _wait_turn(self, host: str) -> None:
         last = self._host_last.get(host)
         if last is not None:
@@ -261,7 +287,7 @@ class GuardedFetcher:
         session = self._get_session()
         for _hop in range(MAX_REDIRECTS + 1):
             host = (urlsplit(current).hostname or "").lower()
-            lock = self._host_locks.setdefault(host, asyncio.Lock())
+            lock = self._host_lock(host)
             async with lock:
                 await self._wait_turn(host)
                 try:
@@ -293,9 +319,17 @@ class GuardedFetcher:
     async def get_json(self, url: str, *, headers: Mapping[str, str] | None = None) -> Any:
         page = await self.get(url, headers={"User-Agent": API_USER_AGENT, "Accept": "application/json", **(headers or {})}, max_bytes=MAX_FEED_BYTES)
         try:
-            return json.loads(page.body.decode(page.charset or "utf-8", errors="replace"))
+            return json.loads(page.body.decode(_codec(page.charset), errors="replace"))
         except ValueError as err:
             raise FetchError("The answer was not JSON") from err
+
+
+def _codec(charset: str | None) -> str:
+    """The response's charset when Python knows it, UTF-8 otherwise."""
+    try:
+        return codecs.lookup(charset or "utf-8").name
+    except LookupError:
+        return "utf-8"
 
 
 async def _read_limited(response: aiohttp.ClientResponse, max_bytes: int, truncate: bool) -> tuple[bytes, bool]:
